@@ -31,26 +31,30 @@ const Navbar = () => {
 
   const scrollToSection = (e, targetId) => {
     if (e && e.preventDefault) e.preventDefault();
-    if (location.pathname !== '/') {
-      navigate('/');
-      setTimeout(() => {
-        if (targetId === 'top' || !targetId) {
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        } else {
+    if (targetId === 'pricing') {
+      navigate('/plan');
+      return;
+    }
+    if (targetId === 'top' || !targetId) {
+      if (location.pathname !== '/') {
+        navigate('/');
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    } else {
+      if (location.pathname !== '/') {
+        navigate('/');
+        setTimeout(() => {
           const element = document.getElementById(targetId);
           if (element) {
             element.scrollIntoView({ behavior: 'smooth' });
           }
+        }, 100);
+      } else {
+        const element = document.getElementById(targetId);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth' });
         }
-      }, 100);
-      return;
-    }
-    if (targetId === 'top' || !targetId) {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else {
-      const element = document.getElementById(targetId);
-      if (element) {
-        element.scrollIntoView({ behavior: 'smooth' });
       }
     }
   };
