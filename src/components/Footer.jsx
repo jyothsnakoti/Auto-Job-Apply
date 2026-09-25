@@ -22,10 +22,6 @@ const Footer = () => {
 
     const scrollToSection = (e, targetId) => {
         if (e && e.preventDefault) e.preventDefault();
-        if (targetId === 'pricing') {
-            navigate('/plan');
-            return;
-        }
         if (targetId === 'top') {
             if (location.pathname !== '/') {
                 navigate('/');

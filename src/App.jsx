@@ -4,6 +4,11 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Plan from './pages/Plan';
 import Payment from './pages/Payment';
 import ResumeSetup from './pages/ResumeSetup';
+import LocationSetup from './pages/LocationSetup';
+import ContactSetup from './pages/ContactSetup';
+import WorkEligibility from './pages/WorkEligibility';
+import FinalDetails from './pages/FinalDetails';
+import ApplicationSettings from './pages/ApplicationSettings';
 
 import {
   Registration,
@@ -47,6 +52,11 @@ function App() {
         <Route path="/plan" element={<Plan />} />
         <Route path="/payment" element={<Payment />} />
         <Route path="/resume-setup" element={<ResumeSetup />} />
+        <Route path="/location-setup" element={<LocationSetup />} />
+        <Route path="/contact-setup" element={<ContactSetup />} />
+        <Route path="/work-eligibility" element={<WorkEligibility />} />
+        <Route path="/final-details" element={<FinalDetails />} />
+        <Route path="/application-settings" element={<ApplicationSettings />} />
       </Routes>
     </BrowserRouter>
   );
