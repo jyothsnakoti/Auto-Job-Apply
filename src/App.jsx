@@ -1,12 +1,8 @@
 import React from 'react';
-import Navbar from './components/Navbar';
+import Home from './pages/Home';
 
 function App() {
-  return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#FFFFFF' }}>
-      <Navbar />
-    </div>
-  );
+  return <Home />;
 }
 
 export default App;
