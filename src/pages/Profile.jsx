@@ -1,0 +1,770 @@
+import React, { useState } from "react";
+import Sidebar from "../components/Sidebar";
+import Header from "../components/Header";
+
+const Profile = () => {
+  // Personal Info State
+  const [fullName, setFullName] = useState("Naresh P");
+  const [email, setEmail] = useState("nareshpulluri79@gmail.com");
+  const [phone, setPhone] = useState("+91 98765 43210");
+  const [linkedin, setLinkedin] = useState("https://www.linkedin.com/in/nareshp");
+
+  // Location & Work Auth State
+  const [currentLocation, setCurrentLocation] = useState("Bengaluru, Karnataka, India");
+  const [openToRelocate, setOpenToRelocate] = useState("Yes");
+  const [citizenship, setCitizenship] = useState(["India"]);
+  const [targetCountries, setTargetCountries] = useState([
+    "India",
+    "United States",
+    "Canada",
+    "United Kingdom",
+  ]);
+  const [workMode, setWorkMode] = useState("Remote");
+
+  // Diversity & Inclusion State
+  const [gender, setGender] = useState("Male");
+  const [ethnicity, setEthnicity] = useState("Prefer not to say");
+  const [veteran, setVeteran] = useState("No");
+  const [disability, setDisability] = useState("No");
+
+  // Skills & Experience State
+  const [experienceRange, setExperienceRange] = useState("5+ years");
+  const [education, setEducation] = useState("Bachelor's Degree");
+  const [totalExperience, setTotalExperience] = useState("5");
+  const [skills, setSkills] = useState([
+    "React",
+    "UI/UX Design",
+    "JavaScript",
+    "Figma",
+    "TypeScript",
+    "Node.js",
+  ]);
+  const [newSkillInput, setNewSkillInput] = useState("");
+  const [isAddingSkill, setIsAddingSkill] = useState(false);
+
+  const removeSkill = (skillToRemove) => {
+    setSkills(skills.filter((s) => s !== skillToRemove));
+  };
+
+  const handleAddSkill = (e) => {
+    e.preventDefault();
+    if (newSkillInput.trim() && !skills.includes(newSkillInput.trim())) {
+      setSkills([...skills, newSkillInput.trim()]);
+      setNewSkillInput("");
+      setIsAddingSkill(false);
+    }
+  };
+
+  const removeCountry = (cToRemove) => {
+    setTargetCountries(targetCountries.filter((c) => c !== cToRemove));
+  };
+
+  const removeCitizenship = (cToRemove) => {
+    setCitizenship(citizenship.filter((c) => c !== cToRemove));
+  };
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-[#F8FAFC]">
+      {/* Left Sidebar */}
+      <Sidebar />
+
+      {/* Main Content Area (Scrollable) */}
+      <div className="flex min-w-0 flex-1 flex-col h-screen overflow-y-auto bg-[#F8FAFC]">
+        {/* Top Header */}
+        <Header />
+
+        {/* Profile Main Content */}
+        <main className="flex-1 px-8 py-7 flex flex-col gap-6 w-full bg-[#F8FAFC]">
+          {/* Page Heading */}
+          <div className="flex flex-col gap-1">
+            <h1 className="text-[20px] md:text-[22px] font-bold text-black tracking-tight">
+              Profile
+            </h1>
+            <p className="text-[13px] text-[#64748B]">
+              Manage your profile, resume, job preferences and application settings. This information is used to find the best job matches and fill applications for you.
+            </p>
+          </div>
+
+          {/* Top Row: Personal Information + Resume Management */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 w-full items-stretch">
+            {/* 1. Personal Information (7 Cols) */}
+            <div className="lg:col-span-7 bg-white rounded-[20px] border border-[#E2E8F0] p-6 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col justify-between">
+              <div>
+                {/* Header */}
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex flex-col">
+                    <h2 className="text-[16px] font-bold text-[#0F172A]">
+                      Personal Information
+                    </h2>
+                    <p className="text-[12.5px] text-[#64748B] mt-0.5">
+                      Basic information used for job matching and applications.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 text-[12.5px] font-semibold text-[#4F46E5] hover:text-[#4338CA] transition-colors cursor-pointer shrink-0"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                    </svg>
+                    <span>Edit</span>
+                  </button>
+                </div>
+
+                {/* Form Fields Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5">
+                  {/* Full Name */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[12.5px] font-medium text-[#64748B]">
+                      Full Name
+                    </label>
+                    <input
+                      type="text"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      className="h-[40px] px-3.5 rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#0F172A] font-medium outline-none focus:border-slate-400 transition-colors"
+                    />
+                  </div>
+
+                  {/* Email Address */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[12.5px] font-medium text-[#64748B]">
+                      Email Address
+                    </label>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="h-[40px] px-3.5 rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#0F172A] font-medium outline-none focus:border-slate-400 transition-colors truncate"
+                    />
+                  </div>
+
+                  {/* Phone Number */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[12.5px] font-medium text-[#64748B]">
+                      Phone Number
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 h-[40px] px-2.5 rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-slate-700 shrink-0">
+                        <span className="text-base leading-none">🇮🇳</span>
+                        <svg className="w-3 h-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                          <path d="m6 9 6 6 6-6" />
+                        </svg>
+                      </div>
+                      <input
+                        type="text"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        className="flex-1 h-[40px] px-3.5 rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#0F172A] font-medium outline-none focus:border-slate-400 transition-colors min-w-0"
+                      />
+                    </div>
+                  </div>
+
+                  {/* LinkedIn Profile */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[12.5px] font-medium text-[#64748B]">
+                      LinkedIn Profile
+                    </label>
+                    <div className="flex items-center gap-2 h-[40px] px-3 rounded-[10px] border border-[#E2E8F0] bg-white focus-within:border-slate-400 transition-colors">
+                      <div className="w-4 h-4 rounded-[3px] bg-[#0A66C2] text-white flex items-center justify-center text-[10px] font-bold shrink-0">
+                        in
+                      </div>
+                      <input
+                        type="text"
+                        value={linkedin}
+                        onChange={(e) => setLinkedin(e.target.value)}
+                        className="flex-1 bg-transparent border-0 text-[13px] text-[#0F172A] font-medium outline-none truncate min-w-0"
+                      />
+                      <a
+                        href={linkedin}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-slate-400 hover:text-[#0A66C2] transition-colors"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                          <polyline points="15 3 21 3 21 9" />
+                          <line x1="10" y1="14" x2="21" y2="3" />
+                        </svg>
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 2. Resume Management (5 Cols) */}
+            <div className="lg:col-span-5 bg-white rounded-[20px] border border-[#E2E8F0] p-6 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col justify-between">
+              <div>
+                {/* Header */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col">
+                    <h2 className="text-[16px] font-bold text-[#0F172A]">
+                      Resume Management
+                    </h2>
+                    <p className="text-[12.5px] text-[#64748B] mt-0.5">
+                      Upload and manage your resumes.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="h-[36px] px-3.5 rounded-[10px] bg-[#4F46E5] hover:bg-[#4338CA] text-white text-[12.5px] font-medium flex items-center gap-1.5 shadow-2xs active:scale-[0.99] transition-all cursor-pointer whitespace-nowrap shrink-0"
+                  >
+                    <span>+</span>
+                    <span>Upload Resume</span>
+                  </button>
+                </div>
+
+                {/* Uploaded Resume Card */}
+                <div className="mt-5 p-3.5 rounded-[14px] border border-[#E2E8F0] bg-[#F8FAFC]/70 flex items-center justify-between gap-3 hover:bg-slate-50 transition-colors">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-[42px] h-[42px] rounded-[10px] bg-[#EEF2FF] text-[#4F46E5] flex items-center justify-center shrink-0">
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="16" y1="13" x2="8" y2="13" />
+                        <line x1="16" y1="17" x2="8" y2="17" />
+                      </svg>
+                    </div>
+
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-[13.5px] font-bold text-[#0F172A] truncate">
+                        Naresh_P_Resume.pdf
+                      </span>
+                      <span className="text-[11.5px] text-[#94A3B8] mt-0.5">
+                        Uploaded on Oct 20, 2024 • 1.2 MB
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="text-slate-400 hover:text-slate-700 p-1.5 rounded-md hover:bg-slate-200/50 transition-colors cursor-pointer shrink-0"
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                      <circle cx="12" cy="5" r="1.5" />
+                      <circle cx="12" cy="12" r="1.5" />
+                      <circle cx="12" cy="19" r="1.5" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Middle Row: Location & Work Authorization Card (Full Width) */}
+          <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-6 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col gap-5 w-full">
+            {/* Header */}
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex flex-col">
+                <h2 className="text-[16px] font-bold text-[#0F172A]">
+                  Location & Work Authorization
+                </h2>
+                <p className="text-[12.5px] text-[#64748B] mt-0.5">
+                  Tell us where you can work so we can find the right opportunities.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="flex items-center gap-1.5 text-[12.5px] font-semibold text-[#4F46E5] hover:text-[#4338CA] transition-colors cursor-pointer shrink-0"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+                <span>Edit</span>
+              </button>
+            </div>
+
+            {/* Current Location + Open to Relocate */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-end">
+              {/* Current Location (10 Cols) */}
+              <div className="lg:col-span-10 flex flex-col gap-1.5">
+                <label className="text-[12.5px] font-medium text-[#64748B]">
+                  Current Location
+                </label>
+                <div className="flex items-center justify-between h-[42px] px-3.5 rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#0F172A] font-medium">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                      <circle cx="12" cy="10" r="3" />
+                    </svg>
+                    <span className="truncate">{currentLocation}</span>
+                  </div>
+                  <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Open to Relocate Toggle (2 Cols) */}
+              <div className="lg:col-span-2 flex flex-col gap-1.5">
+                <label className="text-[12.5px] font-medium text-[#64748B] whitespace-nowrap">
+                  Open to Relocate
+                </label>
+                <div className="flex items-center h-[42px] p-1 rounded-[10px] border border-[#E2E8F0] bg-white">
+                  <button
+                    type="button"
+                    onClick={() => setOpenToRelocate("Yes")}
+                    className={`flex-1 h-full rounded-[7px] text-[12.5px] font-semibold transition-all cursor-pointer ${
+                      openToRelocate === "Yes"
+                        ? "bg-[#2563EB] text-white shadow-2xs"
+                        : "text-[#64748B] hover:text-[#0F172A]"
+                    }`}
+                  >
+                    Yes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOpenToRelocate("No")}
+                    className={`flex-1 h-full rounded-[7px] text-[12.5px] font-semibold transition-all cursor-pointer ${
+                      openToRelocate === "No"
+                        ? "bg-[#2563EB] text-white shadow-2xs"
+                        : "text-[#64748B] hover:text-[#0F172A]"
+                    }`}
+                  >
+                    No
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Countries: Citizenship & Target Countries */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Countries of Citizenship */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[12.5px] font-medium text-[#64748B]">
+                  Countries of Citizenship
+                </label>
+                <div className="min-h-[42px] p-1.5 px-3 rounded-[10px] border border-[#E2E8F0] bg-white flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {citizenship.map((c) => (
+                      <span
+                        key={c}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] bg-[#F1F5F9] text-[#334155] text-[12.5px] font-medium"
+                      >
+                        <span>{c}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeCitizenship(c)}
+                          className="text-slate-400 hover:text-slate-700 cursor-pointer"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <svg className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Countries where you want to work */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[12.5px] font-medium text-[#64748B]">
+                  Countries where you want to work
+                </label>
+                <div className="min-h-[42px] p-1.5 px-3 rounded-[10px] border border-[#E2E8F0] bg-white flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {targetCountries.map((c) => (
+                      <span
+                        key={c}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] bg-[#F1F5F9] text-[#334155] text-[12.5px] font-medium"
+                      >
+                        <span>{c}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeCountry(c)}
+                          className="text-slate-400 hover:text-slate-700 cursor-pointer"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <svg className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            {/* Work Mode Preference (3 Large Option Cards) */}
+            <div className="flex flex-col gap-2 pt-1">
+              <label className="text-[12.5px] font-medium text-[#64748B]">
+                Work Mode Preference
+              </label>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {[
+                  {
+                    id: "Remote",
+                    title: "Remote",
+                    desc: "Work from anywhere",
+                    icon: (active) => (
+                      <svg
+                        className={`w-4 h-4 transition-colors ${
+                          active ? "text-[#4F46E5]" : "text-slate-500"
+                        }`}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                        <polyline points="9 22 9 12 15 12 15 22" />
+                      </svg>
+                    ),
+                  },
+                  {
+                    id: "Hybrid",
+                    title: "Hybrid",
+                    desc: "Office + remote",
+                    icon: (active) => (
+                      <svg
+                        className={`w-4 h-4 transition-colors ${
+                          active ? "text-[#4F46E5]" : "text-slate-500"
+                        }`}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <rect x="4" y="2" width="16" height="20" rx="2" ry="2" />
+                        <path d="M9 22v-4h6v4" />
+                        <path d="M8 6h.01M16 6h.01M8 10h.01M16 10h.01M8 14h.01M16 14h.01" />
+                      </svg>
+                    ),
+                  },
+                  {
+                    id: "On-site",
+                    title: "On-site",
+                    desc: "At company location",
+                    icon: (active) => (
+                      <svg
+                        className={`w-4 h-4 transition-colors ${
+                          active ? "text-[#4F46E5]" : "text-slate-500"
+                        }`}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+                        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+                      </svg>
+                    ),
+                  },
+                ].map((item) => {
+                  const isActive = workMode === item.id;
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => setWorkMode(item.id)}
+                      className={`p-4 rounded-[14px] cursor-pointer transition-all ${
+                        isActive
+                          ? "border-2 border-[#4F46E5] bg-white shadow-xs"
+                          : "border border-[#E2E8F0] bg-white hover:border-slate-300"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 text-[14.5px] font-bold text-[#0F172A]">
+                        {item.icon(isActive)}
+                        <span>{item.title}</span>
+                      </div>
+                      <p
+                        className={`text-[12px] mt-1 transition-colors ${
+                          isActive
+                            ? "text-[#4F46E5] font-medium"
+                            : "text-[#64748B]"
+                        }`}
+                      >
+                        {item.desc}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom Row: Diversity & Inclusion + Skills & Experience */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full items-stretch">
+            {/* 1. Diversity & Inclusion (Optional) */}
+            <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-6 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col justify-between">
+              <div>
+                {/* Header */}
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex flex-col">
+                    <h2 className="text-[16px] font-bold text-[#0F172A]">
+                      Diversity & Inclusion <span className="font-normal text-[#64748B] text-[13px]">(Optional)</span>
+                    </h2>
+                    <p className="text-[12.5px] text-[#64748B] mt-0.5">
+                      Help us match you with inclusive employers.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 text-[12.5px] font-semibold text-[#4F46E5] hover:text-[#4338CA] transition-colors cursor-pointer shrink-0"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                    </svg>
+                    <span>Edit</span>
+                  </button>
+                </div>
+
+                {/* 2x2 Dropdowns Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5">
+                  {/* Gender */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[12.5px] font-medium text-[#64748B]">
+                      Gender
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={gender}
+                        onChange={(e) => setGender(e.target.value)}
+                        className="w-full h-[40px] px-3.5 pr-8 rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#0F172A] font-medium outline-none focus:border-slate-400 appearance-none cursor-pointer"
+                      >
+                        <option>Male</option>
+                        <option>Female</option>
+                        <option>Non-binary</option>
+                        <option>Prefer not to say</option>
+                      </select>
+                      <svg className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-3.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                        <path d="m6 9 6 6 6-6" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  {/* Race / Ethnicity */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[12.5px] font-medium text-[#64748B]">
+                      Race / Ethnicity
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={ethnicity}
+                        onChange={(e) => setEthnicity(e.target.value)}
+                        className="w-full h-[40px] px-3.5 pr-8 rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#0F172A] font-medium outline-none focus:border-slate-400 appearance-none cursor-pointer"
+                      >
+                        <option>Prefer not to say</option>
+                        <option>Asian</option>
+                        <option>Black / African American</option>
+                        <option>Hispanic / Latino</option>
+                        <option>White / Caucasian</option>
+                        <option>Other</option>
+                      </select>
+                      <svg className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-3.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                        <path d="m6 9 6 6 6-6" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  {/* Veteran Status */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[12.5px] font-medium text-[#64748B]">
+                      Veteran Status
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={veteran}
+                        onChange={(e) => setVeteran(e.target.value)}
+                        className="w-full h-[40px] px-3.5 pr-8 rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#0F172A] font-medium outline-none focus:border-slate-400 appearance-none cursor-pointer"
+                      >
+                        <option>No</option>
+                        <option>Yes</option>
+                        <option>Prefer not to say</option>
+                      </select>
+                      <svg className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-3.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                        <path d="m6 9 6 6 6-6" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  {/* Disability Status */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[12.5px] font-medium text-[#64748B]">
+                      Disability Status
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={disability}
+                        onChange={(e) => setDisability(e.target.value)}
+                        className="w-full h-[40px] px-3.5 pr-8 rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#0F172A] font-medium outline-none focus:border-slate-400 appearance-none cursor-pointer"
+                      >
+                        <option>No</option>
+                        <option>Yes</option>
+                        <option>Prefer not to say</option>
+                      </select>
+                      <svg className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-3.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                        <path d="m6 9 6 6 6-6" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 2. Skills & Experience */}
+            <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-6 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col justify-between">
+              <div>
+                {/* Header */}
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex flex-col">
+                    <h2 className="text-[16px] font-bold text-[#0F172A]">
+                      Skills & Experience
+                    </h2>
+                    <p className="text-[12.5px] text-[#64748B] mt-0.5">
+                      Add your skills and experience to get better job matches.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 text-[12.5px] font-semibold text-[#4F46E5] hover:text-[#4338CA] transition-colors cursor-pointer shrink-0"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                    </svg>
+                    <span>Edit</span>
+                  </button>
+                </div>
+
+                {/* Top 3 Field Inputs */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mt-5">
+                  {/* Years of Experience */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[12.5px] font-medium text-[#64748B]">
+                      Years of Experience
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={experienceRange}
+                        onChange={(e) => setExperienceRange(e.target.value)}
+                        className="w-full h-[40px] px-3 pr-7 rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#0F172A] font-medium outline-none focus:border-slate-400 appearance-none cursor-pointer"
+                      >
+                        <option>1-3 years</option>
+                        <option>3-5 years</option>
+                        <option>5+ years</option>
+                        <option>8+ years</option>
+                      </select>
+                      <svg className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-3.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                        <path d="m6 9 6 6 6-6" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  {/* Highest Education */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[12.5px] font-medium text-[#64748B]">
+                      Highest Education
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={education}
+                        onChange={(e) => setEducation(e.target.value)}
+                        className="w-full h-[40px] px-3 pr-7 rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#0F172A] font-medium outline-none focus:border-slate-400 appearance-none cursor-pointer truncate"
+                      >
+                        <option>Bachelor's Degree</option>
+                        <option>Master's Degree</option>
+                        <option>PhD</option>
+                        <option>High School</option>
+                      </select>
+                      <svg className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-3.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                        <path d="m6 9 6 6 6-6" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  {/* Total Experience (Years) */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[12.5px] font-medium text-[#64748B]">
+                      Total Experience (Years)
+                    </label>
+                    <input
+                      type="number"
+                      value={totalExperience}
+                      onChange={(e) => setTotalExperience(e.target.value)}
+                      className="h-[40px] px-3.5 rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#0F172A] font-medium outline-none focus:border-slate-400 transition-colors"
+                    />
+                  </div>
+                </div>
+
+                {/* Key Skills Tags */}
+                <div className="flex flex-col gap-2 mt-4.5">
+                  <label className="text-[12.5px] font-medium text-[#64748B]">
+                    Key Skills
+                  </label>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {skills.map((skill) => (
+                      <span
+                        key={skill}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] bg-[#F1F5F9] text-[#334155] text-[12.5px] font-medium hover:bg-slate-200/80 transition-colors"
+                      >
+                        <span>{skill}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeSkill(skill)}
+                          className="text-slate-400 hover:text-slate-700 cursor-pointer text-[12px]"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ))}
+
+                    {isAddingSkill ? (
+                      <form onSubmit={handleAddSkill} className="inline-flex items-center gap-1">
+                        <input
+                          type="text"
+                          autoFocus
+                          value={newSkillInput}
+                          onChange={(e) => setNewSkillInput(e.target.value)}
+                          placeholder="Skill name..."
+                          className="h-[32px] px-2.5 text-[12.5px] rounded-[8px] border border-indigo-400 outline-none w-[110px]"
+                        />
+                        <button
+                          type="submit"
+                          className="h-[32px] px-2 bg-[#4F46E5] text-white text-[12px] font-medium rounded-[8px] cursor-pointer"
+                        >
+                          Add
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsAddingSkill(false)}
+                          className="h-[32px] px-2 bg-slate-100 text-slate-600 text-[12px] rounded-[8px] cursor-pointer"
+                        >
+                          ✕
+                        </button>
+                      </form>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setIsAddingSkill(true)}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-[8px] border border-dashed border-[#818CF8] bg-[#EEF2FF]/60 text-[#4F46E5] text-[12.5px] font-medium hover:bg-[#EEF2FF] transition-colors cursor-pointer"
+                      >
+                        <span>+</span>
+                        <span>Add Skill</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+};
+
+export default Profile;
