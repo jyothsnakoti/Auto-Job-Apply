@@ -12,6 +12,7 @@ const ContactSetup = () => {
     // Form state
     const [phoneNumber, setPhoneNumber] = useState('');
     const [linkedinUrl, setLinkedinUrl] = useState('');
+    const [focusedField, setFocusedField] = useState(null); // 'phone' | 'linkedin'
     const [isHoveredContinue, setIsHoveredContinue] = useState(false);
 
     useEffect(() => {
@@ -323,16 +324,17 @@ const ContactSetup = () => {
             display: 'flex',
             alignItems: 'center',
         },
-        inputIcon: {
+        inputIcon: (isFocused) => ({
             position: 'absolute',
             left: '14px',
             width: '18px',
             height: '18px',
-            stroke: '#94A3B8',
+            stroke: isFocused ? '#2563EB' : '#94A3B8',
             strokeWidth: '2',
             fill: 'none',
             pointerEvents: 'none',
-        },
+            transition: 'stroke 0.2s ease',
+        }),
         linkedinBadge: {
             position: 'absolute',
             left: '14px',
@@ -350,21 +352,22 @@ const ContactSetup = () => {
             pointerEvents: 'none',
             userSelect: 'none',
         },
-        inputField: {
+        inputField: (isFocused) => ({
             width: '100%',
             height: '48px',
             paddingLeft: '44px',
             paddingRight: '16px',
             borderRadius: '12px',
-            border: '1px solid #E2E8F0',
+            border: isFocused ? '1.5px solid #2563EB' : '1px solid #E2E8F0',
             backgroundColor: '#FFFFFF',
             fontSize: '15px',
             fontFamily: '"Plus Jakarta Sans", sans-serif',
             color: '#0F172A',
             outline: 'none',
             boxSizing: 'border-box',
+            boxShadow: isFocused ? '0 0 0 3px rgba(37, 99, 235, 0.12)' : 'none',
             transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
-        },
+        }),
         fieldHelper: {
             fontFamily: '"Plus Jakarta Sans", sans-serif',
             fontSize: '12.5px',
@@ -525,15 +528,17 @@ const ContactSetup = () => {
                                 <div>
                                     <label style={styles.fieldLabel}>Phone number</label>
                                     <div style={styles.inputWrapper}>
-                                        <svg viewBox="0 0 24 24" style={styles.inputIcon}>
+                                        <svg viewBox="0 0 24 24" style={styles.inputIcon(focusedField === 'phone')}>
                                             <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
                                         </svg>
                                         <input
                                             type="tel"
                                             value={phoneNumber}
+                                            onFocus={() => setFocusedField('phone')}
+                                            onBlur={() => setFocusedField(null)}
                                             onChange={(e) => setPhoneNumber(e.target.value)}
                                             placeholder="Enter phone number with country code"
-                                            style={styles.inputField}
+                                            style={styles.inputField(focusedField === 'phone')}
                                         />
                                     </div>
                                     <span style={styles.fieldHelper}>
@@ -549,9 +554,11 @@ const ContactSetup = () => {
                                         <input
                                             type="url"
                                             value={linkedinUrl}
+                                            onFocus={() => setFocusedField('linkedin')}
+                                            onBlur={() => setFocusedField(null)}
                                             onChange={(e) => setLinkedinUrl(e.target.value)}
                                             placeholder="https://linkedin.com/in/yourhandle"
-                                            style={styles.inputField}
+                                            style={styles.inputField(focusedField === 'linkedin')}
                                         />
                                     </div>
                                     <span style={styles.fieldHelper}>
