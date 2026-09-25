@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import logoSrc from '../assets/Background.svg';
 
 const Footer = () => {
+    const navigate = useNavigate();
+    const location = useLocation();
     const [windowWidth, setWindowWidth] = useState(
         typeof window !== 'undefined' ? window.innerWidth : 1440
     );
@@ -19,12 +22,30 @@ const Footer = () => {
 
     const scrollToSection = (e, targetId) => {
         if (e && e.preventDefault) e.preventDefault();
+        if (targetId === 'pricing') {
+            navigate('/plan');
+            return;
+        }
         if (targetId === 'top') {
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            if (location.pathname !== '/') {
+                navigate('/');
+            } else {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
         } else if (targetId) {
-            const element = document.getElementById(targetId);
-            if (element) {
-                element.scrollIntoView({ behavior: 'smooth' });
+            if (location.pathname !== '/') {
+                navigate('/');
+                setTimeout(() => {
+                    const element = document.getElementById(targetId);
+                    if (element) {
+                        element.scrollIntoView({ behavior: 'smooth' });
+                    }
+                }, 100);
+            } else {
+                const element = document.getElementById(targetId);
+                if (element) {
+                    element.scrollIntoView({ behavior: 'smooth' });
+                }
             }
         }
     };
