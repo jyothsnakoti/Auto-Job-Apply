@@ -1,17 +1,25 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Pencil } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Pencil, RefreshCw } from 'lucide-react';
 import AuthLayout from './AuthLayout';
+import { verifyOtp, resendOtp } from '../../services/api';
 
 const VerifyEmail = ({ email: propEmail }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const email = location.state?.email || propEmail || 'your email';
+  const email =
+    location.state?.email ||
+    sessionStorage.getItem('pendingVerificationEmail') ||
+    propEmail ||
+    '';
 
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [activeInput, setActiveInput] = useState(0);
   const [timer, setTimer] = useState(60);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const inputRefs = useRef([]);
 
   // Resend countdown timer
@@ -33,6 +41,9 @@ const VerifyEmail = ({ email: propEmail }) => {
 
   const handleChange = (e, index) => {
     const val = e.target.value;
+    if (errorMessage) {
+      setErrorMessage('');
+    }
     if (!val) {
       const newOtp = [...otp];
       newOtp[index] = '';
@@ -56,7 +67,6 @@ const VerifyEmail = ({ email: propEmail }) => {
   };
 
   const handleKeyDown = (e, index) => {
-    // Allow navigation, control keys, and keyboard shortcuts
     if (
       e.key === 'Backspace' ||
       e.key === 'Tab' ||
@@ -85,7 +95,6 @@ const VerifyEmail = ({ email: propEmail }) => {
       return;
     }
 
-    // Prevent any key that is not a numeric digit 0-9
     if (!/^[0-9]$/.test(e.key)) {
       e.preventDefault();
     }
@@ -93,8 +102,10 @@ const VerifyEmail = ({ email: propEmail }) => {
 
   const handlePaste = (e) => {
     e.preventDefault();
+    if (errorMessage) {
+      setErrorMessage('');
+    }
     const pastedData = e.clipboardData.getData('text');
-    // Filter out all non-digits from pasted content
     const numericDigits = pastedData.replace(/\D/g, '').split('').slice(0, 6);
     if (numericDigits.length > 0) {
       const newOtp = ['', '', '', '', '', ''];
@@ -106,23 +117,60 @@ const VerifyEmail = ({ email: propEmail }) => {
     }
   };
 
-  const handleResend = () => {
-    if (timer === 0) {
+  const handleResend = async () => {
+    if (isResending) return;
+
+    if (!email || email === 'your email') {
+      setErrorMessage('No valid email address found. Please register or re-enter your email.');
+      return;
+    }
+
+    setErrorMessage('');
+    setSuccessMessage('');
+    setIsResending(true);
+
+    try {
+      const response = await resendOtp({ email: email.trim() });
+      setSuccessMessage(
+        response?.message || 'A new 6-digit verification code has been sent to your email.'
+      );
       setTimer(60);
-      // Simulate resend code logic
+    } catch (error) {
+      setErrorMessage(
+        error.message || 'Failed to resend verification code. Please try again.'
+      );
+    } finally {
+      setIsResending(false);
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (otp.some((digit) => !digit || !/^\d$/.test(digit))) {
+    const enteredOtp = otp.join('');
+    if (enteredOtp.length < 6 || otp.some((digit) => !digit || !/^\d$/.test(digit))) {
       return;
     }
+
+    setErrorMessage('');
+    setSuccessMessage('');
     setIsSubmitting(true);
-    setTimeout(() => {
+
+    try {
+      const response = await verifyOtp({
+        email: email.trim(),
+        otp: enteredOtp,
+      });
+
+      navigate('/login', {
+        state: { email: email.trim(), verified: true, responseData: response },
+      });
+    } catch (error) {
+      setErrorMessage(
+        error.message || 'Invalid verification code. Please try again.'
+      );
+    } finally {
       setIsSubmitting(false);
-      navigate('/login', { state: { email } });
-    }, 600);
+    }
   };
 
   const formatTimer = (seconds) => {
@@ -166,6 +214,28 @@ const VerifyEmail = ({ email: propEmail }) => {
             <span>Wrong email? Change address</span>
           </button>
         </div>
+
+        {/* Success Alert Message */}
+        {successMessage && (
+          <div className="mb-4 p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs sm:text-[13px] font-medium flex items-center gap-2 animate-in fade-in">
+            <svg className="w-4 h-4 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            <span>{successMessage}</span>
+          </div>
+        )}
+
+        {/* Error Alert Message */}
+        {errorMessage && (
+          <div className="mb-4 p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs sm:text-[13px] font-medium flex items-center gap-2 animate-in fade-in">
+            <svg className="w-4 h-4 text-red-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            <span>{errorMessage}</span>
+          </div>
+        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="flex flex-col gap-5">
@@ -212,36 +282,39 @@ const VerifyEmail = ({ email: propEmail }) => {
             disabled={isSubmitting || otp.some((d) => !d || !/^\d$/.test(d))}
             className="group w-full h-12 mt-2 bg-gradient-to-r from-[#5748f2] to-[#7633e8] hover:from-[#4f3ee8] hover:to-[#6d2bd8] text-white font-semibold text-sm sm:text-[15px] rounded-xl flex items-center justify-center gap-2 shadow-[0px_4px_6px_-4px_#6366F140,0px_10px_15px_-3px_#6366F140] hover:shadow-[0px_6px_10px_-4px_#6366F160,0px_14px_20px_-3px_#6366F160] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
           >
-            <span>Verify & Continue</span>
-            <ArrowRight
-              size={18}
-              className="transition-transform duration-200 group-hover:translate-x-1"
-            />
+            <span>{isSubmitting ? 'Verifying...' : 'Verify & Continue'}</span>
+            {!isSubmitting && (
+              <ArrowRight
+                size={18}
+                className="transition-transform duration-200 group-hover:translate-x-1"
+              />
+            )}
           </button>
 
-          {/* Footer Resend Code Info */}
+          {/* Footer Resend Code Info & Button */}
           <div className="flex items-center justify-between pt-1 font-['Inter',sans-serif]">
             <span className="text-slate-500 text-xs sm:text-[13px]">
               Didn&apos;t receive the email?
             </span>
-            {timer > 0 ? (
-              <span className="text-[#4F46E5] text-xs sm:text-[13px] font-semibold">
-                Resend code <span className="font-normal">{formatTimer(timer)}</span>
+            <button
+              type="button"
+              onClick={handleResend}
+              disabled={isResending}
+              className="inline-flex items-center gap-1.5 text-[#4F46E5] hover:text-indigo-800 text-xs sm:text-[13px] font-bold cursor-pointer border-none bg-transparent p-0 transition-colors disabled:opacity-60"
+            >
+              <RefreshCw size={13} className={isResending ? 'animate-spin' : ''} />
+              <span>
+                {isResending
+                  ? 'Sending...'
+                  : timer > 0
+                  ? `Resend code (${formatTimer(timer)})`
+                  : 'Resend code'}
               </span>
-            ) : (
-              <button
-                type="button"
-                onClick={handleResend}
-                className="text-[#4F46E5] hover:text-indigo-800 text-xs sm:text-[13px] font-semibold cursor-pointer border-none bg-transparent p-0 transition-colors"
-              >
-                Resend code
-              </button>
-            )}
+            </button>
           </div>
         </form>
       </div>
     </AuthLayout>
   );
 };
-
 export default VerifyEmail;

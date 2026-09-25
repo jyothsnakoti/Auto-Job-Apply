@@ -38,8 +38,11 @@ const Registration = () => {
         password: formData.password,
       });
 
+      const emailToVerify = formData.email.trim();
+      sessionStorage.setItem('pendingVerificationEmail', emailToVerify);
+
       navigate('/verify', {
-        state: { email: formData.email.trim(), responseData: response },
+        state: { email: emailToVerify, responseData: response },
       });
     } catch (error) {
       setErrorMessage(
