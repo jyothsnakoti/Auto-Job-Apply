@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import logoSrc from '../assets/Background.svg';
 
 const Navbar = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [windowWidth, setWindowWidth] = useState(
     typeof window !== 'undefined' ? window.innerWidth : 1200
@@ -28,6 +31,20 @@ const Navbar = () => {
 
   const scrollToSection = (e, targetId) => {
     if (e && e.preventDefault) e.preventDefault();
+    if (location.pathname !== '/') {
+      navigate('/');
+      setTimeout(() => {
+        if (targetId === 'top' || !targetId) {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          const element = document.getElementById(targetId);
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth' });
+          }
+        }
+      }, 100);
+      return;
+    }
     if (targetId === 'top' || !targetId) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
@@ -307,6 +324,7 @@ const Navbar = () => {
             <button
               type="button"
               style={styles.loginBtn(isLoginHovered)}
+              onClick={() => navigate('/login')}
               onMouseEnter={() => setIsLoginHovered(true)}
               onMouseLeave={() => setIsLoginHovered(false)}
             >
@@ -315,6 +333,7 @@ const Navbar = () => {
             <button
               type="button"
               style={styles.getStartedBtn(isGetStartedHovered)}
+              onClick={() => navigate('/register')}
               onMouseEnter={() => setIsGetStartedHovered(true)}
               onMouseLeave={() => setIsGetStartedHovered(false)}
             >
@@ -386,14 +405,20 @@ const Navbar = () => {
             <button
               type="button"
               style={styles.mobileLoginBtn}
-              onClick={() => setIsMobileMenuOpen(false)}
+              onClick={() => {
+                setIsMobileMenuOpen(false);
+                navigate('/login');
+              }}
             >
               Log in
             </button>
             <button
               type="button"
               style={styles.mobileGetStartedBtn}
-              onClick={() => setIsMobileMenuOpen(false)}
+              onClick={() => {
+                setIsMobileMenuOpen(false);
+                navigate('/register');
+              }}
             >
               <span>Get Started</span>
               <svg
