@@ -1,11 +1,29 @@
 import React from 'react';
-import Navbar from './components/Navbar';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import {
+  Registration,
+  Login,
+  VerifyEmail,
+  ForgotPassword,
+  CheckInbox,
+  ResetPassword,
+  PasswordUpdated,
+} from './pages/onboarding';
 
 function App() {
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#FFFFFF' }}>
-      <Navbar />
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Navigate to="/register" replace />} />
+        <Route path="/register" element={<Registration />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/verify" element={<VerifyEmail />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/check-inbox" element={<CheckInbox />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/password-updated" element={<PasswordUpdated />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 
