@@ -1,18 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import logoSrc from '../assets/Background.svg';
 
-const ResumeSetup = () => {
+const ContactSetup = () => {
     const navigate = useNavigate();
-    const fileInputRef = useRef(null);
 
     const [windowWidth, setWindowWidth] = useState(
         typeof window !== 'undefined' ? window.innerWidth : 1440
     );
 
-    const [selectedFile, setSelectedFile] = useState(null);
-    const [fileError, setFileError] = useState('');
-    const [isDragging, setIsDragging] = useState(false);
+    // Form state
+    const [phoneNumber, setPhoneNumber] = useState('');
+    const [linkedinUrl, setLinkedinUrl] = useState('');
     const [isHoveredContinue, setIsHoveredContinue] = useState(false);
 
     useEffect(() => {
@@ -25,89 +24,20 @@ const ResumeSetup = () => {
     const isTablet = windowWidth >= 768 && windowWidth < 1100;
     const isDesktop = windowWidth >= 1100;
 
-    const allowedTypes = [
-        'application/pdf',
-        'application/msword',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    const benefits = [
+        'Auto-fills application contact information',
+        'Uses the same details across job sites',
+        'Helps you receive important updates',
     ];
-
-    const maxFileSize = 10 * 1024 * 1024; // 10MB
-
-    const handleFileValidationAndSet = (file) => {
-        setFileError('');
-        if (!file) return;
-
-        // Check file extension / mime type
-        const fileExtension = file.name.split('.').pop().toLowerCase();
-        const isValidExtension = ['pdf', 'doc', 'docx'].includes(fileExtension);
-        const isValidMime = allowedTypes.includes(file.type);
-
-        if (!isValidExtension && !isValidMime) {
-            setFileError('Invalid file format. Please upload a PDF or DOCX file.');
-            setSelectedFile(null);
-            return;
-        }
-
-        if (file.size > maxFileSize) {
-            setFileError('File size exceeds the 10MB limit. Please upload a smaller file.');
-            setSelectedFile(null);
-            return;
-        }
-
-        setSelectedFile(file);
-    };
-
-    const handleFileInputChange = (e) => {
-        const file = e.target.files?.[0];
-        handleFileValidationAndSet(file);
-    };
-
-    const handleDragOver = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsDragging(true);
-    };
-
-    const handleDragLeave = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsDragging(false);
-    };
-
-    const handleDrop = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsDragging(false);
-        const file = e.dataTransfer.files?.[0];
-        handleFileValidationAndSet(file);
-    };
-
-    const handleRemoveFile = (e) => {
-        e.stopPropagation();
-        setSelectedFile(null);
-        setFileError('');
-        if (fileInputRef.current) {
-            fileInputRef.current.value = '';
-        }
-    };
 
     const handleContinue = () => {
-        if (!selectedFile) return;
-        navigate('/location-setup', { state: { resumeName: selectedFile?.name } });
+        navigate('/work-eligibility', {
+            state: {
+                phoneNumber,
+                linkedinUrl,
+            },
+        });
     };
-
-    const formatFileSize = (bytes) => {
-        if (bytes < 1024 * 1024) {
-            return `${(bytes / 1024).toFixed(1)} KB`;
-        }
-        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-    };
-
-    const benefits = [
-        'AI extracts your experience, skills, and technologies',
-        'Your resume powers personalized job matching',
-        'Job-specific resume tailoring starts from your real experience',
-    ];
 
     const styles = {
         page: {
@@ -116,7 +46,7 @@ const ResumeSetup = () => {
             backgroundColor: '#F5F3FF',
             display: 'flex',
             flexDirection: 'column',
-            fontFamily: '"Plus Jakarta Sans", sans-serif',
+            fontFamily: '"Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
             boxSizing: 'border-box',
         },
         navbar: {
@@ -214,13 +144,31 @@ const ResumeSetup = () => {
             width: '100%',
             marginBottom: 'clamp(28px, 2.5vw, 36px)',
         },
+        progressHeaderRow: {
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: '10px',
+        },
         progressLabel: {
             fontFamily: '"Plus Jakarta Sans", sans-serif',
             fontSize: '16px',
             fontWeight: '500',
             color: '#64748B',
-            marginBottom: '10px',
-            display: 'block',
+        },
+        backBtn: {
+            background: 'none',
+            border: 'none',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            fontFamily: '"Plus Jakarta Sans", sans-serif',
+            fontSize: '15px',
+            fontWeight: '600',
+            color: '#0F172A',
+            cursor: 'pointer',
+            padding: '4px 6px',
+            transition: 'color 0.2s ease, transform 0.15s ease',
         },
         progressBarTrack: {
             width: '100%',
@@ -228,19 +176,13 @@ const ResumeSetup = () => {
             backgroundColor: '#EEF2F7',
             borderRadius: '9999px',
             overflow: 'hidden',
-            marginBottom: 'clamp(24px, 2vw, 32px)',
         },
         progressBarFill: {
-            width: '16.67%',
+            width: '50%',
             height: '100%',
             background: 'linear-gradient(90deg, #4F46E5, #A855F7)',
             borderRadius: '9999px',
             transition: 'width 0.4s ease',
-        },
-        progressDivider: {
-            width: '100%',
-            height: '1px',
-            backgroundColor: '#E2E8F0',
         },
         contentGrid: {
             display: 'grid',
@@ -248,6 +190,7 @@ const ResumeSetup = () => {
             gap: isDesktop ? 'clamp(40px, 3.5vw, 56px)' : '36px',
             alignItems: 'stretch',
             width: '100%',
+            marginTop: 'clamp(16px, 1.5vw, 24px)',
         },
         // Left Column
         leftCol: {
@@ -335,191 +278,121 @@ const ResumeSetup = () => {
             color: '#334155',
             fontWeight: '500',
         },
-        // Right Card
+        // Right Form Card
         rightCard: {
             backgroundColor: '#FFFFFF',
             border: '1px solid #E2E8F0',
             borderRadius: '24px',
             padding: isMobile ? '24px 18px' : 'clamp(28px, 2.4vw, 36px)',
-            minHeight: isDesktop ? '520px' : 'auto',
             display: 'flex',
             flexDirection: 'column',
             boxSizing: 'border-box',
-        },
-        rightBadge: {
-            fontFamily: '"Plus Jakarta Sans", sans-serif',
-            fontSize: '12px',
-            fontWeight: '700',
-            letterSpacing: '1px',
-            textTransform: 'uppercase',
-            color: '#2563EB',
-            marginBottom: '12px',
-            display: 'inline-block',
         },
         rightHeading: {
             fontFamily: '"Plus Jakarta Sans", sans-serif',
             fontWeight: '800',
-            fontSize: 'clamp(28px, 2.3vw, 36px)',
-            lineHeight: '1.15',
+            fontSize: 'clamp(24px, 2vw, 30px)',
+            lineHeight: '1.2',
             color: '#0F172A',
-            margin: '0 0 12px 0',
-        },
-        rightHeadingBlue: {
-            color: '#2563EB',
+            margin: '0 0 10px 0',
         },
         rightDesc: {
             fontFamily: '"Plus Jakarta Sans", sans-serif',
-            fontSize: '16px',
-            lineHeight: '26px',
+            fontSize: '15px',
+            lineHeight: '24px',
             color: '#64748B',
             margin: '0 0 clamp(24px, 2vw, 32px) 0',
-            maxWidth: '850px',
         },
-        uploadArea: {
-            backgroundColor: isDragging ? '#EEF2FF' : '#FBFDFF',
-            border: isDragging ? '2px dashed #2563EB' : '1.5px dashed #4F46E5',
-            borderRadius: '18px',
-            minHeight: '185px',
+        formFieldsGroup: {
             display: 'flex',
             flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            padding: '24px 20px',
-            transition: 'all 0.25s ease',
-            boxSizing: 'border-box',
-            marginBottom: 'clamp(24px, 2vw, 32px)',
+            gap: '24px',
+            width: '100%',
         },
-        uploadIconContainer: {
-            backgroundColor: '#EFF6FF',
-            borderRadius: '9999px',
-            padding: '12px',
+        fieldLabel: {
+            fontFamily: '"Plus Jakarta Sans", sans-serif',
+            fontSize: '14.5px',
+            fontWeight: '600',
+            color: '#1E293B',
+            marginBottom: '8px',
+            display: 'block',
+        },
+        inputWrapper: {
+            position: 'relative',
+            width: '100%',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            marginBottom: '12px',
         },
-        cloudUploadSvg: {
-            width: '24px',
-            height: '24px',
-            stroke: '#2563EB',
+        inputIcon: {
+            position: 'absolute',
+            left: '14px',
+            width: '18px',
+            height: '18px',
+            stroke: '#94A3B8',
             strokeWidth: '2',
             fill: 'none',
-            strokeLinecap: 'round',
-            strokeLinejoin: 'round',
+            pointerEvents: 'none',
         },
-        uploadMainText: {
-            fontFamily: '"Plus Jakarta Sans", sans-serif',
-            fontSize: '16px',
-            fontWeight: '600',
-            color: '#0F172A',
-            marginBottom: '6px',
-            textAlign: 'center',
-        },
-        browseHighlight: {
-            color: '#2563EB',
-            cursor: 'pointer',
-            textDecoration: 'underline',
-            textUnderlineOffset: '2px',
-        },
-        uploadSubText: {
-            fontFamily: '"Plus Jakarta Sans", sans-serif',
-            fontSize: '14px',
-            color: '#94A3B8',
-            margin: 0,
-            textAlign: 'center',
-        },
-        fileSelectedBox: {
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            width: '100%',
-            maxWidth: '520px',
-            padding: '12px 18px',
-            backgroundColor: '#FFFFFF',
-            border: '1px solid #DCE3EF',
-            borderRadius: '12px',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
-        },
-        fileInfoLeft: {
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            overflow: 'hidden',
-        },
-        fileIcon: {
-            width: '32px',
-            height: '32px',
-            backgroundColor: '#EEF2FF',
-            color: '#4F46E5',
-            borderRadius: '8px',
+        linkedinBadge: {
+            position: 'absolute',
+            left: '14px',
+            width: '18px',
+            height: '18px',
+            backgroundColor: '#0A66C2',
+            borderRadius: '3px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            flexShrink: 0,
+            color: '#FFFFFF',
+            fontSize: '11px',
+            fontWeight: '700',
+            fontFamily: 'sans-serif',
+            pointerEvents: 'none',
+            userSelect: 'none',
         },
-        fileName: {
-            fontFamily: '"Plus Jakarta Sans", sans-serif',
+        inputField: {
+            width: '100%',
+            height: '48px',
+            paddingLeft: '44px',
+            paddingRight: '16px',
+            borderRadius: '12px',
+            border: '1px solid #E2E8F0',
+            backgroundColor: '#FFFFFF',
             fontSize: '15px',
-            fontWeight: '600',
+            fontFamily: '"Plus Jakarta Sans", sans-serif',
             color: '#0F172A',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            maxWidth: '280px',
-            margin: 0,
+            outline: 'none',
+            boxSizing: 'border-box',
+            transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
         },
-        fileSize: {
+        fieldHelper: {
             fontFamily: '"Plus Jakarta Sans", sans-serif',
-            fontSize: '13px',
-            color: '#64748B',
-            margin: 0,
+            fontSize: '12.5px',
+            color: '#94A3B8',
+            marginTop: '6px',
+            display: 'block',
         },
-        removeBtn: {
-            background: 'none',
-            border: 'none',
-            color: '#EF4444',
-            fontFamily: '"Plus Jakarta Sans", sans-serif',
-            fontSize: '13.5px',
-            fontWeight: '600',
-            cursor: 'pointer',
-            padding: '4px 8px',
-            borderRadius: '6px',
-            transition: 'opacity 0.2s ease',
-        },
-        errorBanner: {
-            color: '#EF4444',
-            fontSize: '13.5px',
-            fontFamily: '"Plus Jakarta Sans", sans-serif',
-            fontWeight: '500',
-            marginTop: '8px',
-            textAlign: 'center',
-        },
-        continueBtn: (enabled, isHovered) => ({
-            width: isMobile ? '100%' : '175px',
+        continueBtn: (isHovered) => ({
+            width: isMobile ? '100%' : '160px',
             height: '48px',
             borderRadius: '12px',
-            background: enabled
-                ? 'linear-gradient(90deg, #2563EB, #4F46E5)'
-                : '#CBD5E1',
+            background: 'linear-gradient(90deg, #3B82F6, #4F46E5)',
             color: '#FFFFFF',
             fontFamily: '"Plus Jakarta Sans", sans-serif',
             fontSize: '16px',
             fontWeight: '700',
             border: 'none',
-            cursor: enabled ? 'pointer' : 'not-allowed',
+            cursor: 'pointer',
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
             gap: '8px',
-            boxShadow: enabled
-                ? isHovered
-                    ? '0px 6px 16px rgba(37, 99, 235, 0.4)'
-                    : '0px 4px 8px rgba(37, 99, 235, 0.25)'
-                : 'none',
-            transform: enabled && isHovered ? 'translateY(-2px)' : 'none',
+            boxShadow: isHovered
+                ? '0px 6px 16px rgba(79, 70, 229, 0.4)'
+                : '0px 4px 10px rgba(79, 70, 229, 0.25)',
+            transform: isHovered ? 'translateY(-2px)' : 'none',
             transition: 'all 0.25s ease',
-            marginTop: 'auto',
+            marginTop: '36px',
             alignSelf: isMobile ? 'stretch' : 'flex-end',
         }),
         arrowSvg: {
@@ -535,7 +408,7 @@ const ResumeSetup = () => {
 
     return (
         <div style={styles.page}>
-            {/* TOP WHITE NAVBAR */}
+            {/* TOP NAVBAR */}
             <header style={styles.navbar}>
                 {/* Brand */}
                 <a
@@ -570,36 +443,58 @@ const ResumeSetup = () => {
                 </div>
             </header>
 
-            {/* MAIN CONTAINER */}
+            {/* MAIN CONTENT AREA */}
             <main style={styles.mainWrapper}>
                 <div style={styles.mainCard}>
                     {/* PROGRESS HEADER */}
                     <div style={styles.progressSection}>
-                        <span style={styles.progressLabel}>Step 1 of 6</span>
+                        <div style={styles.progressHeaderRow}>
+                            <span style={styles.progressLabel}>Step 3 of 6</span>
+                            <button
+                                type="button"
+                                onClick={() => navigate('/location-setup')}
+                                style={styles.backBtn}
+                                aria-label="Go back to previous step"
+                            >
+                                <svg
+                                    viewBox="0 0 24 24"
+                                    style={{
+                                        width: '16px',
+                                        height: '16px',
+                                        stroke: 'currentColor',
+                                        strokeWidth: '2.4',
+                                        fill: 'none',
+                                    }}
+                                >
+                                    <line x1="19" y1="12" x2="5" y2="12" />
+                                    <polyline points="12 19 5 12 12 5" />
+                                </svg>
+                                <span>Back</span>
+                            </button>
+                        </div>
                         <div style={styles.progressBarTrack}>
                             <div style={styles.progressBarFill} />
                         </div>
-                        <div style={styles.progressDivider} />
                     </div>
 
-                    {/* TWO COLUMN CONTENT */}
+                    {/* TWO COLUMN GRID */}
                     <div style={styles.contentGrid}>
-                        {/* LEFT COLUMN: BADGE, HEADING, DESCRIPTION, BENEFITS */}
+                        {/* LEFT COLUMN */}
                         <div style={styles.leftCol}>
                             <div style={styles.leftBadge}>
                                 <span style={styles.blueDot} />
-                                <span>RESUME SETUP</span>
+                                <span>CONTACT SETUP</span>
                             </div>
 
                             <h1 style={styles.leftHeading}>
-                                Your resume unlocks
+                                Stay connected, never
                                 <br />
-                                better opportunities.
+                                miss an opportunity.
                             </h1>
 
                             <p style={styles.leftDesc}>
-                                Upload your resume and let AutoApply understand your experience, skills, and
-                                target roles to find and apply to the most relevant jobs for you.
+                                We'll use this information to fill application forms and ensure recruiters can reach
+                                you.
                             </p>
 
                             <ul style={styles.benefitsList}>
@@ -616,97 +511,60 @@ const ResumeSetup = () => {
                             </ul>
                         </div>
 
-                        {/* RIGHT CARD: INNER UPLOAD BOX */}
+                        {/* RIGHT FORM CARD */}
                         <div style={styles.rightCard}>
-                            <span style={styles.rightBadge}>RESUME SETUP</span>
-
-                            <h2 style={styles.rightHeading}>
-                                Let's start with your <span style={styles.rightHeadingBlue}>resume.</span>
-                            </h2>
+                            <h2 style={styles.rightHeading}>How should we reach out?</h2>
 
                             <p style={styles.rightDesc}>
-                                Upload your latest resume so AutoApply can understand your experience and find
-                                better-fit opportunities.
+                                Your phone number and LinkedIn profile help us auto-fill applications and make sure
+                                recruiters can reach you.
                             </p>
 
-                            {/* Hidden file input */}
-                            <input
-                                ref={fileInputRef}
-                                type="file"
-                                accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                                onChange={handleFileInputChange}
-                                style={{ display: 'none' }}
-                            />
-
-                            {/* UPLOAD AREA */}
-                            <div
-                                style={styles.uploadArea}
-                                onClick={() => fileInputRef.current?.click()}
-                                onDragOver={handleDragOver}
-                                onDragLeave={handleDragLeave}
-                                onDrop={handleDrop}
-                                role="button"
-                                tabIndex={0}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter' || e.key === ' ') {
-                                        fileInputRef.current?.click();
-                                    }
-                                }}
-                            >
-                                {!selectedFile ? (
-                                    <>
-                                        <div style={styles.uploadIconContainer}>
-                                            <svg viewBox="0 0 24 24" style={styles.cloudUploadSvg}>
-                                                <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" />
-                                                <path d="M12 12v9" />
-                                                <path d="m8 16 4-4 4 4" />
-                                            </svg>
-                                        </div>
-                                        <p style={styles.uploadMainText}>
-                                            Drop your resume here, or <span style={styles.browseHighlight}>Browse</span>
-                                        </p>
-                                        <p style={styles.uploadSubText}>PDF or DOCX • Up to 10MB</p>
-                                    </>
-                                ) : (
-                                    <div style={styles.fileSelectedBox} onClick={(e) => e.stopPropagation()}>
-                                        <div style={styles.fileInfoLeft}>
-                                            <div style={styles.fileIcon}>
-                                                <svg
-                                                    viewBox="0 0 24 24"
-                                                    style={{ width: '18px', height: '18px', stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}
-                                                >
-                                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                                                    <polyline points="14 2 14 8 20 8" />
-                                                    <line x1="16" y1="13" x2="8" y2="13" />
-                                                    <line x1="16" y1="17" x2="8" y2="17" />
-                                                    <polyline points="10 9 9 9 8 9" />
-                                                </svg>
-                                            </div>
-                                            <div>
-                                                <p style={styles.fileName}>{selectedFile.name}</p>
-                                                <p style={styles.fileSize}>{formatFileSize(selectedFile.size)}</p>
-                                            </div>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            onClick={handleRemoveFile}
-                                            style={styles.removeBtn}
-                                            aria-label="Remove uploaded resume"
-                                        >
-                                            Remove
-                                        </button>
+                            <div style={styles.formFieldsGroup}>
+                                {/* PHONE NUMBER */}
+                                <div>
+                                    <label style={styles.fieldLabel}>Phone number</label>
+                                    <div style={styles.inputWrapper}>
+                                        <svg viewBox="0 0 24 24" style={styles.inputIcon}>
+                                            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                                        </svg>
+                                        <input
+                                            type="tel"
+                                            value={phoneNumber}
+                                            onChange={(e) => setPhoneNumber(e.target.value)}
+                                            placeholder="Enter phone number with country code"
+                                            style={styles.inputField}
+                                        />
                                     </div>
-                                )}
-                            </div>
+                                    <span style={styles.fieldHelper}>
+                                        Example: +1 for US/Canada, +91 for India, etc.
+                                    </span>
+                                </div>
 
-                            {fileError && <p style={styles.errorBanner}>{fileError}</p>}
+                                {/* LINKEDIN PROFILE */}
+                                <div>
+                                    <label style={styles.fieldLabel}>LinkedIn profile</label>
+                                    <div style={styles.inputWrapper}>
+                                        <div style={styles.linkedinBadge}>in</div>
+                                        <input
+                                            type="url"
+                                            value={linkedinUrl}
+                                            onChange={(e) => setLinkedinUrl(e.target.value)}
+                                            placeholder="https://linkedin.com/in/yourhandle"
+                                            style={styles.inputField}
+                                        />
+                                    </div>
+                                    <span style={styles.fieldHelper}>
+                                        We'll use this to pre-fill applications on most job sites.
+                                    </span>
+                                </div>
+                            </div>
 
                             {/* CONTINUE BUTTON */}
                             <button
                                 type="button"
-                                disabled={!selectedFile}
                                 onClick={handleContinue}
-                                style={styles.continueBtn(!!selectedFile, isHoveredContinue)}
+                                style={styles.continueBtn(isHoveredContinue)}
                                 onMouseEnter={() => setIsHoveredContinue(true)}
                                 onMouseLeave={() => setIsHoveredContinue(false)}
                             >
@@ -723,4 +581,4 @@ const ResumeSetup = () => {
     );
 };
 
-export default ResumeSetup;
+export default ContactSetup;

@@ -1,0 +1,957 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import logoSrc from '../assets/Background.svg';
+
+const LocationSetup = () => {
+    const navigate = useNavigate();
+    const dropdownRef = useRef(null);
+
+    const [windowWidth, setWindowWidth] = useState(
+        typeof window !== 'undefined' ? window.innerWidth : 1440
+    );
+
+    // Form state
+    const [address, setAddress] = useState('');
+    const [city, setCity] = useState('');
+    const [stateVal, setStateVal] = useState('');
+    const [country, setCountry] = useState('');
+    const [isCountryDropdownOpen, setIsCountryDropdownOpen] = useState(false);
+    const [workMode, setWorkMode] = useState('remote'); // 'remote' | 'hybrid' | 'on-site'
+    const [isHoveredContinue, setIsHoveredContinue] = useState(false);
+
+    useEffect(() => {
+        const handleResize = () => setWindowWidth(window.innerWidth);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    // Close country dropdown on outside click
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+                setIsCountryDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const isMobile = windowWidth < 768;
+    const isTablet = windowWidth >= 768 && windowWidth < 1100;
+    const isDesktop = windowWidth >= 1100;
+
+    const countries = [
+        'United States',
+        'Canada',
+        'United Kingdom',
+        'Australia',
+        'Germany',
+        'India',
+        'France',
+        'Netherlands',
+        'Singapore',
+        'Ireland',
+        'Switzerland',
+        'United Arab Emirates',
+        'Sweden',
+        'Japan',
+        'Spain',
+        'Italy',
+        'Brazil',
+        'New Zealand',
+    ];
+
+    const benefits = [
+        'Match jobs to your preferred locations',
+        'Prioritize remote, hybrid or on-site roles',
+        'Pre-fill supported application fields',
+    ];
+
+    const handleContinue = () => {
+        navigate('/contact-setup', {
+            state: {
+                address,
+                city,
+                state: stateVal,
+                country,
+                workMode,
+            },
+        });
+    };
+
+    const styles = {
+        page: {
+            width: '100%',
+            minHeight: '100vh',
+            backgroundColor: '#F5F3FF',
+            display: 'flex',
+            flexDirection: 'column',
+            fontFamily: '"Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+            boxSizing: 'border-box',
+        },
+        navbar: {
+            width: '100%',
+            height: '80px',
+            backgroundColor: '#FFFFFF',
+            borderBottom: '1px solid #E2E8F0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingLeft: isMobile ? '20px' : isTablet ? '36px' : 'clamp(40px, 4vw, 80px)',
+            paddingRight: isMobile ? '20px' : isTablet ? '36px' : 'clamp(40px, 4vw, 80px)',
+            boxSizing: 'border-box',
+        },
+        brandWrapper: {
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '12px',
+            textDecoration: 'none',
+            cursor: 'pointer',
+        },
+        logoImg: {
+            width: '38px',
+            height: '38px',
+            objectFit: 'contain',
+        },
+        brandText: {
+            fontFamily: '"Plus Jakarta Sans", sans-serif',
+            fontWeight: '700',
+            fontSize: 'clamp(22px, 1.6vw, 26px)',
+            color: '#00509F',
+            letterSpacing: '-0.02em',
+            margin: 0,
+        },
+        userArea: {
+            display: 'flex',
+            alignItems: 'center',
+            gap: isMobile ? '14px' : '28px',
+        },
+        userEmail: {
+            fontFamily: '"Plus Jakarta Sans", sans-serif',
+            fontSize: isMobile ? '14px' : '15.5px',
+            color: '#64748B',
+            fontWeight: '500',
+        },
+        logoutBtn: {
+            background: 'none',
+            border: 'none',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            fontFamily: '"Plus Jakarta Sans", sans-serif',
+            fontSize: '16px',
+            fontWeight: '600',
+            color: '#0F172A',
+            cursor: 'pointer',
+            padding: '6px 8px',
+            borderRadius: '8px',
+            transition: 'opacity 0.2s ease',
+        },
+        logoutSvg: {
+            width: '18px',
+            height: '18px',
+            stroke: '#0F172A',
+            strokeWidth: '2.2',
+            fill: 'none',
+            strokeLinecap: 'round',
+            strokeLinejoin: 'round',
+        },
+        mainWrapper: {
+            width: '100%',
+            flexGrow: 1,
+            paddingLeft: isMobile ? '16px' : isTablet ? '28px' : 'clamp(32px, 3.5vw, 64px)',
+            paddingRight: isMobile ? '16px' : isTablet ? '28px' : 'clamp(32px, 3.5vw, 64px)',
+            paddingTop: isMobile ? '24px' : 'clamp(32px, 3vw, 48px)',
+            paddingBottom: isMobile ? '40px' : 'clamp(48px, 4vw, 70px)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'flex-start',
+            boxSizing: 'border-box',
+        },
+        mainCard: {
+            width: '100%',
+            maxWidth: '1520px',
+            backgroundColor: '#FFFFFF',
+            border: '1px solid #E2E8F0',
+            borderRadius: isMobile ? '20px' : '28px',
+            boxShadow: '0px 10px 30px rgba(79, 70, 229, 0.08)',
+            padding: isMobile ? '24px 20px' : isTablet ? '36px 32px' : 'clamp(36px, 3vw, 48px)',
+            boxSizing: 'border-box',
+            display: 'flex',
+            flexDirection: 'column',
+        },
+        progressSection: {
+            width: '100%',
+            marginBottom: 'clamp(28px, 2.5vw, 36px)',
+        },
+        progressHeaderRow: {
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: '10px',
+        },
+        progressLabel: {
+            fontFamily: '"Plus Jakarta Sans", sans-serif',
+            fontSize: '16px',
+            fontWeight: '500',
+            color: '#64748B',
+        },
+        backBtn: {
+            background: 'none',
+            border: 'none',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            fontFamily: '"Plus Jakarta Sans", sans-serif',
+            fontSize: '15px',
+            fontWeight: '600',
+            color: '#0F172A',
+            cursor: 'pointer',
+            padding: '4px 6px',
+            transition: 'color 0.2s ease, transform 0.15s ease',
+        },
+        progressBarTrack: {
+            width: '100%',
+            height: '7px',
+            backgroundColor: '#EEF2F7',
+            borderRadius: '9999px',
+            overflow: 'hidden',
+        },
+        progressBarFill: {
+            width: '33.33%',
+            height: '100%',
+            background: 'linear-gradient(90deg, #4F46E5, #A855F7)',
+            borderRadius: '9999px',
+            transition: 'width 0.4s ease',
+        },
+        contentGrid: {
+            display: 'grid',
+            gridTemplateColumns: isDesktop ? '0.75fr 1.25fr' : '1fr',
+            gap: isDesktop ? 'clamp(40px, 3.5vw, 56px)' : '36px',
+            alignItems: 'stretch',
+            width: '100%',
+            marginTop: 'clamp(16px, 1.5vw, 24px)',
+        },
+        // Left Column
+        leftCol: {
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-start',
+        },
+        leftBadge: {
+            backgroundColor: '#EFF6FF',
+            border: '1px solid #DBEAFE',
+            borderRadius: '9999px',
+            padding: '7px 14px',
+            fontFamily: '"Plus Jakarta Sans", sans-serif',
+            fontSize: '12px',
+            fontWeight: '700',
+            letterSpacing: '0.6px',
+            color: '#2563EB',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            marginBottom: 'clamp(16px, 1.4vw, 22px)',
+        },
+        blueDot: {
+            width: '6px',
+            height: '6px',
+            borderRadius: '50%',
+            backgroundColor: '#2563EB',
+        },
+        leftHeading: {
+            fontFamily: '"Plus Jakarta Sans", sans-serif',
+            fontWeight: '800',
+            fontSize: 'clamp(28px, 2.3vw, 36px)',
+            lineHeight: '1.15',
+            letterSpacing: '-0.8px',
+            color: '#0F172A',
+            margin: '0 0 clamp(14px, 1.2vw, 18px) 0',
+        },
+        leftDesc: {
+            fontFamily: '"Plus Jakarta Sans", sans-serif',
+            fontSize: '16px',
+            lineHeight: '26px',
+            color: '#475569',
+            margin: '0 0 clamp(28px, 2.5vw, 36px) 0',
+            maxWidth: '500px',
+        },
+        benefitsList: {
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'clamp(16px, 1.4vw, 20px)',
+            padding: 0,
+            margin: 0,
+            listStyle: 'none',
+            width: '100%',
+        },
+        benefitItem: {
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '12px',
+        },
+        benefitIconWrapper: {
+            width: '22px',
+            height: '22px',
+            borderRadius: '50%',
+            backgroundColor: '#EFF6FF',
+            border: '1px solid #BFDBFE',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            marginTop: '2px',
+        },
+        benefitCheckSvg: {
+            width: '12px',
+            height: '12px',
+            stroke: '#2563EB',
+            strokeWidth: '2.5',
+            fill: 'none',
+            strokeLinecap: 'round',
+            strokeLinejoin: 'round',
+        },
+        benefitText: {
+            fontFamily: '"Plus Jakarta Sans", sans-serif',
+            fontSize: '15.5px',
+            lineHeight: '24px',
+            color: '#334155',
+            fontWeight: '500',
+        },
+        // Right Form Card
+        rightCard: {
+            backgroundColor: '#FFFFFF',
+            border: '1px solid #E2E8F0',
+            borderRadius: '24px',
+            padding: isMobile ? '24px 18px' : 'clamp(28px, 2.4vw, 36px)',
+            display: 'flex',
+            flexDirection: 'column',
+            boxSizing: 'border-box',
+        },
+        rightHeading: {
+            fontFamily: '"Plus Jakarta Sans", sans-serif',
+            fontWeight: '800',
+            fontSize: 'clamp(24px, 2vw, 30px)',
+            lineHeight: '1.2',
+            color: '#0F172A',
+            margin: '0 0 10px 0',
+        },
+        rightHeadingBlue: {
+            color: '#2563EB',
+        },
+        rightDesc: {
+            fontFamily: '"Plus Jakarta Sans", sans-serif',
+            fontSize: '15px',
+            lineHeight: '24px',
+            color: '#64748B',
+            margin: '0 0 clamp(24px, 2vw, 32px) 0',
+        },
+        formFieldsGroup: {
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '20px',
+            width: '100%',
+        },
+        fieldLabel: {
+            fontFamily: '"Plus Jakarta Sans", sans-serif',
+            fontSize: '12px',
+            fontWeight: '700',
+            letterSpacing: '0.6px',
+            textTransform: 'uppercase',
+            color: '#334155',
+            marginBottom: '8px',
+            display: 'block',
+        },
+        inputWrapper: {
+            position: 'relative',
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+        },
+        inputIcon: {
+            position: 'absolute',
+            left: '14px',
+            width: '18px',
+            height: '18px',
+            stroke: '#94A3B8',
+            strokeWidth: '2',
+            fill: 'none',
+            pointerEvents: 'none',
+        },
+        inputField: {
+            width: '100%',
+            height: '48px',
+            paddingLeft: '44px',
+            paddingRight: '16px',
+            borderRadius: '12px',
+            border: '1px solid #E2E8F0',
+            backgroundColor: '#FFFFFF',
+            fontSize: '15px',
+            fontFamily: '"Plus Jakarta Sans", sans-serif',
+            color: '#0F172A',
+            outline: 'none',
+            boxSizing: 'border-box',
+            transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
+        },
+        cityStateRow: {
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+            gap: '16px',
+            width: '100%',
+        },
+        dropdownToggle: {
+            width: '100%',
+            height: '48px',
+            paddingLeft: '44px',
+            paddingRight: '16px',
+            borderRadius: '12px',
+            border: '1px solid #E2E8F0',
+            backgroundColor: '#FFFFFF',
+            fontSize: '15px',
+            fontFamily: '"Plus Jakarta Sans", sans-serif',
+            color: country ? '#0F172A' : '#94A3B8',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            boxSizing: 'border-box',
+            textAlign: 'left',
+        },
+        chevronIcon: {
+            width: '18px',
+            height: '18px',
+            stroke: '#94A3B8',
+            strokeWidth: '2',
+            fill: 'none',
+            transition: 'transform 0.2s ease',
+        },
+        dropdownMenu: {
+            position: 'absolute',
+            top: 'calc(100% + 6px)',
+            left: 0,
+            right: 0,
+            backgroundColor: '#FFFFFF',
+            border: '1px solid #E2E8F0',
+            borderRadius: '12px',
+            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+            maxHeight: '220px',
+            overflowY: 'auto',
+            zIndex: 50,
+            padding: '6px 0',
+        },
+        dropdownItem: (isSelected) => ({
+            padding: '10px 16px',
+            fontSize: '14.5px',
+            fontFamily: '"Plus Jakarta Sans", sans-serif',
+            color: isSelected ? '#2563EB' : '#1E293B',
+            backgroundColor: isSelected ? '#EFF6FF' : 'transparent',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            transition: 'background-color 0.15s ease',
+        }),
+        workModeGrid: {
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)',
+            gap: '12px',
+            width: '100%',
+        },
+        workModeCard: (isSelected) => ({
+            border: isSelected ? '2px solid #2563EB' : '1px solid #E2E8F0',
+            backgroundColor: isSelected ? '#FFFFFF' : '#FFFFFF',
+            borderRadius: '14px',
+            padding: '16px 14px',
+            cursor: 'pointer',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            minHeight: '108px',
+            transition: 'all 0.2s ease',
+            boxSizing: 'border-box',
+            position: 'relative',
+        }),
+        workModeTopRow: {
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            width: '100%',
+            marginBottom: '12px',
+        },
+        workModeIconBox: (isSelected) => ({
+            width: '36px',
+            height: '36px',
+            borderRadius: '10px',
+            backgroundColor: isSelected ? '#2563EB' : '#F1F5F9',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: isSelected ? '#FFFFFF' : '#64748B',
+            transition: 'all 0.2s ease',
+        }),
+        radioCircle: (isSelected) => ({
+            width: '18px',
+            height: '18px',
+            borderRadius: '50%',
+            border: isSelected ? '2px solid #2563EB' : '2px solid #CBD5E1',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: '#FFFFFF',
+            transition: 'all 0.2s ease',
+        }),
+        radioDot: {
+            width: '8px',
+            height: '8px',
+            borderRadius: '50%',
+            backgroundColor: '#2563EB',
+        },
+        workModeTitle: {
+            fontFamily: '"Plus Jakarta Sans", sans-serif',
+            fontSize: '15px',
+            fontWeight: '700',
+            color: '#0F172A',
+            margin: '0 0 2px 0',
+        },
+        workModeSubtitle: {
+            fontFamily: '"Plus Jakarta Sans", sans-serif',
+            fontSize: '12.5px',
+            color: '#64748B',
+            margin: 0,
+        },
+        continueBtn: (isHovered) => ({
+            width: isMobile ? '100%' : '160px',
+            height: '48px',
+            borderRadius: '12px',
+            background: 'linear-gradient(90deg, #3B82F6, #4F46E5)',
+            color: '#FFFFFF',
+            fontFamily: '"Plus Jakarta Sans", sans-serif',
+            fontSize: '16px',
+            fontWeight: '700',
+            border: 'none',
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            boxShadow: isHovered
+                ? '0px 6px 16px rgba(79, 70, 229, 0.4)'
+                : '0px 4px 10px rgba(79, 70, 229, 0.25)',
+            transform: isHovered ? 'translateY(-2px)' : 'none',
+            transition: 'all 0.25s ease',
+            marginTop: '28px',
+            alignSelf: isMobile ? 'stretch' : 'flex-end',
+        }),
+        arrowSvg: {
+            width: '18px',
+            height: '18px',
+            stroke: '#FFFFFF',
+            strokeWidth: '2.4',
+            fill: 'none',
+            strokeLinecap: 'round',
+            strokeLinejoin: 'round',
+        },
+    };
+
+    return (
+        <div style={styles.page}>
+            {/* TOP NAVBAR */}
+            <header style={styles.navbar}>
+                {/* Brand */}
+                <a
+                    href="/"
+                    onClick={(e) => {
+                        e.preventDefault();
+                        navigate('/');
+                    }}
+                    style={styles.brandWrapper}
+                    aria-label="Auto Jobs Apply Homepage"
+                >
+                    <img src={logoSrc} alt="Auto Jobs Apply Logo" style={styles.logoImg} />
+                    <span style={styles.brandText}>Auto Jobs Apply</span>
+                </a>
+
+                {/* Right: Email & Logout */}
+                <div style={styles.userArea}>
+                    <span style={styles.userEmail}>nareshpulluri79@gmail.com</span>
+                    <button
+                        type="button"
+                        onClick={() => navigate('/')}
+                        style={styles.logoutBtn}
+                        aria-label="Log out"
+                    >
+                        <svg viewBox="0 0 24 24" style={styles.logoutSvg}>
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                            <polyline points="16 17 21 12 16 7" />
+                            <line x1="21" y1="12" x2="9" y2="12" />
+                        </svg>
+                        <span>Log out</span>
+                    </button>
+                </div>
+            </header>
+
+            {/* MAIN CONTENT AREA */}
+            <main style={styles.mainWrapper}>
+                <div style={styles.mainCard}>
+                    {/* PROGRESS HEADER */}
+                    <div style={styles.progressSection}>
+                        <div style={styles.progressHeaderRow}>
+                            <span style={styles.progressLabel}>Step 2 of 6</span>
+                            <button
+                                type="button"
+                                onClick={() => navigate('/resume-setup')}
+                                style={styles.backBtn}
+                                aria-label="Go back to previous step"
+                            >
+                                <svg
+                                    viewBox="0 0 24 24"
+                                    style={{
+                                        width: '16px',
+                                        height: '16px',
+                                        stroke: 'currentColor',
+                                        strokeWidth: '2.4',
+                                        fill: 'none',
+                                    }}
+                                >
+                                    <line x1="19" y1="12" x2="5" y2="12" />
+                                    <polyline points="12 19 5 12 12 5" />
+                                </svg>
+                                <span>Back</span>
+                            </button>
+                        </div>
+                        <div style={styles.progressBarTrack}>
+                            <div style={styles.progressBarFill} />
+                        </div>
+                    </div>
+
+                    {/* TWO COLUMN GRID */}
+                    <div style={styles.contentGrid}>
+                        {/* LEFT COLUMN */}
+                        <div style={styles.leftCol}>
+                            <div style={styles.leftBadge}>
+                                <span style={styles.blueDot} />
+                                <span>PROFILE SETUP</span>
+                            </div>
+
+                            <h1 style={styles.leftHeading}>
+                                Your location helps
+                                <br />
+                                us find the right
+                                <br />
+                                jobs.
+                            </h1>
+
+                            <p style={styles.leftDesc}>
+                                We use your location and work preferences to match you with relevant opportunities and
+                                automatically fill application forms accurately.
+                            </p>
+
+                            <ul style={styles.benefitsList}>
+                                {benefits.map((benefit, idx) => (
+                                    <li key={idx} style={styles.benefitItem}>
+                                        <div style={styles.benefitIconWrapper}>
+                                            <svg viewBox="0 0 24 24" style={styles.benefitCheckSvg}>
+                                                <polyline points="20 6 9 17 4 12" />
+                                            </svg>
+                                        </div>
+                                        <span style={styles.benefitText}>{benefit}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+
+                        {/* RIGHT FORM CARD */}
+                        <div style={styles.rightCard}>
+                            <h2 style={styles.rightHeading}>
+                                Where are you looking <span style={styles.rightHeadingBlue}>to work?</span>
+                            </h2>
+
+                            <p style={styles.rightDesc}>
+                                Tell us where you're targeting jobs so we can match opportunities to your location and
+                                work preferences.
+                            </p>
+
+                            <div style={styles.formFieldsGroup}>
+                                {/* ADDRESS */}
+                                <div>
+                                    <label style={styles.fieldLabel}>ADDRESS</label>
+                                    <div style={styles.inputWrapper}>
+                                        <svg viewBox="0 0 24 24" style={styles.inputIcon}>
+                                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                                            <circle cx="12" cy="10" r="3" />
+                                        </svg>
+                                        <input
+                                            type="text"
+                                            value={address}
+                                            onChange={(e) => setAddress(e.target.value)}
+                                            placeholder="Start typing your address....."
+                                            style={styles.inputField}
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* CITY & STATE */}
+                                <div style={styles.cityStateRow}>
+                                    <div>
+                                        <label style={styles.fieldLabel}>CITY</label>
+                                        <div style={styles.inputWrapper}>
+                                            <svg viewBox="0 0 24 24" style={styles.inputIcon}>
+                                                <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z" />
+                                                <path d="M6 12H4a2 2 0 0 0-2 2v8h4" />
+                                                <path d="M18 9h2a2 2 0 0 1 2 2v11h-4" />
+                                                <path d="M10 6h4" />
+                                                <path d="M10 10h4" />
+                                                <path d="M10 14h4" />
+                                                <path d="M10 18h4" />
+                                            </svg>
+                                            <input
+                                                type="text"
+                                                value={city}
+                                                onChange={(e) => setCity(e.target.value)}
+                                                placeholder="e.g. San Francisco"
+                                                style={styles.inputField}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label style={styles.fieldLabel}>STATE</label>
+                                        <div style={styles.inputWrapper}>
+                                            <svg viewBox="0 0 24 24" style={styles.inputIcon}>
+                                                <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21" />
+                                                <line x1="9" y1="3" x2="9" y2="18" />
+                                                <line x1="15" y1="6" x2="15" y2="21" />
+                                            </svg>
+                                            <input
+                                                type="text"
+                                                value={stateVal}
+                                                onChange={(e) => setStateVal(e.target.value)}
+                                                placeholder="e.g. California"
+                                                style={styles.inputField}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* COUNTRY */}
+                                <div ref={dropdownRef} style={{ position: 'relative' }}>
+                                    <label style={styles.fieldLabel}>COUNTRY</label>
+                                    <button
+                                        type="button"
+                                        style={styles.dropdownToggle}
+                                        onClick={() => setIsCountryDropdownOpen(!isCountryDropdownOpen)}
+                                        aria-haspopup="listbox"
+                                        aria-expanded={isCountryDropdownOpen}
+                                    >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                            <svg
+                                                viewBox="0 0 24 24"
+                                                style={{
+                                                    width: '18px',
+                                                    height: '18px',
+                                                    stroke: '#94A3B8',
+                                                    strokeWidth: '2',
+                                                    fill: 'none',
+                                                    flexShrink: 0,
+                                                }}
+                                            >
+                                                <circle cx="12" cy="12" r="10" />
+                                                <line x1="2" y1="12" x2="22" y2="12" />
+                                                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                                            </svg>
+                                            <span>{country || 'Select a country'}</span>
+                                        </div>
+                                        <svg
+                                            viewBox="0 0 24 24"
+                                            style={{
+                                                ...styles.chevronIcon,
+                                                transform: isCountryDropdownOpen ? 'rotate(180deg)' : 'none',
+                                            }}
+                                        >
+                                            <polyline points="6 9 12 15 18 9" />
+                                        </svg>
+                                    </button>
+
+                                    {isCountryDropdownOpen && (
+                                        <ul style={styles.dropdownMenu} role="listbox">
+                                            {countries.map((c) => (
+                                                <li
+                                                    key={c}
+                                                    role="option"
+                                                    aria-selected={country === c}
+                                                    style={styles.dropdownItem(country === c)}
+                                                    onClick={() => {
+                                                        setCountry(c);
+                                                        setIsCountryDropdownOpen(false);
+                                                    }}
+                                                    onMouseEnter={(e) => {
+                                                        if (country !== c) e.currentTarget.style.backgroundColor = '#F8FAFC';
+                                                    }}
+                                                    onMouseLeave={(e) => {
+                                                        if (country !== c) e.currentTarget.style.backgroundColor = 'transparent';
+                                                    }}
+                                                >
+                                                    <span>{c}</span>
+                                                    {country === c && (
+                                                        <svg
+                                                            viewBox="0 0 24 24"
+                                                            style={{
+                                                                width: '16px',
+                                                                height: '16px',
+                                                                stroke: '#2563EB',
+                                                                strokeWidth: '2.5',
+                                                                fill: 'none',
+                                                            }}
+                                                        >
+                                                            <polyline points="20 6 9 17 4 12" />
+                                                        </svg>
+                                                    )}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </div>
+
+                                {/* WORK MODE */}
+                                <div>
+                                    <label style={styles.fieldLabel}>WORK MODE</label>
+                                    <div style={styles.workModeGrid}>
+                                        {/* REMOTE */}
+                                        <div
+                                            style={styles.workModeCard(workMode === 'remote')}
+                                            onClick={() => setWorkMode('remote')}
+                                            role="button"
+                                            tabIndex={0}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' || e.key === ' ') setWorkMode('remote');
+                                            }}
+                                        >
+                                            <div style={styles.workModeTopRow}>
+                                                <div style={styles.workModeIconBox(workMode === 'remote')}>
+                                                    <svg
+                                                        viewBox="0 0 24 24"
+                                                        style={{
+                                                            width: '18px',
+                                                            height: '18px',
+                                                            stroke: 'currentColor',
+                                                            strokeWidth: '2.2',
+                                                            fill: 'none',
+                                                        }}
+                                                    >
+                                                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                                                        <polyline points="9 22 9 12 15 12 15 22" />
+                                                    </svg>
+                                                </div>
+                                                <div style={styles.radioCircle(workMode === 'remote')}>
+                                                    {workMode === 'remote' && <div style={styles.radioDot} />}
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <p style={styles.workModeTitle}>Remote</p>
+                                                <p style={styles.workModeSubtitle}>Work from anywhere</p>
+                                            </div>
+                                        </div>
+
+                                        {/* HYBRID */}
+                                        <div
+                                            style={styles.workModeCard(workMode === 'hybrid')}
+                                            onClick={() => setWorkMode('hybrid')}
+                                            role="button"
+                                            tabIndex={0}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' || e.key === ' ') setWorkMode('hybrid');
+                                            }}
+                                        >
+                                            <div style={styles.workModeTopRow}>
+                                                <div style={styles.workModeIconBox(workMode === 'hybrid')}>
+                                                    <svg
+                                                        viewBox="0 0 24 24"
+                                                        style={{
+                                                            width: '18px',
+                                                            height: '18px',
+                                                            stroke: 'currentColor',
+                                                            strokeWidth: '2.2',
+                                                            fill: 'none',
+                                                        }}
+                                                    >
+                                                        <rect x="4" y="2" width="16" height="20" rx="2" />
+                                                        <path d="M9 22v-4h6v4" />
+                                                        <path d="M8 6h.01" />
+                                                        <path d="M16 6h.01" />
+                                                        <path d="M8 10h.01" />
+                                                        <path d="M16 10h.01" />
+                                                        <path d="M8 14h.01" />
+                                                        <path d="M16 14h.01" />
+                                                    </svg>
+                                                </div>
+                                                <div style={styles.radioCircle(workMode === 'hybrid')}>
+                                                    {workMode === 'hybrid' && <div style={styles.radioDot} />}
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <p style={styles.workModeTitle}>Hybrid</p>
+                                                <p style={styles.workModeSubtitle}>Office + remote</p>
+                                            </div>
+                                        </div>
+
+                                        {/* ON-SITE */}
+                                        <div
+                                            style={styles.workModeCard(workMode === 'on-site')}
+                                            onClick={() => setWorkMode('on-site')}
+                                            role="button"
+                                            tabIndex={0}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' || e.key === ' ') setWorkMode('on-site');
+                                            }}
+                                        >
+                                            <div style={styles.workModeTopRow}>
+                                                <div style={styles.workModeIconBox(workMode === 'on-site')}>
+                                                    <svg
+                                                        viewBox="0 0 24 24"
+                                                        style={{
+                                                            width: '18px',
+                                                            height: '18px',
+                                                            stroke: 'currentColor',
+                                                            strokeWidth: '2.2',
+                                                            fill: 'none',
+                                                        }}
+                                                    >
+                                                        <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+                                                        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+                                                    </svg>
+                                                </div>
+                                                <div style={styles.radioCircle(workMode === 'on-site')}>
+                                                    {workMode === 'on-site' && <div style={styles.radioDot} />}
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <p style={styles.workModeTitle}>On-site</p>
+                                                <p style={styles.workModeSubtitle}>At company location</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* CONTINUE BUTTON */}
+                            <button
+                                type="button"
+                                onClick={handleContinue}
+                                style={styles.continueBtn(isHoveredContinue)}
+                                onMouseEnter={() => setIsHoveredContinue(true)}
+                                onMouseLeave={() => setIsHoveredContinue(false)}
+                            >
+                                <span>Continue</span>
+                                <svg viewBox="0 0 24 24" style={styles.arrowSvg}>
+                                    <path d="M5 12h14M12 5l7 7-7 7" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    );
+};
+
+export default LocationSetup;
