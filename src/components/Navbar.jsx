@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import logoSrc from '../assets/Background.svg';
 
 const Navbar = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [windowWidth, setWindowWidth] = useState(
     typeof window !== 'undefined' ? window.innerWidth : 1200
@@ -26,11 +29,37 @@ const Navbar = () => {
   const isDesktop = windowWidth >= 1024 && windowWidth < 1920;
   const isUltraWide = windowWidth >= 1920;
 
+  const scrollToSection = (e, targetId) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (location.pathname !== '/') {
+      navigate('/');
+      setTimeout(() => {
+        if (targetId === 'top' || !targetId) {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          const element = document.getElementById(targetId);
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth' });
+          }
+        }
+      }, 100);
+      return;
+    }
+    if (targetId === 'top' || !targetId) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      const element = document.getElementById(targetId);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+  };
+
   const navLinks = [
-    { name: 'How It Works', href: '#how-it-works' },
-    { name: 'Features', href: '#features' },
-    { name: 'Pricing', href: '#pricing' },
-    { name: 'FAQ', href: '#faq' },
+    { name: 'How It Works', targetId: 'how-it-works' },
+    { name: 'Features', targetId: 'features' },
+    { name: 'Pricing', targetId: 'pricing' },
+    { name: 'FAQ', targetId: 'faq' },
   ];
 
   // Inline styles
@@ -258,7 +287,12 @@ const Navbar = () => {
     <header style={styles.header}>
       <div style={styles.navContainer}>
         {/* LEFT: Brand */}
-        <a href="/" style={styles.brandWrapper} aria-label="Auto Jobs Apply Home">
+        <a
+          href="#"
+          onClick={(e) => scrollToSection(e, 'top')}
+          style={styles.brandWrapper}
+          aria-label="Auto Jobs Apply Home"
+        >
           <img src={logoSrc} alt="Auto Jobs Apply Logo" style={styles.logoImg} />
           <span style={styles.brandText}>Auto Jobs Apply</span>
         </a>
@@ -270,7 +304,8 @@ const Navbar = () => {
               {navLinks.map((link, index) => (
                 <li key={index} style={styles.navLinkItem}>
                   <a
-                    href={link.href}
+                    href="#"
+                    onClick={(e) => scrollToSection(e, link.targetId)}
                     style={styles.navLink(hoveredLink === index)}
                     onMouseEnter={() => setHoveredLink(index)}
                     onMouseLeave={() => setHoveredLink(null)}
@@ -289,6 +324,7 @@ const Navbar = () => {
             <button
               type="button"
               style={styles.loginBtn(isLoginHovered)}
+              onClick={() => navigate('/login')}
               onMouseEnter={() => setIsLoginHovered(true)}
               onMouseLeave={() => setIsLoginHovered(false)}
             >
@@ -297,6 +333,7 @@ const Navbar = () => {
             <button
               type="button"
               style={styles.getStartedBtn(isGetStartedHovered)}
+              onClick={() => navigate('/register')}
               onMouseEnter={() => setIsGetStartedHovered(true)}
               onMouseLeave={() => setIsGetStartedHovered(false)}
             >
@@ -354,9 +391,12 @@ const Navbar = () => {
           {navLinks.map((link, index) => (
             <a
               key={index}
-              href={link.href}
+              href="#"
               style={styles.mobileNavLink}
-              onClick={() => setIsMobileMenuOpen(false)}
+              onClick={(e) => {
+                scrollToSection(e, link.targetId);
+                setIsMobileMenuOpen(false);
+              }}
             >
               {link.name}
             </a>
@@ -365,14 +405,20 @@ const Navbar = () => {
             <button
               type="button"
               style={styles.mobileLoginBtn}
-              onClick={() => setIsMobileMenuOpen(false)}
+              onClick={() => {
+                setIsMobileMenuOpen(false);
+                navigate('/login');
+              }}
             >
               Log in
             </button>
             <button
               type="button"
               style={styles.mobileGetStartedBtn}
-              onClick={() => setIsMobileMenuOpen(false)}
+              onClick={() => {
+                setIsMobileMenuOpen(false);
+                navigate('/register');
+              }}
             >
               <span>Get Started</span>
               <svg
