@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
 
@@ -340,6 +341,7 @@ const recentApplications = [
 ];
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [selectedAppTab, setSelectedAppTab] = useState("All");
@@ -1228,6 +1230,7 @@ const Dashboard = () => {
               <div className="flex items-center gap-3">
                 <button
                   type="button"
+                  onClick={() => navigate("/auto-apply")}
                   className="h-[38px] px-4 rounded-[10px] bg-[#4F46E5] hover:bg-[#4338CA] text-white text-[13px] font-medium flex items-center gap-1.5 shadow-xs active:scale-[0.99] transition-all cursor-pointer whitespace-nowrap"
                 >
                   <span>Auto Apply to all 5</span>
@@ -1236,6 +1239,7 @@ const Dashboard = () => {
 
                 <button
                   type="button"
+                  onClick={() => navigate("/browse-jobs")}
                   className="h-[38px] px-4 rounded-[10px] bg-white border border-[#E2E8F0] text-[#4F46E5] hover:bg-slate-50 text-[13px] font-medium flex items-center gap-1.5 active:scale-[0.99] transition-all cursor-pointer whitespace-nowrap"
                 >
                   <span>Browse Jobs</span>
@@ -1335,6 +1339,7 @@ const Dashboard = () => {
 
               <button
                 type="button"
+                onClick={() => navigate("/tracker")}
                 className="text-[13px] font-medium text-[#4F46E5] hover:text-[#4338CA] flex items-center gap-1 transition-colors cursor-pointer"
               >
                 <span>View all applications</span>
