@@ -16,7 +16,8 @@ const LocationSetup = () => {
     const [stateVal, setStateVal] = useState('');
     const [country, setCountry] = useState('');
     const [isCountryDropdownOpen, setIsCountryDropdownOpen] = useState(false);
-    const [workMode, setWorkMode] = useState('remote'); // 'remote' | 'hybrid' | 'on-site'
+    const [workMode, setWorkMode] = useState(''); // 'remote' | 'hybrid' | 'on-site'
+    const [focusedField, setFocusedField] = useState(null); // 'address' | 'city' | 'state' | 'country'
     const [isHoveredContinue, setIsHoveredContinue] = useState(false);
 
     useEffect(() => {
@@ -368,44 +369,46 @@ const LocationSetup = () => {
             display: 'flex',
             alignItems: 'center',
         },
-        inputIcon: {
+        inputIcon: (isFocused) => ({
             position: 'absolute',
             left: '14px',
             width: '18px',
             height: '18px',
-            stroke: '#94A3B8',
+            stroke: isFocused ? '#2563EB' : '#94A3B8',
             strokeWidth: '2',
             fill: 'none',
             pointerEvents: 'none',
-        },
-        inputField: {
+            transition: 'stroke 0.2s ease',
+        }),
+        inputField: (isFocused) => ({
             width: '100%',
             height: '48px',
             paddingLeft: '44px',
             paddingRight: '16px',
             borderRadius: '12px',
-            border: '1px solid #E2E8F0',
+            border: isFocused ? '1.5px solid #2563EB' : '1px solid #E2E8F0',
             backgroundColor: '#FFFFFF',
             fontSize: '15px',
             fontFamily: '"Plus Jakarta Sans", sans-serif',
             color: '#0F172A',
             outline: 'none',
             boxSizing: 'border-box',
+            boxShadow: isFocused ? '0 0 0 3px rgba(37, 99, 235, 0.12)' : 'none',
             transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
-        },
+        }),
         cityStateRow: {
             display: 'grid',
             gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
             gap: '16px',
             width: '100%',
         },
-        dropdownToggle: {
+        dropdownToggle: (isOpen) => ({
             width: '100%',
             height: '48px',
-            paddingLeft: '44px',
+            paddingLeft: '14px',
             paddingRight: '16px',
             borderRadius: '12px',
-            border: '1px solid #E2E8F0',
+            border: isOpen ? '1.5px solid #2563EB' : '1px solid #E2E8F0',
             backgroundColor: '#FFFFFF',
             fontSize: '15px',
             fontFamily: '"Plus Jakarta Sans", sans-serif',
@@ -416,14 +419,16 @@ const LocationSetup = () => {
             justifyContent: 'space-between',
             boxSizing: 'border-box',
             textAlign: 'left',
-        },
+            boxShadow: isOpen ? '0 0 0 3px rgba(37, 99, 235, 0.12)' : 'none',
+            transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
+        }),
         chevronIcon: {
             width: '18px',
             height: '18px',
             stroke: '#94A3B8',
             strokeWidth: '2',
             fill: 'none',
-            transition: 'transform 0.2s ease',
+            transition: 'transform 0.2s ease, stroke 0.2s ease',
         },
         dropdownMenu: {
             position: 'absolute',
@@ -676,16 +681,18 @@ const LocationSetup = () => {
                                 <div>
                                     <label style={styles.fieldLabel}>ADDRESS</label>
                                     <div style={styles.inputWrapper}>
-                                        <svg viewBox="0 0 24 24" style={styles.inputIcon}>
+                                        <svg viewBox="0 0 24 24" style={styles.inputIcon(focusedField === 'address')}>
                                             <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
                                             <circle cx="12" cy="10" r="3" />
                                         </svg>
                                         <input
                                             type="text"
                                             value={address}
+                                            onFocus={() => setFocusedField('address')}
+                                            onBlur={() => setFocusedField(null)}
                                             onChange={(e) => setAddress(e.target.value)}
                                             placeholder="Start typing your address....."
-                                            style={styles.inputField}
+                                            style={styles.inputField(focusedField === 'address')}
                                         />
                                     </div>
                                 </div>
@@ -695,7 +702,7 @@ const LocationSetup = () => {
                                     <div>
                                         <label style={styles.fieldLabel}>CITY</label>
                                         <div style={styles.inputWrapper}>
-                                            <svg viewBox="0 0 24 24" style={styles.inputIcon}>
+                                            <svg viewBox="0 0 24 24" style={styles.inputIcon(focusedField === 'city')}>
                                                 <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z" />
                                                 <path d="M6 12H4a2 2 0 0 0-2 2v8h4" />
                                                 <path d="M18 9h2a2 2 0 0 1 2 2v11h-4" />
@@ -707,9 +714,11 @@ const LocationSetup = () => {
                                             <input
                                                 type="text"
                                                 value={city}
+                                                onFocus={() => setFocusedField('city')}
+                                                onBlur={() => setFocusedField(null)}
                                                 onChange={(e) => setCity(e.target.value)}
                                                 placeholder="e.g. San Francisco"
-                                                style={styles.inputField}
+                                                style={styles.inputField(focusedField === 'city')}
                                             />
                                         </div>
                                     </div>
@@ -717,7 +726,7 @@ const LocationSetup = () => {
                                     <div>
                                         <label style={styles.fieldLabel}>STATE</label>
                                         <div style={styles.inputWrapper}>
-                                            <svg viewBox="0 0 24 24" style={styles.inputIcon}>
+                                            <svg viewBox="0 0 24 24" style={styles.inputIcon(focusedField === 'state')}>
                                                 <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21" />
                                                 <line x1="9" y1="3" x2="9" y2="18" />
                                                 <line x1="15" y1="6" x2="15" y2="21" />
@@ -725,9 +734,11 @@ const LocationSetup = () => {
                                             <input
                                                 type="text"
                                                 value={stateVal}
+                                                onFocus={() => setFocusedField('state')}
+                                                onBlur={() => setFocusedField(null)}
                                                 onChange={(e) => setStateVal(e.target.value)}
                                                 placeholder="e.g. California"
-                                                style={styles.inputField}
+                                                style={styles.inputField(focusedField === 'state')}
                                             />
                                         </div>
                                     </div>
@@ -738,7 +749,7 @@ const LocationSetup = () => {
                                     <label style={styles.fieldLabel}>COUNTRY</label>
                                     <button
                                         type="button"
-                                        style={styles.dropdownToggle}
+                                        style={styles.dropdownToggle(isCountryDropdownOpen)}
                                         onClick={() => setIsCountryDropdownOpen(!isCountryDropdownOpen)}
                                         aria-haspopup="listbox"
                                         aria-expanded={isCountryDropdownOpen}
@@ -749,10 +760,11 @@ const LocationSetup = () => {
                                                 style={{
                                                     width: '18px',
                                                     height: '18px',
-                                                    stroke: '#94A3B8',
+                                                    stroke: isCountryDropdownOpen ? '#2563EB' : '#94A3B8',
                                                     strokeWidth: '2',
                                                     fill: 'none',
                                                     flexShrink: 0,
+                                                    transition: 'stroke 0.2s ease',
                                                 }}
                                             >
                                                 <circle cx="12" cy="12" r="10" />
@@ -765,6 +777,7 @@ const LocationSetup = () => {
                                             viewBox="0 0 24 24"
                                             style={{
                                                 ...styles.chevronIcon,
+                                                stroke: isCountryDropdownOpen ? '#2563EB' : '#94A3B8',
                                                 transform: isCountryDropdownOpen ? 'rotate(180deg)' : 'none',
                                             }}
                                         >

@@ -10,19 +10,19 @@ const FinalDetails = () => {
     );
 
     // Form states
-    const [openToInPerson, setOpenToInPerson] = useState(true);
-    const [willingToRelocate, setWillingToRelocate] = useState(true);
-    const [canStartImmediately, setCanStartImmediately] = useState(true);
-    const [reliableTransportation, setReliableTransportation] = useState(true);
-    const [workplaceAccommodations, setWorkplaceAccommodations] = useState('prefer-not-to-say'); // 'yes' | 'no' | 'prefer-not-to-say'
+    const [openToInPerson, setOpenToInPerson] = useState(null);
+    const [willingToRelocate, setWillingToRelocate] = useState(null);
+    const [canStartImmediately, setCanStartImmediately] = useState(null);
+    const [reliableTransportation, setReliableTransportation] = useState(null);
+    const [workplaceAccommodations, setWorkplaceAccommodations] = useState(null); // 'yes' | 'no' | 'prefer-not-to-say'
 
-    const [governmentClearance, setGovernmentClearance] = useState(false);
-    const [foreignTies, setForeignTies] = useState(false);
+    const [governmentClearance, setGovernmentClearance] = useState(null);
+    const [foreignTies, setForeignTies] = useState(null);
 
     const [gender, setGender] = useState('');
     const [ethnicity, setEthnicity] = useState('');
-    const [veteranStatus, setVeteranStatus] = useState('prefer-not-to-say'); // 'yes' | 'no' | 'prefer-not-to-say'
-    const [disabilityStatus, setDisabilityStatus] = useState('prefer-not-to-say'); // 'yes' | 'no' | 'prefer-not-to-say'
+    const [veteranStatus, setVeteranStatus] = useState(null); // 'yes' | 'no' | 'prefer-not-to-say'
+    const [disabilityStatus, setDisabilityStatus] = useState(null); // 'yes' | 'no' | 'prefer-not-to-say'
 
     const [additionalNotes, setAdditionalNotes] = useState('');
     const [isHoveredContinue, setIsHoveredContinue] = useState(false);

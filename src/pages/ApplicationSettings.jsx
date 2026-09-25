@@ -10,14 +10,14 @@ const ApplicationSettings = () => {
     );
 
     // Form states
-    const [resumeTailoring, setResumeTailoring] = useState('job-specific'); // 'original' | 'job-specific'
-    const [autoApproveEdits, setAutoApproveEdits] = useState(true); // true | false
+    const [resumeTailoring, setResumeTailoring] = useState(null); // 'original' | 'job-specific'
+    const [autoApproveEdits, setAutoApproveEdits] = useState(null); // true | false
 
-    const [automationMode, setAutomationMode] = useState('automatic'); // 'automatic' | 'review-before-submit'
+    const [automationMode, setAutomationMode] = useState(null); // 'automatic' | 'review-before-submit'
 
-    const [coverLetterMode, setCoverLetterMode] = useState('auto-generate'); // 'auto-generate' | 'none'
+    const [coverLetterMode, setCoverLetterMode] = useState(null); // 'auto-generate' | 'none'
 
-    const [questionMode, setQuestionMode] = useState('saved-answers'); // 'saved-answers' | 'ask-when-needed'
+    const [questionMode, setQuestionMode] = useState(null); // 'saved-answers' | 'ask-when-needed'
 
     const [isHoveredContinue, setIsHoveredContinue] = useState(false);
 

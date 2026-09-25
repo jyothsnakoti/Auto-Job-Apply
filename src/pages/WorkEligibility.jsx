@@ -18,15 +18,9 @@ const WorkEligibility = () => {
     const [workCountrySearch, setWorkCountrySearch] = useState('');
 
     // Selected data
-    const [citizenshipCountries, setCitizenshipCountries] = useState(['India']);
-    const [addedCountries, setAddedCountries] = useState([
-        {
-            country: 'India',
-            isAuthorized: true,
-            requiresSponsorship: false,
-            authorizationBasis: '',
-        },
-    ]);
+    const [citizenshipCountries, setCitizenshipCountries] = useState([]);
+    const [addedCountries, setAddedCountries] = useState([]);
+    const [focusedBasis, setFocusedBasis] = useState(null);
 
     const [isHoveredContinue, setIsHoveredContinue] = useState(false);
 
@@ -85,14 +79,22 @@ const WorkEligibility = () => {
         'Save time with pre-filled application answers',
     ];
 
+    const filteredCitizenshipCountries = allCountries.filter((c) =>
+        c.toLowerCase().includes(citizenshipSearch.toLowerCase())
+    );
+
+    const filteredWorkCountries = allCountries.filter((c) =>
+        c.toLowerCase().includes(workCountrySearch.toLowerCase())
+    );
+
     const handleAddCountry = (countryName) => {
         if (!addedCountries.some((c) => c.country === countryName)) {
             setAddedCountries((prev) => [
                 ...prev,
                 {
                     country: countryName,
-                    isAuthorized: true,
-                    requiresSponsorship: false,
+                    isAuthorized: null,
+                    requiresSponsorship: null,
                     authorizationBasis: '',
                 },
             ]);
@@ -399,36 +401,39 @@ const WorkEligibility = () => {
             width: '100%',
             display: 'flex',
             alignItems: 'center',
+            cursor: 'pointer',
         },
-        inputIcon: {
+        inputIcon: (isOpen) => ({
             position: 'absolute',
             left: '14px',
             width: '18px',
             height: '18px',
-            stroke: '#94A3B8',
+            stroke: isOpen ? '#2563EB' : '#94A3B8',
             strokeWidth: '2',
             fill: 'none',
             pointerEvents: 'none',
             flexShrink: 0,
-        },
-        chevronIcon: {
+            transition: 'stroke 0.2s ease',
+        }),
+        chevronIcon: (isOpen) => ({
             position: 'absolute',
             right: '14px',
             width: '18px',
             height: '18px',
-            stroke: '#94A3B8',
+            stroke: isOpen ? '#2563EB' : '#94A3B8',
             strokeWidth: '2',
             fill: 'none',
             pointerEvents: 'none',
-            transition: 'transform 0.2s ease',
-        },
-        selectInput: {
+            transform: isOpen ? 'rotate(180deg)' : 'none',
+            transition: 'transform 0.2s ease, stroke 0.2s ease',
+        }),
+        selectInput: (isOpen) => ({
             width: '100%',
             height: '48px',
             paddingLeft: '44px',
             paddingRight: '44px',
             borderRadius: '12px',
-            border: '1px solid #E2E8F0',
+            border: isOpen ? '1.5px solid #2563EB' : '1px solid #E2E8F0',
             backgroundColor: '#FFFFFF',
             fontSize: '15px',
             fontFamily: '"Plus Jakarta Sans", sans-serif',
@@ -436,7 +441,9 @@ const WorkEligibility = () => {
             outline: 'none',
             boxSizing: 'border-box',
             cursor: 'pointer',
-        },
+            boxShadow: isOpen ? '0 0 0 3px rgba(37, 99, 235, 0.12)' : 'none',
+            transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
+        }),
         fieldHelper: {
             fontFamily: '"Plus Jakarta Sans", sans-serif',
             fontSize: '12.5px',
@@ -522,7 +529,7 @@ const WorkEligibility = () => {
             height: '44px',
             borderRadius: '10px',
             border: isActive ? '2px solid #2563EB' : '1px solid #E2E8F0',
-            backgroundColor: isActive ? '#FFFFFF' : '#FFFFFF',
+            backgroundColor: '#FFFFFF',
             padding: '0 16px',
             display: 'flex',
             alignItems: 'center',
@@ -532,6 +539,7 @@ const WorkEligibility = () => {
             fontSize: '14.5px',
             fontWeight: isActive ? '600' : '500',
             color: '#0F172A',
+            boxShadow: isActive ? '0 0 0 3px rgba(37, 99, 235, 0.12)' : 'none',
             transition: 'all 0.15s ease',
             boxSizing: 'border-box',
         }),
@@ -544,6 +552,7 @@ const WorkEligibility = () => {
             alignItems: 'center',
             justifyContent: 'center',
             backgroundColor: '#FFFFFF',
+            transition: 'border-color 0.15s ease',
         }),
         radioDot: {
             width: '8px',
@@ -557,13 +566,13 @@ const WorkEligibility = () => {
             display: 'flex',
             alignItems: 'center',
         },
-        basisSelect: {
+        basisSelect: (isFocused) => ({
             width: '100%',
             height: '46px',
             paddingLeft: '44px',
             paddingRight: '40px',
             borderRadius: '10px',
-            border: '1px solid #E2E8F0',
+            border: isFocused ? '1.5px solid #2563EB' : '1px solid #E2E8F0',
             backgroundColor: '#FFFFFF',
             fontSize: '14.5px',
             fontFamily: '"Plus Jakarta Sans", sans-serif',
@@ -572,7 +581,9 @@ const WorkEligibility = () => {
             boxSizing: 'border-box',
             cursor: 'pointer',
             appearance: 'none',
-        },
+            boxShadow: isFocused ? '0 0 0 3px rgba(37, 99, 235, 0.12)' : 'none',
+            transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
+        }),
         continueBtn: (isHovered) => ({
             width: isMobile ? '100%' : '160px',
             height: '48px',
@@ -728,7 +739,7 @@ const WorkEligibility = () => {
                                     style={styles.inputWrapper}
                                     onClick={() => setIsCitizenshipOpen(!isCitizenshipOpen)}
                                 >
-                                    <svg viewBox="0 0 24 24" style={styles.inputIcon}>
+                                    <svg viewBox="0 0 24 24" style={styles.inputIcon(isCitizenshipOpen)}>
                                         <circle cx="12" cy="12" r="10" />
                                         <line x1="2" y1="12" x2="22" y2="12" />
                                         <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
@@ -742,14 +753,11 @@ const WorkEligibility = () => {
                                                 : ''
                                         }
                                         placeholder="Search countries"
-                                        style={styles.selectInput}
+                                        style={styles.selectInput(isCitizenshipOpen)}
                                     />
                                     <svg
                                         viewBox="0 0 24 24"
-                                        style={{
-                                            ...styles.chevronIcon,
-                                            transform: isCitizenshipOpen ? 'rotate(180deg)' : 'none',
-                                        }}
+                                        style={styles.chevronIcon(isCitizenshipOpen)}
                                     >
                                         <polyline points="6 9 12 15 18 9" />
                                     </svg>
@@ -809,7 +817,7 @@ const WorkEligibility = () => {
                                     style={styles.inputWrapper}
                                     onClick={() => setIsWorkCountriesOpen(!isWorkCountriesOpen)}
                                 >
-                                    <svg viewBox="0 0 24 24" style={styles.inputIcon}>
+                                    <svg viewBox="0 0 24 24" style={styles.inputIcon(isWorkCountriesOpen)}>
                                         <circle cx="12" cy="12" r="10" />
                                         <line x1="2" y1="12" x2="22" y2="12" />
                                         <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
@@ -819,14 +827,11 @@ const WorkEligibility = () => {
                                         readOnly
                                         value=""
                                         placeholder="Search and add countries"
-                                        style={styles.selectInput}
+                                        style={styles.selectInput(isWorkCountriesOpen)}
                                     />
                                     <svg
                                         viewBox="0 0 24 24"
-                                        style={{
-                                            ...styles.chevronIcon,
-                                            transform: isWorkCountriesOpen ? 'rotate(180deg)' : 'none',
-                                        }}
+                                        style={styles.chevronIcon(isWorkCountriesOpen)}
                                     >
                                         <polyline points="6 9 12 15 18 9" />
                                     </svg>
@@ -877,7 +882,7 @@ const WorkEligibility = () => {
 
                                         {/* Q1: Legally authorized */}
                                         <p style={styles.questionTitle}>
-                                            Are you legally authorized to work in {item.country}?
+                                             Are you legally authorized to work in {item.country}?
                                         </p>
                                         <div style={styles.toggleRow}>
                                             <button
@@ -957,10 +962,11 @@ const WorkEligibility = () => {
                                                         left: '14px',
                                                         width: '18px',
                                                         height: '18px',
-                                                        stroke: '#94A3B8',
+                                                        stroke: focusedBasis === item.country ? '#2563EB' : '#94A3B8',
                                                         strokeWidth: '2',
                                                         fill: 'none',
                                                         pointerEvents: 'none',
+                                                        transition: 'stroke 0.2s ease',
                                                     }}
                                                 >
                                                     <rect x="3" y="4" width="18" height="16" rx="3" />
@@ -971,6 +977,8 @@ const WorkEligibility = () => {
                                                 </svg>
                                                 <select
                                                     value={item.authorizationBasis}
+                                                    onFocus={() => setFocusedBasis(item.country)}
+                                                    onBlur={() => setFocusedBasis(null)}
                                                     onChange={(e) =>
                                                         updateCountryField(
                                                             item.country,
@@ -978,7 +986,7 @@ const WorkEligibility = () => {
                                                             e.target.value
                                                         )
                                                     }
-                                                    style={styles.basisSelect}
+                                                    style={styles.basisSelect(focusedBasis === item.country)}
                                                 >
                                                     <option value="" disabled>
                                                         Select a status
@@ -996,10 +1004,11 @@ const WorkEligibility = () => {
                                                         right: '14px',
                                                         width: '18px',
                                                         height: '18px',
-                                                        stroke: '#94A3B8',
+                                                        stroke: focusedBasis === item.country ? '#2563EB' : '#94A3B8',
                                                         strokeWidth: '2',
                                                         fill: 'none',
                                                         pointerEvents: 'none',
+                                                        transition: 'stroke 0.2s ease',
                                                     }}
                                                 >
                                                     <polyline points="6 9 12 15 18 9" />
@@ -1032,3 +1041,4 @@ const WorkEligibility = () => {
 };
 
 export default WorkEligibility;
+
