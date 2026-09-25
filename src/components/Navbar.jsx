@@ -328,6 +328,7 @@ const Navbar = () => {
             <button
               type="button"
               style={styles.loginBtn(isLoginHovered)}
+              onClick={() => navigate('/login')}
               onMouseEnter={() => setIsLoginHovered(true)}
               onMouseLeave={() => setIsLoginHovered(false)}
             >
@@ -336,6 +337,7 @@ const Navbar = () => {
             <button
               type="button"
               style={styles.getStartedBtn(isGetStartedHovered)}
+              onClick={() => navigate('/register')}
               onMouseEnter={() => setIsGetStartedHovered(true)}
               onMouseLeave={() => setIsGetStartedHovered(false)}
             >
@@ -407,14 +409,20 @@ const Navbar = () => {
             <button
               type="button"
               style={styles.mobileLoginBtn}
-              onClick={() => setIsMobileMenuOpen(false)}
+              onClick={() => {
+                setIsMobileMenuOpen(false);
+                navigate('/login');
+              }}
             >
               Log in
             </button>
             <button
               type="button"
               style={styles.mobileGetStartedBtn}
-              onClick={() => setIsMobileMenuOpen(false)}
+              onClick={() => {
+                setIsMobileMenuOpen(false);
+                navigate('/register');
+              }}
             >
               <span>Get Started</span>
               <svg
