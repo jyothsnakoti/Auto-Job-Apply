@@ -86,10 +86,14 @@ const Registration = () => {
       });
 
       const emailToVerify = formData.email.trim();
+      const fullNameVal = formData.fullName.trim();
       sessionStorage.setItem('pendingVerificationEmail', emailToVerify);
+      sessionStorage.setItem('pendingFullName', fullNameVal);
+      sessionStorage.setItem('userFullName', fullNameVal);
+      localStorage.setItem('userFullName', fullNameVal);
 
       navigate('/verify', {
-        state: { email: emailToVerify, responseData: response },
+        state: { email: emailToVerify, fullName: fullNameVal, responseData: response },
       });
     } catch (error) {
       setErrorMessage(

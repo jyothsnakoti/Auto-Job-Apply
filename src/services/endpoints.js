@@ -26,12 +26,22 @@ export const BILLING_ENDPOINTS = {
   CONFIRM_CARD_UPDATE: `${API_BASE_URL}/api/billing/confirm-card-update`,
   CONFIRM_PAYMENT: `${API_BASE_URL}/api/billing/confirm-payment`,
   STATUS: `${API_BASE_URL}/api/billing/status`,
+  HISTORY: `${API_BASE_URL}/api/billing/history`,
   RECOVER: `${API_BASE_URL}/api/billing/recover`,
   SELECT_TRIAL: `${API_BASE_URL}/api/billing/select-trial`,
 };
 
 export const ONBOARDING_ENDPOINTS = {
   SUBMIT: `${API_BASE_URL}/api/onboarding`,
+  GET: `${API_BASE_URL}/api/onboarding`,
+};
+
+export const PROFILE_ENDPOINTS = {
+  GET: `${API_BASE_URL}/api/onboarding`,
+  UPDATE_PERSONAL: `${API_BASE_URL}/api/profile/personal`,
+  UPDATE_LOCATION: `${API_BASE_URL}/api/profile/location`,
+  UPDATE_SETTINGS: `${API_BASE_URL}/api/profile/settings`,
+  UPDATE_WORK_PREFERENCES: `${API_BASE_URL}/api/profile/work-preferences`,
 };
 
 export const ENDPOINTS = {
@@ -39,6 +49,7 @@ export const ENDPOINTS = {
   AUTH: AUTH_ENDPOINTS,
   BILLING: BILLING_ENDPOINTS,
   ONBOARDING: ONBOARDING_ENDPOINTS,
+  PROFILE: PROFILE_ENDPOINTS,
 };
 
 export default ENDPOINTS;

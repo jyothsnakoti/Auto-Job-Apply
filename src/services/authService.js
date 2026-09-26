@@ -68,6 +68,14 @@ export const getStoredUser = () => {
       localStorage.getItem('user') ||
       sessionStorage.getItem('user');
 
+    const storedFullName =
+      localStorage.getItem('userFullName') ||
+      sessionStorage.getItem('userFullName') ||
+      localStorage.getItem('userName') ||
+      sessionStorage.getItem('userName') ||
+      sessionStorage.getItem('pendingFullName') ||
+      '';
+
     if (raw) {
       const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
       if (parsed) {
@@ -80,8 +88,9 @@ export const getStoredUser = () => {
         const name =
           parsed.name ||
           parsed.fullName ||
+          storedFullName ||
           (email ? email.split('@')[0] : '');
-        return { email, name, ...parsed };
+        return { email, name, fullName: name, ...parsed };
       }
     }
 
@@ -91,12 +100,15 @@ export const getStoredUser = () => {
       sessionStorage.getItem('pendingVerificationEmail') ||
       '';
 
+    const name = storedFullName || (email ? email.split('@')[0] : '');
+
     return {
       email,
-      name: email ? email.split('@')[0] : '',
+      name,
+      fullName: name,
     };
   } catch {
-    return { email: '', name: '' };
+    return { email: '', name: '', fullName: '' };
   }
 };
 
@@ -262,6 +274,7 @@ export const initiateLinkedInAuth = (options = {}) => {
 
   if (typeof sessionStorage !== 'undefined') {
     sessionStorage.setItem('linkedin_oauth_state', state);
+    sessionStorage.setItem('linkedin_redirect_uri', config.redirectUri);
     if (options.returnTo) {
       sessionStorage.setItem('linkedin_return_to', options.returnTo);
     }
@@ -314,7 +327,22 @@ export const loginWithLinkedIn = async ({ code, redirectUri, rememberMe = true }
       data.data?.refreshToken ||
       '';
 
-    const user = data.user || data.data?.user || (data.email ? { email: data.email } : null);
+    let user = data.user || data.data?.user || (data.email ? { email: data.email } : null);
+    if (!user && accessToken) {
+      try {
+        const parts = accessToken.split('.');
+        if (parts.length === 3) {
+          const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+          const email = payload.sub || payload.email || payload.username || '';
+          const name = payload.name || payload.fullName || '';
+          if (email) {
+            user = { email, name };
+          }
+        }
+      } catch (e) {
+        console.debug('Could not decode JWT payload for user info', e);
+      }
+    }
 
     saveAuthTokens({ accessToken, refreshToken }, rememberMe);
 
@@ -322,6 +350,9 @@ export const loginWithLinkedIn = async ({ code, redirectUri, rememberMe = true }
     if (user) {
       storage.setItem('authUser', JSON.stringify(user));
       storage.setItem('user', JSON.stringify(user));
+      if (user.email) {
+        storage.setItem('userEmail', user.email);
+      }
     }
 
     return { ...data, accessToken, refreshToken, user };

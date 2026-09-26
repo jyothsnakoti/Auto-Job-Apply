@@ -65,16 +65,19 @@ const LinkedInCallback = () => {
 
       const savedReturnTo = sessionStorage.getItem('linkedin_return_to') || '';
       const savedRememberMe = sessionStorage.getItem('linkedin_remember_me') !== 'false';
+      const storedRedirectUri = sessionStorage.getItem('linkedin_redirect_uri');
       sessionStorage.removeItem('linkedin_return_to');
       sessionStorage.removeItem('linkedin_remember_me');
+      sessionStorage.removeItem('linkedin_redirect_uri');
 
       const config = getLinkedInConfig();
+      const redirectUriToUse = storedRedirectUri || config.redirectUri;
 
       try {
         // 4. Exchange authorization code with backend POST /api/auth/linkedin
         const result = await loginWithLinkedIn({
           code,
-          redirectUri: config.redirectUri,
+          redirectUri: redirectUriToUse,
           rememberMe: savedRememberMe,
         });
 

@@ -1,32 +1,81 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { logoutUser, getStoredUser } from "../services/api";
+import { logoutUser, getStoredUser, getOnboardingProfile } from "../services/api";
 
 const Header = () => {
   const navigate = useNavigate();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [userName, setUserName] = useState("Jyothsna");
+  const [userName, setUserName] = useState("");
   const [userEmail, setUserEmail] = useState("");
-  const [userInitial, setUserInitial] = useState("J");
+  const [userInitial, setUserInitial] = useState("U");
   const dropdownRef = useRef(null);
 
   useEffect(() => {
-    try {
-      const user = getStoredUser();
-      if (user) {
-        if (user.email) setUserEmail(user.email);
-        const name =
-          user.name ||
-          user.fullName ||
-          (user.email ? user.email.split("@")[0] : "Jyothsna");
-        setUserName(name);
-        const initialChar = (user.email ? user.email.charAt(0) : name.charAt(0)).toUpperCase() || "J";
-        setUserInitial(initialChar);
+    const loadUserData = async () => {
+      try {
+        const user = getStoredUser();
+        const storedFullName =
+          localStorage.getItem("userFullName") ||
+          sessionStorage.getItem("userFullName") ||
+          localStorage.getItem("userName") ||
+          sessionStorage.getItem("userName") ||
+          sessionStorage.getItem("pendingFullName") ||
+          "";
+
+        let currentEmail =
+          user?.email ||
+          localStorage.getItem("userEmail") ||
+          sessionStorage.getItem("userEmail") ||
+          sessionStorage.getItem("pendingVerificationEmail") ||
+          "";
+
+        let currentName =
+          user?.fullName ||
+          user?.name ||
+          storedFullName ||
+          "";
+
+        if (currentEmail) setUserEmail(currentEmail);
+
+        if (currentName && currentName !== currentEmail) {
+          setUserName(currentName);
+          setUserInitial(currentName.trim().charAt(0).toUpperCase());
+        } else if (currentEmail) {
+          const emailPrefix = currentEmail.split("@")[0];
+          setUserName(emailPrefix);
+          setUserInitial(emailPrefix.charAt(0).toUpperCase());
+        }
+
+        // Fetch onboarding profile data to get full dynamic name
+        try {
+          const profileData = await getOnboardingProfile();
+          if (profileData) {
+            const resolvedName =
+              profileData.fullName ||
+              profileData.name ||
+              profileData.profile?.fullName ||
+              profileData.profile?.name;
+
+            if (resolvedName) {
+              setUserName(resolvedName);
+              setUserInitial(resolvedName.trim().charAt(0).toUpperCase());
+              localStorage.setItem("userFullName", resolvedName);
+              sessionStorage.setItem("userFullName", resolvedName);
+            }
+            if (profileData.email) {
+              setUserEmail(profileData.email);
+            }
+          }
+        } catch {
+          // Fallback gracefully to stored credentials
+        }
+      } catch (err) {
+        console.warn("Could not load user data in Header:", err);
       }
-    } catch {
-      // Keep default fallback
-    }
+    };
+
+    loadUserData();
   }, []);
 
   useEffect(() => {
@@ -99,15 +148,16 @@ const Header = () => {
           className="flex items-center gap-[10px] cursor-pointer hover:opacity-90 transition-opacity bg-transparent border-none p-1 rounded-lg focus:outline-none"
         >
           {/* Avatar */}
-          <div className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-[#E2E8F0]">
-            <span className="text-[13px] font-semibold text-[#475569]">
-              {userInitial}
-            </span>
+          <div className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-[#EEF2FF] text-[#4F46E5] font-semibold text-[13px]">
+            <span>{userInitial}</span>
           </div>
 
-          {/* Name / Email */}
-          <span className="text-[13px] font-medium text-[#1E293B] max-w-[200px] truncate" title={userEmail || userName}>
-            {userEmail || userName}
+          {/* User Name */}
+          <span
+            className="text-[13px] font-medium text-[#1E293B] max-w-[200px] truncate"
+            title={userName || userEmail || "User"}
+          >
+            {userName || userEmail || "User"}
           </span>
 
           {/* Dropdown Arrow */}
@@ -130,10 +180,14 @@ const Header = () => {
         {isDropdownOpen && (
           <div className="absolute right-0 mt-2 w-[220px] rounded-[14px] bg-white border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
             <div className="px-3 py-2 border-b border-slate-100">
-              <p className="text-[11px] font-medium text-slate-400">Signed in as</p>
-              <p className="text-[13px] font-semibold text-slate-800 truncate" title={userEmail || userName}>
-                {userEmail || userName}
+              <p className="text-[13px] font-bold text-slate-800 truncate" title={userName || "User"}>
+                {userName || "User"}
               </p>
+              {userEmail && (
+                <p className="text-[11.5px] font-medium text-slate-500 truncate mt-0.5" title={userEmail}>
+                  {userEmail}
+                </p>
+              )}
             </div>
 
             <button

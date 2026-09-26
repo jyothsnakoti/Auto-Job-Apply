@@ -257,10 +257,11 @@ const PaymentFormContent = ({
                             value={formData.nameOnCard}
                             onChange={handleInputChange}
                             disabled={isSubmitting}
-                            className={`w-full h-11 px-3.5 text-sm font-medium text-slate-900 bg-white border rounded-xl outline-none transition-all ${errors.nameOnCard
+                            className={`w-full h-11 px-3.5 text-sm font-medium text-slate-900 bg-white border rounded-xl outline-none transition-all ${
+                                errors.nameOnCard
                                     ? 'border-red-500 focus:ring-2 focus:ring-red-500/15'
                                     : 'border-slate-200 focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/15'
-                                }`}
+                            }`}
                         />
                         {errors.nameOnCard && (
                             <span className="text-xs text-red-500 mt-0.5">
@@ -318,10 +319,11 @@ const PaymentFormContent = ({
                             value={formData.streetAddress}
                             onChange={handleInputChange}
                             disabled={isSubmitting}
-                            className={`w-full h-11 px-3.5 text-sm font-medium text-slate-900 bg-white border rounded-xl outline-none transition-all ${errors.streetAddress
+                            className={`w-full h-11 px-3.5 text-sm font-medium text-slate-900 bg-white border rounded-xl outline-none transition-all ${
+                                errors.streetAddress
                                     ? 'border-red-500 focus:ring-2 focus:ring-red-500/15'
                                     : 'border-slate-200 focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/15'
-                                }`}
+                            }`}
                         />
                         {errors.streetAddress && (
                             <span className="text-xs text-red-500 mt-0.5">
@@ -347,10 +349,11 @@ const PaymentFormContent = ({
                                 value={formData.city}
                                 onChange={handleInputChange}
                                 disabled={isSubmitting}
-                                className={`w-full h-11 px-3.5 text-sm font-medium text-slate-900 bg-white border rounded-xl outline-none transition-all ${errors.city
+                                className={`w-full h-11 px-3.5 text-sm font-medium text-slate-900 bg-white border rounded-xl outline-none transition-all ${
+                                    errors.city
                                         ? 'border-red-500 focus:ring-2 focus:ring-red-500/15'
                                         : 'border-slate-200 focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/15'
-                                    }`}
+                                }`}
                             />
                             {errors.city && (
                                 <span className="text-xs text-red-500 mt-0.5">
@@ -374,10 +377,11 @@ const PaymentFormContent = ({
                                 value={formData.zipCode}
                                 onChange={handleInputChange}
                                 disabled={isSubmitting}
-                                className={`w-full h-11 px-3.5 text-sm font-medium text-slate-900 bg-white border rounded-xl outline-none transition-all ${errors.zipCode
+                                className={`w-full h-11 px-3.5 text-sm font-medium text-slate-900 bg-white border rounded-xl outline-none transition-all ${
+                                    errors.zipCode
                                         ? 'border-red-500 focus:ring-2 focus:ring-red-500/15'
                                         : 'border-slate-200 focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/15'
-                                    }`}
+                                }`}
                             />
                             {errors.zipCode && (
                                 <span className="text-xs text-red-500 mt-0.5">
@@ -401,10 +405,11 @@ const PaymentFormContent = ({
                             value={formData.country}
                             onChange={handleInputChange}
                             disabled={isSubmitting}
-                            className={`w-full h-11 px-3.5 text-sm font-medium text-slate-900 bg-white border rounded-xl outline-none transition-all cursor-pointer ${errors.country
+                            className={`w-full h-11 px-3.5 text-sm font-medium text-slate-900 bg-white border rounded-xl outline-none transition-all cursor-pointer ${
+                                errors.country
                                     ? 'border-red-500 focus:ring-2 focus:ring-red-500/15'
                                     : 'border-slate-200 focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/15'
-                                }`}
+                            }`}
                         >
                             <option value="United States">United States</option>
                             <option value="Canada">Canada</option>
@@ -561,8 +566,8 @@ const PaymentFormContent = ({
                                 {paymentState === 'processingPayment'
                                     ? 'Processing payment...'
                                     : paymentState === 'confirmingBackend'
-                                        ? 'Activating subscription...'
-                                        : 'Verifying credits...'}
+                                    ? 'Activating subscription...'
+                                    : 'Verifying credits...'}
                             </span>
                         </>
                     ) : (
