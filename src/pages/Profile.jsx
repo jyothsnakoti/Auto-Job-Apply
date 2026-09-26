@@ -1,7 +1,13 @@
 import React, { useState, useEffect } from "react";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
-import { getOnboardingProfile, getStoredUser, updatePersonalProfile, updateLocationProfile } from "../services/api";
+import {
+  getOnboardingProfile,
+  getStoredUser,
+  updatePersonalProfile,
+  updateLocationProfile,
+  updateWorkPreferencesProfile,
+} from "../services/api";
 
 const toCapitalizedYesNo = (val, defaultVal = "No") => {
   if (val === true || val === "yes" || val === "Yes" || val === "YES") return "Yes";
@@ -38,6 +44,7 @@ const Profile = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSavingPersonal, setIsSavingPersonal] = useState(false);
   const [isSavingLocation, setIsSavingLocation] = useState(false);
+  const [isSavingWorkPrefs, setIsSavingWorkPrefs] = useState(false);
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
 
   // Raw Location details from server
@@ -276,6 +283,45 @@ const Profile = () => {
     }
   };
 
+  const handleSaveWorkPrefs = async () => {
+    try {
+      setIsSavingWorkPrefs(true);
+
+      const payload = {
+        openToInPerson: inPersonWork,
+        canStartImmediately: startImmediately,
+        reliableTransportation: reliableTransportation,
+        workplaceAccommodations: workplaceAccommodations,
+      };
+
+      const response = await updateWorkPreferencesProfile(payload);
+      const message =
+        response?.message ||
+        (typeof response === "string" ? response : "Work preferences updated.");
+
+      setToast({
+        show: true,
+        message,
+        type: "success",
+      });
+
+      setIsEditingWorkPrefs(false);
+    } catch (err) {
+      console.error("Failed to save work preferences:", err);
+      const errMsg =
+        err?.message ||
+        err?.data?.message ||
+        "Failed to update work preferences";
+      setToast({
+        show: true,
+        message: errMsg,
+        type: "error",
+      });
+    } finally {
+      setIsSavingWorkPrefs(false);
+    }
+  };
+
   const removeCountry = (cToRemove) => {
     if (!isEditingLocation) return;
     setTargetCountries(targetCountries.filter((c) => c !== cToRemove));
@@ -349,11 +395,10 @@ const Profile = () => {
                       value={fullName}
                       readOnly={!isEditingPersonal}
                       onChange={(e) => setFullName(e.target.value)}
-                      className={`h-[40px] px-3.5 rounded-[10px] border text-[13px] font-medium outline-none transition-all ${
-                        isEditingPersonal
+                      className={`h-[40px] px-3.5 rounded-[10px] border text-[13px] font-medium outline-none transition-all ${isEditingPersonal
                           ? "border-indigo-400 bg-white text-[#0F172A] ring-2 ring-indigo-500/10 focus:border-indigo-500"
                           : "border-[#E2E8F0] bg-slate-50/50 text-[#0F172A] cursor-default"
-                      }`}
+                        }`}
                     />
                   </div>
 
@@ -367,11 +412,10 @@ const Profile = () => {
                       value={email}
                       readOnly={!isEditingPersonal}
                       onChange={(e) => setEmail(e.target.value)}
-                      className={`h-[40px] px-3.5 rounded-[10px] border text-[13px] font-medium outline-none transition-all truncate ${
-                        isEditingPersonal
+                      className={`h-[40px] px-3.5 rounded-[10px] border text-[13px] font-medium outline-none transition-all truncate ${isEditingPersonal
                           ? "border-indigo-400 bg-white text-[#0F172A] ring-2 ring-indigo-500/10 focus:border-indigo-500"
                           : "border-[#E2E8F0] bg-slate-50/50 text-[#0F172A] cursor-default"
-                      }`}
+                        }`}
                     />
                   </div>
 
@@ -392,11 +436,10 @@ const Profile = () => {
                         value={phone}
                         readOnly={!isEditingPersonal}
                         onChange={(e) => setPhone(e.target.value)}
-                        className={`flex-1 h-[40px] px-3.5 rounded-[10px] border text-[13px] font-medium outline-none transition-all min-w-0 ${
-                          isEditingPersonal
+                        className={`flex-1 h-[40px] px-3.5 rounded-[10px] border text-[13px] font-medium outline-none transition-all min-w-0 ${isEditingPersonal
                             ? "border-indigo-400 bg-white text-[#0F172A] ring-2 ring-indigo-500/10 focus:border-indigo-500"
                             : "border-[#E2E8F0] bg-slate-50/50 text-[#0F172A] cursor-default"
-                        }`}
+                          }`}
                       />
                     </div>
                   </div>
@@ -407,11 +450,10 @@ const Profile = () => {
                       LinkedIn Profile
                     </label>
                     <div
-                      className={`flex items-center gap-2 h-[40px] px-3 rounded-[10px] border transition-all ${
-                        isEditingPersonal
+                      className={`flex items-center gap-2 h-[40px] px-3 rounded-[10px] border transition-all ${isEditingPersonal
                           ? "border-indigo-400 bg-white ring-2 ring-indigo-500/10"
                           : "border-[#E2E8F0] bg-slate-50/50"
-                      }`}
+                        }`}
                     >
                       <div className="w-4 h-4 rounded-[3px] bg-[#0A66C2] text-white flex items-center justify-center text-[10px] font-bold shrink-0">
                         in
@@ -592,13 +634,11 @@ const Profile = () => {
                     type="button"
                     disabled={!isEditingLocation}
                     onClick={() => setOpenToRelocate("Yes")}
-                    className={`flex-1 h-full rounded-[8px] text-[13px] font-semibold transition-all ${
-                      isEditingLocation ? "cursor-pointer" : "cursor-default"
-                    } ${
-                      openToRelocate === "Yes"
+                    className={`flex-1 h-full rounded-[8px] text-[13px] font-semibold transition-all ${isEditingLocation ? "cursor-pointer" : "cursor-default"
+                      } ${openToRelocate === "Yes"
                         ? "bg-white border border-[#E2E8F0] text-[#4F46E5] shadow-[0_1px_2px_rgba(0,0,0,0.05)]"
                         : "bg-transparent border border-transparent text-[#64748B] hover:text-[#0F172A]"
-                    }`}
+                      }`}
                   >
                     Yes
                   </button>
@@ -606,13 +646,11 @@ const Profile = () => {
                     type="button"
                     disabled={!isEditingLocation}
                     onClick={() => setOpenToRelocate("No")}
-                    className={`flex-1 h-full rounded-[8px] text-[13px] font-semibold transition-all ${
-                      isEditingLocation ? "cursor-pointer" : "cursor-default"
-                    } ${
-                      openToRelocate === "No"
+                    className={`flex-1 h-full rounded-[8px] text-[13px] font-semibold transition-all ${isEditingLocation ? "cursor-pointer" : "cursor-default"
+                      } ${openToRelocate === "No"
                         ? "bg-white border border-[#E2E8F0] text-[#4F46E5] shadow-[0_1px_2px_rgba(0,0,0,0.05)]"
                         : "bg-transparent border border-transparent text-[#64748B] hover:text-[#0F172A]"
-                    }`}
+                      }`}
                   >
                     No
                   </button>
@@ -628,11 +666,10 @@ const Profile = () => {
                   Countries of Citizenship
                 </label>
                 <div
-                  className={`min-h-[42px] p-1.5 px-3 rounded-[10px] border flex items-center justify-between gap-2 flex-wrap ${
-                    isEditingLocation
+                  className={`min-h-[42px] p-1.5 px-3 rounded-[10px] border flex items-center justify-between gap-2 flex-wrap ${isEditingLocation
                       ? "border-indigo-400 bg-white ring-2 ring-indigo-500/10"
                       : "border-[#E2E8F0] bg-slate-50/50"
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {citizenship.map((c) => (
@@ -665,11 +702,10 @@ const Profile = () => {
                   Countries where you want to work
                 </label>
                 <div
-                  className={`min-h-[42px] p-1.5 px-3 rounded-[10px] border flex items-center justify-between gap-2 flex-wrap ${
-                    isEditingLocation
+                  className={`min-h-[42px] p-1.5 px-3 rounded-[10px] border flex items-center justify-between gap-2 flex-wrap ${isEditingLocation
                       ? "border-indigo-400 bg-white ring-2 ring-indigo-500/10"
                       : "border-[#E2E8F0] bg-slate-50/50"
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {targetCountries.map((c) => (
@@ -871,11 +907,10 @@ const Profile = () => {
                         value={inPersonWork}
                         disabled={!isEditingWorkPrefs}
                         onChange={(e) => setInPersonWork(e.target.value)}
-                        className={`w-full h-[40px] px-3.5 pr-8 rounded-[10px] border text-[13px] text-[#0F172A] font-medium outline-none appearance-none transition-all ${
-                          isEditingWorkPrefs
+                        className={`w-full h-[40px] px-3.5 pr-8 rounded-[10px] border text-[13px] text-[#0F172A] font-medium outline-none appearance-none transition-all ${isEditingWorkPrefs
                             ? "border-indigo-400 bg-white ring-2 ring-indigo-500/10 cursor-pointer"
                             : "border-[#E2E8F0] bg-slate-50/50 cursor-default"
-                        }`}
+                          }`}
                       >
                         <option>Yes</option>
                         <option>No</option>
@@ -898,11 +933,10 @@ const Profile = () => {
                         value={startImmediately}
                         disabled={!isEditingWorkPrefs}
                         onChange={(e) => setStartImmediately(e.target.value)}
-                        className={`w-full h-[40px] px-3.5 pr-8 rounded-[10px] border text-[13px] text-[#0F172A] font-medium outline-none appearance-none transition-all ${
-                          isEditingWorkPrefs
+                        className={`w-full h-[40px] px-3.5 pr-8 rounded-[10px] border text-[13px] text-[#0F172A] font-medium outline-none appearance-none transition-all ${isEditingWorkPrefs
                             ? "border-indigo-400 bg-white ring-2 ring-indigo-500/10 cursor-pointer"
                             : "border-[#E2E8F0] bg-slate-50/50 cursor-default"
-                        }`}
+                          }`}
                       >
                         <option>Yes</option>
                         <option>No</option>
@@ -925,11 +959,10 @@ const Profile = () => {
                         value={reliableTransportation}
                         disabled={!isEditingWorkPrefs}
                         onChange={(e) => setReliableTransportation(e.target.value)}
-                        className={`w-full h-[40px] px-3.5 pr-8 rounded-[10px] border text-[13px] text-[#0F172A] font-medium outline-none appearance-none transition-all ${
-                          isEditingWorkPrefs
+                        className={`w-full h-[40px] px-3.5 pr-8 rounded-[10px] border text-[13px] text-[#0F172A] font-medium outline-none appearance-none transition-all ${isEditingWorkPrefs
                             ? "border-indigo-400 bg-white ring-2 ring-indigo-500/10 cursor-pointer"
                             : "border-[#E2E8F0] bg-slate-50/50 cursor-default"
-                        }`}
+                          }`}
                       >
                         <option>No</option>
                         <option>Yes</option>
@@ -952,11 +985,10 @@ const Profile = () => {
                         value={workplaceAccommodations}
                         disabled={!isEditingWorkPrefs}
                         onChange={(e) => setWorkplaceAccommodations(e.target.value)}
-                        className={`w-full h-[40px] px-3.5 pr-8 rounded-[10px] border text-[13px] text-[#0F172A] font-medium outline-none appearance-none transition-all ${
-                          isEditingWorkPrefs
+                        className={`w-full h-[40px] px-3.5 pr-8 rounded-[10px] border text-[13px] text-[#0F172A] font-medium outline-none appearance-none transition-all ${isEditingWorkPrefs
                             ? "border-indigo-400 bg-white ring-2 ring-indigo-500/10 cursor-pointer"
                             : "border-[#E2E8F0] bg-slate-50/50 cursor-default"
-                        }`}
+                          }`}
                       >
                         <option>Prefer Not to say</option>
                         <option>No</option>
@@ -974,10 +1006,21 @@ const Profile = () => {
                   <div className="flex justify-end mt-4 pt-3 border-t border-slate-100 animate-in fade-in duration-200">
                     <button
                       type="button"
-                      onClick={() => setIsEditingWorkPrefs(false)}
-                      className="px-6 h-[38px] rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] text-white text-[13px] font-semibold shadow-sm hover:shadow active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                      disabled={isSavingWorkPrefs}
+                      onClick={handleSaveWorkPrefs}
+                      className="px-6 h-[38px] rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] text-white text-[13px] font-semibold shadow-sm hover:shadow active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-                      Save
+                      {isSavingWorkPrefs ? (
+                        <>
+                          <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          </svg>
+                          <span>Saving...</span>
+                        </>
+                      ) : (
+                        <span>Save</span>
+                      )}
                     </button>
                   </div>
                 )}
@@ -991,16 +1034,14 @@ const Profile = () => {
       {toast.show && (
         <div className="fixed top-20 right-6 md:right-8 z-50 animate-in fade-in slide-in-from-top-3 duration-300">
           <div
-            className={`flex items-center gap-3 px-4 py-3 rounded-xl border shadow-[0_4px_20px_-2px_rgba(79,70,229,0.12)] ${
-              toast.type === "error"
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl border shadow-[0_4px_20px_-2px_rgba(79,70,229,0.12)] ${toast.type === "error"
                 ? "bg-red-50 border-red-200 text-red-800"
                 : "bg-[#EEF2FF] border border-[#C7D2FE] text-[#4338CA]"
-            }`}
+              }`}
           >
             <div
-              className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
-                toast.type === "error" ? "bg-red-100 text-red-600" : "bg-[#E0E7FF] text-[#4F46E5]"
-              }`}
+              className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${toast.type === "error" ? "bg-red-100 text-red-600" : "bg-[#E0E7FF] text-[#4F46E5]"
+                }`}
             >
               {toast.type === "error" ? (
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
@@ -1016,9 +1057,8 @@ const Profile = () => {
             <button
               type="button"
               onClick={() => setToast((prev) => ({ ...prev, show: false }))}
-              className={`ml-2 cursor-pointer transition-colors ${
-                toast.type === "error" ? "text-slate-400 hover:text-slate-600" : "text-[#6366F1] hover:text-[#4338CA]"
-              }`}
+              className={`ml-2 cursor-pointer transition-colors ${toast.type === "error" ? "text-slate-400 hover:text-slate-600" : "text-[#6366F1] hover:text-[#4338CA]"
+                }`}
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

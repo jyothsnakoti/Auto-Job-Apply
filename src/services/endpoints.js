@@ -38,6 +38,7 @@ export const PROFILE_ENDPOINTS = {
   UPDATE_PERSONAL: `${API_BASE_URL}/api/profile/personal`,
   UPDATE_LOCATION: `${API_BASE_URL}/api/profile/location`,
   UPDATE_SETTINGS: `${API_BASE_URL}/api/profile/settings`,
+  UPDATE_WORK_PREFERENCES: `${API_BASE_URL}/api/profile/work-preferences`,
 };
 
 export const ENDPOINTS = {

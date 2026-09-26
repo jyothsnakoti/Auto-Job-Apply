@@ -6,6 +6,7 @@ export * from './profileService';
 export * from './personalProfileService';
 export * from './locationProfileService';
 export * from './settingsProfileService';
+export * from './workPreferencesProfileService';
 export {
   getStoredAuthToken,
   getStoredRefreshToken,
@@ -27,5 +28,6 @@ export { default as profileService } from './profileService';
 export { default as personalProfileService } from './personalProfileService';
 export { default as locationProfileService } from './locationProfileService';
 export { default as settingsProfileService } from './settingsProfileService';
+export { default as workPreferencesProfileService } from './workPreferencesProfileService';
 export { default as endpoints, ENDPOINTS, AUTH_ENDPOINTS, BILLING_ENDPOINTS, ONBOARDING_ENDPOINTS, PROFILE_ENDPOINTS, API_BASE_URL } from './endpoints';
 
