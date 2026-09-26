@@ -68,6 +68,14 @@ export const getStoredUser = () => {
       localStorage.getItem('user') ||
       sessionStorage.getItem('user');
 
+    const storedFullName =
+      localStorage.getItem('userFullName') ||
+      sessionStorage.getItem('userFullName') ||
+      localStorage.getItem('userName') ||
+      sessionStorage.getItem('userName') ||
+      sessionStorage.getItem('pendingFullName') ||
+      '';
+
     if (raw) {
       const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
       if (parsed) {
@@ -80,8 +88,9 @@ export const getStoredUser = () => {
         const name =
           parsed.name ||
           parsed.fullName ||
+          storedFullName ||
           (email ? email.split('@')[0] : '');
-        return { email, name, ...parsed };
+        return { email, name, fullName: name, ...parsed };
       }
     }
 
@@ -91,12 +100,15 @@ export const getStoredUser = () => {
       sessionStorage.getItem('pendingVerificationEmail') ||
       '';
 
+    const name = storedFullName || (email ? email.split('@')[0] : '');
+
     return {
       email,
-      name: email ? email.split('@')[0] : '',
+      name,
+      fullName: name,
     };
   } catch {
-    return { email: '', name: '' };
+    return { email: '', name: '', fullName: '' };
   }
 };
 

@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
+import { getOnboardingProfile, updateProfileSettings } from "../services/api";
 
 const Settings = () => {
   // Apply Settings States
@@ -16,6 +17,97 @@ const Settings = () => {
 
   // Application Questions State
   const [questionsMode, setQuestionsMode] = useState("saved_answers");
+
+  // Toast State
+  const [toast, setToast] = useState({ show: false, message: "", type: "success" });
+
+  useEffect(() => {
+    if (toast.show) {
+      const timer = setTimeout(() => {
+        setToast((prev) => ({ ...prev, show: false }));
+      }, 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [toast.show]);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const data = await getOnboardingProfile();
+        if (data) {
+          const prof = data.profile || {};
+          if (prof.resumeOptimization) {
+            const opt = String(prof.resumeOptimization).toLowerCase();
+            if (opt === "off") setResumeOptimization("Off");
+            else if (opt === "aggressive") setResumeOptimization("Aggressive");
+            else setResumeOptimization("Honest");
+          }
+          if (prof.autoApproveEdits !== undefined || prof.autoApprove !== undefined) {
+            setAutoApprove(Boolean(prof.autoApproveEdits ?? prof.autoApprove));
+          }
+          if (prof.reviewBeforeSubmit !== undefined) {
+            setReviewBeforeSubmitToggle(Boolean(prof.reviewBeforeSubmit));
+          }
+          if (prof.applicationQuestionsMode) {
+            setQuestionsMode(prof.applicationQuestionsMode);
+          }
+        }
+      } catch (err) {
+        console.warn("Could not load initial settings:", err);
+      }
+    };
+
+    fetchSettings();
+  }, []);
+
+  const sendSettingsPatch = async (updates) => {
+    const payload = {
+      resumeOptimization: (updates.resumeOptimization !== undefined ? updates.resumeOptimization : resumeOptimization).toLowerCase(),
+      autoApproveEdits: updates.autoApproveEdits !== undefined ? updates.autoApproveEdits : autoApprove,
+      reviewBeforeSubmit: updates.reviewBeforeSubmit !== undefined ? updates.reviewBeforeSubmit : reviewBeforeSubmitToggle,
+      applicationQuestionsMode: updates.applicationQuestionsMode !== undefined ? updates.applicationQuestionsMode : questionsMode,
+    };
+
+    try {
+      const response = await updateProfileSettings(payload);
+      const msg = response?.message || (typeof response === "string" ? response : "Settings updated.");
+      setToast({
+        show: true,
+        message: msg,
+        type: "success",
+      });
+    } catch (err) {
+      console.error("Failed to update settings:", err);
+      const errMsg = err?.message || err?.data?.message || "Failed to update settings";
+      setToast({
+        show: true,
+        message: errMsg,
+        type: "error",
+      });
+    }
+  };
+
+  const handleResumeOptimizationChange = (mode) => {
+    setResumeOptimization(mode);
+    sendSettingsPatch({ resumeOptimization: mode });
+  };
+
+  const handleAutoApproveToggle = () => {
+    const nextVal = !autoApprove;
+    setAutoApprove(nextVal);
+    sendSettingsPatch({ autoApproveEdits: nextVal });
+  };
+
+  const handleReviewBeforeSubmitToggle = () => {
+    const nextVal = !reviewBeforeSubmitToggle;
+    setReviewBeforeSubmitToggle(nextVal);
+    sendSettingsPatch({ reviewBeforeSubmit: nextVal });
+  };
+
+  const handleQuestionsModeChange = (mode) => {
+    setQuestionsMode(mode);
+    sendSettingsPatch({ applicationQuestionsMode: mode });
+  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#F8FAFC]">
@@ -83,7 +175,7 @@ const Settings = () => {
                         <button
                           key={mode}
                           type="button"
-                          onClick={() => setResumeOptimization(mode)}
+                          onClick={() => handleResumeOptimizationChange(mode)}
                           className={`h-[28px] px-3.5 rounded-full text-[12.5px] transition-all cursor-pointer ${
                             isSelected
                               ? "bg-white text-[#4F46E5] font-semibold shadow-2xs"
@@ -114,7 +206,7 @@ const Settings = () => {
                     </span>
                     <button
                       type="button"
-                      onClick={() => setAutoApprove(!autoApprove)}
+                      onClick={handleAutoApproveToggle}
                       className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
                         autoApprove ? "bg-[#4F46E5]" : "bg-slate-300"
                       }`}
@@ -145,7 +237,7 @@ const Settings = () => {
                     </span>
                     <button
                       type="button"
-                      onClick={() => setReviewBeforeSubmitToggle(!reviewBeforeSubmitToggle)}
+                      onClick={handleReviewBeforeSubmitToggle}
                       className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
                         reviewBeforeSubmitToggle ? "bg-[#4F46E5]" : "bg-slate-300"
                       }`}
@@ -360,7 +452,7 @@ const Settings = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-1">
                 {/* Option 1: Use saved answers */}
                 <div
-                  onClick={() => setQuestionsMode("saved_answers")}
+                  onClick={() => handleQuestionsModeChange("saved_answers")}
                   className={`p-4 rounded-[14px] flex items-start gap-3 cursor-pointer transition-all ${
                     questionsMode === "saved_answers"
                       ? "border-2 border-[#4F46E5] bg-white shadow-xs"
@@ -389,7 +481,7 @@ const Settings = () => {
 
                 {/* Option 2: Ask me when needed */}
                 <div
-                  onClick={() => setQuestionsMode("ask_me")}
+                  onClick={() => handleQuestionsModeChange("ask_me")}
                   className={`p-4 rounded-[14px] flex items-start gap-3 cursor-pointer transition-all ${
                     questionsMode === "ask_me"
                       ? "border-2 border-[#4F46E5] bg-white shadow-xs"
@@ -421,6 +513,47 @@ const Settings = () => {
           </div>
         </main>
       </div>
+
+      {/* Toast Notification */}
+      {toast.show && (
+        <div className="fixed top-20 right-6 md:right-8 z-50 animate-in fade-in slide-in-from-top-3 duration-300">
+          <div
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl border shadow-[0_4px_20px_-2px_rgba(79,70,229,0.12)] ${
+              toast.type === "error"
+                ? "bg-red-50 border-red-200 text-red-800"
+                : "bg-[#EEF2FF] border border-[#C7D2FE] text-[#4338CA]"
+            }`}
+          >
+            <div
+              className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
+                toast.type === "error" ? "bg-red-100 text-red-600" : "bg-[#E0E7FF] text-[#4F46E5]"
+              }`}
+            >
+              {toast.type === "error" ? (
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              ) : (
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              )}
+            </div>
+            <p className="text-[13px] font-semibold text-[#4338CA] tracking-wide">{toast.message}</p>
+            <button
+              type="button"
+              onClick={() => setToast((prev) => ({ ...prev, show: false }))}
+              className={`ml-2 cursor-pointer transition-colors ${
+                toast.type === "error" ? "text-slate-400 hover:text-slate-600" : "text-[#6366F1] hover:text-[#4338CA]"
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

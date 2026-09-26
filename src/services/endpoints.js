@@ -24,6 +24,14 @@ export const BILLING_ENDPOINTS = {
 
 export const ONBOARDING_ENDPOINTS = {
   SUBMIT: `${API_BASE_URL}/api/onboarding`,
+  GET: `${API_BASE_URL}/api/onboarding`,
+};
+
+export const PROFILE_ENDPOINTS = {
+  GET: `${API_BASE_URL}/api/onboarding`,
+  UPDATE_PERSONAL: `${API_BASE_URL}/api/profile/personal`,
+  UPDATE_LOCATION: `${API_BASE_URL}/api/profile/location`,
+  UPDATE_SETTINGS: `${API_BASE_URL}/api/profile/settings`,
 };
 
 export const ENDPOINTS = {
@@ -31,6 +39,7 @@ export const ENDPOINTS = {
   AUTH: AUTH_ENDPOINTS,
   BILLING: BILLING_ENDPOINTS,
   ONBOARDING: ONBOARDING_ENDPOINTS,
+  PROFILE: PROFILE_ENDPOINTS,
 };
 
 export default ENDPOINTS;
