@@ -11,6 +11,7 @@ const Payment = () => {
     const [windowWidth, setWindowWidth] = useState(
         typeof window !== 'undefined' ? window.innerWidth : 1440
     );
+    
 
     useEffect(() => {
         const handleResize = () => setWindowWidth(window.innerWidth);

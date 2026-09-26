@@ -37,7 +37,7 @@ const ResumeSetup = () => {
         setFileError('');
         if (!file) return;
 
-        // Check file extension / mime type
+       
         const fileExtension = file.name.split('.').pop().toLowerCase();
         const isValidExtension = ['pdf', 'doc', 'docx'].includes(fileExtension);
         const isValidMime = allowedTypes.includes(file.type);
