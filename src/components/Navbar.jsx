@@ -31,10 +31,6 @@ const Navbar = () => {
 
   const scrollToSection = (e, targetId) => {
     if (e && e.preventDefault) e.preventDefault();
-    if (targetId === 'pricing') {
-      navigate('/plan');
-      return;
-    }
     if (targetId === 'top' || !targetId) {
       if (location.pathname !== '/') {
         navigate('/');

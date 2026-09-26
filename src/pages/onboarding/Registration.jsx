@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import AuthLayout from './AuthLayout';
+import { signupUser } from '../../services/api';
 
 const Registration = () => {
   const navigate = useNavigate();
@@ -12,6 +13,7 @@ const Registration = () => {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -19,15 +21,36 @@ const Registration = () => {
       ...prev,
       [name]: value,
     }));
+    if (errorMessage) {
+      setErrorMessage('');
+    }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setErrorMessage('');
     setIsSubmitting(true);
-    setTimeout(() => {
+
+    try {
+      const response = await signupUser({
+        name: formData.fullName.trim(),
+        email: formData.email.trim(),
+        password: formData.password,
+      });
+
+      const emailToVerify = formData.email.trim();
+      sessionStorage.setItem('pendingVerificationEmail', emailToVerify);
+
+      navigate('/verify', {
+        state: { email: emailToVerify, responseData: response },
+      });
+    } catch (error) {
+      setErrorMessage(
+        error.message || 'Failed to create account. Please check your network or try again.'
+      );
+    } finally {
       setIsSubmitting(false);
-      navigate('/verify', { state: { email: formData.email } });
-    }, 600);
+    }
   };
 
   return (
@@ -46,6 +69,18 @@ const Registration = () => {
             Start your smarter job search journey today.
           </p>
         </div>
+
+        {/* Error Alert Message */}
+        {errorMessage && (
+          <div className="mb-4 p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs sm:text-[13px] font-medium flex items-center gap-2 animate-in fade-in">
+            <svg className="w-4 h-4 text-red-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            <span>{errorMessage}</span>
+          </div>
+        )}
 
         {/* Registration Form */}
         <form onSubmit={handleSubmit} className="flex flex-col gap-4 sm:gap-4.5">
@@ -144,11 +179,13 @@ const Registration = () => {
             disabled={isSubmitting}
             className="group w-full h-12 mt-1 bg-gradient-to-r from-[#5748f2] to-[#7633e8] hover:from-[#4f3ee8] hover:to-[#6d2bd8] text-white font-semibold text-sm sm:text-[15px] rounded-xl flex items-center justify-center gap-2 shadow-[0px_4px_6px_-4px_#6366F140,0px_10px_15px_-3px_#6366F140] hover:shadow-[0px_6px_10px_-4px_#6366F160,0px_14px_20px_-3px_#6366F160] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
           >
-            <span>Create account</span>
-            <ArrowRight
-              size={18}
-              className="transition-transform duration-200 group-hover:translate-x-1"
-            />
+            <span>{isSubmitting ? 'Creating account...' : 'Create account'}</span>
+            {!isSubmitting && (
+              <ArrowRight
+                size={18}
+                className="transition-transform duration-200 group-hover:translate-x-1"
+              />
+            )}
           </button>
 
           {/* Legal Terms & Privacy */}

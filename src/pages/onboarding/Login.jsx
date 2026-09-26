@@ -1,7 +1,13 @@
 import React, { useState } from 'react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
 import AuthLayout from './AuthLayout';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://192.168.33.82:8081';
+
+const validateEmail = (email) => {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+};
 
 const Login = () => {
   const navigate = useNavigate();
@@ -13,22 +19,113 @@ const Login = () => {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
+    if (error) setError('');
     setFormData((prev) => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value,
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
+    setError('');
+
+    const emailTrimmed = (formData.email || '').trim();
+    const password = formData.password || '';
+
+    if (!emailTrimmed) {
+      setError('Please enter your email address.');
+      return;
+    }
+
+    if (!validateEmail(emailTrimmed)) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+
+    if (!password) {
+      setError('Please enter your password.');
+      return;
+    }
+
     setIsSubmitting(true);
-    setTimeout(() => {
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: emailTrimmed,
+          password: password,
+        }),
+      });
+
+      let data = {};
+      try {
+        data = await response.json();
+      } catch {
+        // Non-JSON response
+      }
+
+      if (response.ok) {
+        // Extract token & user if provided
+        const token =
+          data.token ||
+          data.accessToken ||
+          data.jwt ||
+          data.data?.token ||
+          data.data?.accessToken ||
+          data.data?.jwt ||
+          '';
+
+        const user = data.user || data.data?.user || (data.email ? { email: data.email } : null);
+
+        const storage = formData.rememberMe ? localStorage : sessionStorage;
+        const altStorage = formData.rememberMe ? sessionStorage : localStorage;
+
+        // Clear alternate storage to prevent conflicting states
+        altStorage.removeItem('authToken');
+        altStorage.removeItem('token');
+        altStorage.removeItem('authUser');
+        altStorage.removeItem('user');
+
+        if (token) {
+          storage.setItem('authToken', token);
+          storage.setItem('token', token);
+        }
+        if (user) {
+          storage.setItem('authUser', JSON.stringify(user));
+          storage.setItem('user', JSON.stringify(user));
+        }
+
+        navigate('/dashboard');
+      } else {
+        // Handle API error responses cleanly
+        if (response.status === 401 || response.status === 403) {
+          setError(data.message || data.error || 'Invalid email or password.');
+        } else if (response.status === 404) {
+          setError(data.message || data.error || 'Account not found. Please check your credentials.');
+        } else if (response.status === 422) {
+          setError(data.message || data.error || 'Invalid input details provided.');
+        } else if (response.status >= 500) {
+          setError('Server error. Please try again later.');
+        } else {
+          setError(data.message || data.error || 'Login failed. Please check your credentials and try again.');
+        }
+      }
+    } catch {
+      setError('Unable to connect to the server. Please try again.');
+    } finally {
       setIsSubmitting(false);
-      navigate('/plan');
-    }, 400);
+    }
   };
 
   return (
@@ -52,8 +149,16 @@ const Login = () => {
           </p>
         </div>
 
+        {/* Error Alert */}
+        {error && (
+          <div className="mb-5 p-3.5 bg-red-50 border border-red-200/80 rounded-xl flex items-start gap-2.5 text-red-700 text-xs sm:text-[13px] leading-snug">
+            <AlertCircle size={17} className="shrink-0 mt-0.5 text-red-500" />
+            <span className="font-medium font-['Inter',sans-serif]">{error}</span>
+          </div>
+        )}
+
         {/* Sign In Form */}
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4 sm:gap-4.5">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4 sm:gap-4.5" noValidate>
           {/* Email Address */}
           <div className="flex flex-col">
             <label
@@ -144,13 +249,22 @@ const Login = () => {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="group w-full h-12 mt-1 bg-gradient-to-r from-[#5748f2] to-[#7633e8] hover:from-[#4f3ee8] hover:to-[#6d2bd8] text-white font-semibold text-sm sm:text-[15px] rounded-xl flex items-center justify-center gap-2 shadow-[0px_4px_6px_-4px_#6366F140,0px_10px_15px_-3px_#6366F140] hover:shadow-[0px_6px_10px_-4px_#6366F160,0px_14px_20px_-3px_#6366F160] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
+            className="group w-full h-12 mt-1 bg-gradient-to-r from-[#5748f2] to-[#7633e8] hover:from-[#4f3ee8] hover:to-[#6d2bd8] text-white font-semibold text-sm sm:text-[15px] rounded-xl flex items-center justify-center gap-2 shadow-[0px_4px_6px_-4px_#6366F140,0px_10px_15px_-3px_#6366F140] hover:shadow-[0px_6px_10px_-4px_#6366F160,0px_14px_20px_-3px_#6366F160] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:translate-y-0"
           >
-            <span>Sign in to AutoApply</span>
-            <ArrowRight
-              size={18}
-              className="transition-transform duration-200 group-hover:translate-x-1"
-            />
+            {isSubmitting ? (
+              <>
+                <Loader2 size={18} className="animate-spin" />
+                <span>Signing in...</span>
+              </>
+            ) : (
+              <>
+                <span>Sign in to AutoApply</span>
+                <ArrowRight
+                  size={18}
+                  className="transition-transform duration-200 group-hover:translate-x-1"
+                />
+              </>
+            )}
           </button>
 
           {/* Divider */}
@@ -221,3 +335,4 @@ const Login = () => {
 };
 
 export default Login;
+
