@@ -244,6 +244,7 @@ const Login = () => {
             {/* Google Button */}
             <button
               type="button"
+              onClick={() => navigate('/plan')}
               className="h-11 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50/80 active:bg-slate-100 text-slate-700 hover:text-slate-900 font-['Inter',sans-serif] text-xs sm:text-[13px] font-medium rounded-xl flex items-center justify-center gap-2 transition-all duration-200 shadow-xs cursor-pointer px-3 whitespace-nowrap"
             >
               <svg
@@ -275,6 +276,7 @@ const Login = () => {
             {/* LinkedIn Button */}
             <button
               type="button"
+              onClick={() => navigate('/plan')}
               className="h-11 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50/80 active:bg-slate-100 text-slate-700 hover:text-slate-900 font-['Inter',sans-serif] text-xs sm:text-[13px] font-medium rounded-xl flex items-center justify-center gap-2 transition-all duration-200 shadow-xs cursor-pointer px-3 whitespace-nowrap"
             >
               <svg
