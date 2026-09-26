@@ -1,9 +1,10 @@
 /**
  * Centralized API Endpoints Configuration
+ * Uses relative API routes so Vite proxy forwards requests cleanly to backend
  */
 
 export const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || 'http://192.168.33.82:8081';
+  import.meta.env.VITE_API_BASE_URL || '';
 
 export const AUTH_ENDPOINTS = {
   SIGNUP: `${API_BASE_URL}/api/auth/signup`,
@@ -16,7 +17,13 @@ export const AUTH_ENDPOINTS = {
 };
 
 export const BILLING_ENDPOINTS = {
+  PLANS: `${API_BASE_URL}/api/billing/plans`,
+  STRIPE_KEY: `${API_BASE_URL}/api/billing/stripe-key`,
+  CREATE_PAYMENT_INTENT: `${API_BASE_URL}/api/billing/create-payment-intent`,
+  CONFIRM_PAYMENT: `${API_BASE_URL}/api/billing/confirm-payment`,
   STATUS: `${API_BASE_URL}/api/billing/status`,
+  RECOVER: `${API_BASE_URL}/api/billing/recover`,
+  SELECT_TRIAL: `${API_BASE_URL}/api/billing/select-trial`,
 };
 
 export const ENDPOINTS = {

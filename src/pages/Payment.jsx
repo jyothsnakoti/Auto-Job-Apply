@@ -10,6 +10,7 @@ import {
 import logoSrc from '../assets/Background.svg';
 import {
     getStoredAuthToken,
+    getBillingPlans,
     getStripePublishableKey,
     createPaymentIntent,
     confirmBackendPayment,
@@ -617,9 +618,8 @@ const Payment = () => {
     const [lastPaymentIntentId, setLastPaymentIntentId] = useState(null);
     const [billingStatusData, setBillingStatusData] = useState(null);
 
-    // Refs to guard against duplicate concurrent initialization (e.g. React StrictMode)
-    const initializingRef = useRef(false);
-    const initializedPlanRef = useRef(null);
+    // Track active effect run to handle StrictMode cleanly without blocking
+    const effectIdRef = useRef(0);
 
     // Fallback: If no plan in state, redirect to /plan
     if (!plan || !plan.name || typeof plan.price !== 'number') {
@@ -628,7 +628,7 @@ const Payment = () => {
 
     // Step 1 - Step 3: Initialize Stripe Key and create PaymentIntent for selected plan
     useEffect(() => {
-        let isMounted = true;
+        const effectId = ++effectIdRef.current;
         const currentToken = getStoredAuthToken();
         const planCode = getPlanCode(plan);
 
@@ -638,53 +638,55 @@ const Payment = () => {
             return;
         }
 
-        // Prevent duplicate simultaneous calls in React 18 StrictMode
-        if (initializingRef.current) {
-            return;
-        }
-
-        // If already initialized for this plan with a valid clientSecret, skip recreation
-        if (initializedPlanRef.current === planCode && clientSecret) {
-            return;
-        }
-
         const initializeCheckout = async () => {
-            initializingRef.current = true;
             try {
                 setPaymentState('loadingInit');
                 setErrorMessage('');
 
-                // 1. Fetch Stripe Publishable Key
+                // 1. Fetch plans (contract flow)
+                try {
+                    await getBillingPlans();
+                } catch (plansErr) {
+                    console.debug('[billing] plans check:', plansErr?.message);
+                }
+                if (effectId !== effectIdRef.current) return;
+
+                // 2. Fetch Stripe Publishable Key
                 const publishableKey = await getStripePublishableKey();
+                if (effectId !== effectIdRef.current) return;
+
                 if (!publishableKey) {
                     throw new Error('Stripe publishable key is not available. Please verify server configuration.');
                 }
+
+                // 3. Load Stripe.js instance
                 const stripeObj = await loadStripe(publishableKey);
-                if (!isMounted) return;
-                setStripePromise(stripeObj);
+                if (effectId !== effectIdRef.current) return;
 
-                // 2. Create PaymentIntent with exact Plancode
+                // 4. Create PaymentIntent with exact Plancode
                 const secret = await createPaymentIntent(planCode);
-                if (!isMounted) return;
+                if (effectId !== effectIdRef.current) return;
 
-                initializedPlanRef.current = planCode;
+                if (!secret) {
+                    throw new Error('Failed to create payment intent client secret.');
+                }
+
+                setStripePromise(stripeObj);
                 setClientSecret(secret);
                 setPaymentState('readyForPayment');
             } catch (err) {
                 console.error('Checkout initialization failed:', err);
-                if (isMounted) {
-                    setErrorMessage(err?.message || 'Failed to initialize payment gateway.');
+                if (effectId === effectIdRef.current) {
+                    setErrorMessage(err?.message || 'Unable to prepare secure checkout. Please try again.');
                     setPaymentState('error');
                 }
-            } finally {
-                initializingRef.current = false;
             }
         };
 
         initializeCheckout();
 
         return () => {
-            isMounted = false;
+            // cleanup if needed
         };
     }, [plan]);
 

@@ -62,6 +62,13 @@ const Login = () => {
         rememberMe: formData.rememberMe,
       });
 
+      const returnTo = location.state?.returnTo;
+      const planState = location.state?.plan;
+      if (returnTo) {
+        navigate(returnTo, { state: planState ? planState : undefined });
+        return;
+      }
+
       // Hit billing status endpoint
       try {
         const billing = await getBillingStatus(loginResult.accessToken);

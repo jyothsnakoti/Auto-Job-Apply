@@ -1,79 +1,344 @@
+/**
+ * JAAP Billing Service - Implementation following the Frontend API Integration Guide
+ * Protected endpoints require: Authorization: Bearer <accessToken>
+ */
+
 import { BILLING_ENDPOINTS } from './endpoints';
-import { getStoredTokens, fetchWithAuth } from './authService';
+import { getStoredTokens, saveAuthTokens, clearAuthTokens, refreshAuthToken as authRefresh } from './authService';
 
 /**
- * Fetch Billing Status
- * GET /api/billing/status
- * @param {string} [token] - Optional explicit access token. If omitted, uses stored token.
- * @returns {Promise<{ remainingApplications: number, hasPlan: boolean }>}
+ * Clean and sanitize stored token string (strips quotes, whitespace, Bearer prefix)
  */
-export const getBillingStatus = async (token = null) => {
+const sanitizeToken = (rawToken) => {
+  if (!rawToken || rawToken === 'undefined' || rawToken === 'null') {
+    return null;
+  }
+
+  let cleaned = String(rawToken).trim();
+  if (
+    (cleaned.startsWith('"') && cleaned.endsWith('"')) ||
+    (cleaned.startsWith("'") && cleaned.endsWith("'"))
+  ) {
+    cleaned = cleaned.slice(1, -1).trim();
+  }
+
+  if (cleaned.toLowerCase().startsWith('bearer ')) {
+    cleaned = cleaned.slice(7).trim();
+  }
+
+  return cleaned || null;
+};
+
+/**
+ * Retrieve stored auth access token from localStorage or sessionStorage
+ */
+export const getStoredAuthToken = () => {
+  const { accessToken } = getStoredTokens();
+  return sanitizeToken(accessToken);
+};
+
+/**
+ * Retrieve stored refresh token
+ */
+export const getStoredRefreshToken = () => {
+  const { refreshToken } = getStoredTokens();
+  return sanitizeToken(refreshToken);
+};
+
+/**
+ * Save updated tokens to active storage
+ */
+export const setStoredTokens = (accessToken, refreshToken) => {
+  const cleanAccess = sanitizeToken(accessToken);
+  const cleanRefresh = sanitizeToken(refreshToken);
+  saveAuthTokens({
+    accessToken: cleanAccess,
+    refreshToken: cleanRefresh,
+  });
+};
+
+/**
+ * Clear stored auth tokens on logout or invalid session
+ */
+export const clearStoredTokens = () => {
+  clearAuthTokens();
+};
+
+/**
+ * Refresh expired access token using POST /api/auth/refresh
+ */
+export const refreshAuthToken = async () => {
+  const refreshToken = getStoredRefreshToken();
+  if (!refreshToken) {
+    return null;
+  }
+
+  console.debug('[billing] token refresh was attempted');
+
   try {
-    const accessToken = token || getStoredTokens().accessToken;
+    const res = await authRefresh(refreshToken);
+    if (res?.accessToken) {
+      return sanitizeToken(res.accessToken);
+    }
+  } catch (err) {
+    console.error('[billing] Token refresh failed:', err);
+  }
+  return null;
+};
 
-    const headers = {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json, text/plain, */*',
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-    };
+/**
+ * Helper to execute authenticated API calls with token refresh and diagnostic logging
+ */
+export const authenticatedFetch = async (endpoint, options = {}) => {
+  let token = getStoredAuthToken();
 
-    let response;
-    if (token) {
-      // Use direct fetch if specific token was passed
-      response = await fetch(BILLING_ENDPOINTS.STATUS, {
-        method: 'GET',
+  // If access token is absent, attempt refresh if a refresh token exists
+  if (!token) {
+    const refreshToken = getStoredRefreshToken();
+    if (refreshToken) {
+      token = await refreshAuthToken();
+    }
+  }
+
+  // Diagnostic logging (NEVER exposing actual token value)
+  const hasToken = Boolean(token);
+  console.debug('[billing] access token present:', hasToken);
+
+  const headers = {
+    Accept: 'application/json, text/plain, */*',
+    ...(options.headers || {}),
+  };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const isAuthAttached = Boolean(headers['Authorization']);
+  console.debug('[billing] authorization header attached:', isAuthAttached);
+
+  if (!isAuthAttached) {
+    const authErr = new Error('Authentication required. Please sign in to proceed with checkout.');
+    authErr.status = 401;
+    authErr.isAuthError = true;
+    throw authErr;
+  }
+
+  let response = await fetch(endpoint, {
+    ...options,
+    headers,
+  });
+
+  // If 401 Unauthorized, attempt token refresh and retry original request once
+  if (response.status === 401) {
+    console.debug('[billing] token refresh was attempted due to 401 Unauthorized');
+    const newToken = await refreshAuthToken();
+    if (newToken) {
+      headers['Authorization'] = `Bearer ${newToken}`;
+      console.debug('[billing] retry occurred with refreshed access token');
+      response = await fetch(endpoint, {
+        ...options,
         headers,
       });
     } else {
-      // Use fetchWithAuth for automatic token refresh on 401
-      response = await fetchWithAuth(BILLING_ENDPOINTS.STATUS, {
-        method: 'GET',
-        headers,
+      const err = new Error('Your session has expired. Please sign in again.');
+      err.status = 401;
+      err.isAuthError = true;
+      throw err;
+    }
+  }
+
+  const contentType = response.headers.get('content-type') || '';
+  const isJson = contentType.includes('application/json');
+
+  if (!response.ok) {
+    let errorMessage = `Request failed (Status ${response.status})`;
+    let errorData = null;
+    try {
+      if (isJson) {
+        errorData = await response.json();
+        errorMessage = errorData?.message || errorData?.error || errorMessage;
+      } else {
+        const errorText = await response.text();
+        if (errorText) errorMessage = errorText;
+      }
+    } catch {
+      // fallback to default message
+    }
+
+    if (response.status === 403) {
+      console.warn('[billing] 403 Forbidden received for endpoint:', endpoint, {
+        hasToken: Boolean(token),
+        headersSent: Object.keys(headers),
+        status: response.status,
+        message: errorMessage,
       });
     }
 
-    const text = await response.text().catch(() => '');
+    const err = new Error(errorMessage);
+    err.status = response.status;
+    err.data = errorData;
+    throw err;
+  }
+
+  if (isJson) {
+    return await response.json();
+  } else {
+    return await response.text();
+  }
+};
+
+/**
+ * Step 1 — Get Plans
+ * GET /api/billing/plans
+ */
+export const getBillingPlans = async () => {
+  return await authenticatedFetch(BILLING_ENDPOINTS.PLANS, {
+    method: 'GET',
+  });
+};
+
+/**
+ * Step 2 — Get Stripe Publishable Key
+ * GET /api/billing/stripe-key
+ */
+export const getStripePublishableKey = async () => {
+  try {
+    const data = await authenticatedFetch(BILLING_ENDPOINTS.STRIPE_KEY, {
+      method: 'GET',
+    });
+    if (typeof data === 'object' && data?.publishableKey) {
+      return data.publishableKey;
+    }
+  } catch (err) {
+    // Rethrow auth errors so UI knows authentication failed
+    if (err?.status === 401 || err?.status === 403 || err?.isAuthError) {
+      throw err;
+    }
+    console.warn('Could not fetch stripe-key from backend, checking environment fallback:', err?.message);
+  }
+  return import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || null;
+};
+
+/**
+ * Step 3 — Create Payment Intent
+ * POST /api/billing/create-payment-intent
+ * Body EXACTLY: { "Plancode": "basic" | "pro" }
+ */
+export const createPaymentIntent = async (plancode) => {
+  const normalizedCode = (plancode || 'basic').toLowerCase().trim();
+  const res = await authenticatedFetch(BILLING_ENDPOINTS.CREATE_PAYMENT_INTENT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      Plancode: normalizedCode,
+    }),
+  });
+
+  if (typeof res === 'object' && res?.clientSecret) {
+    return res.clientSecret;
+  }
+  throw new Error('Backend did not return a valid clientSecret for PaymentIntent creation.');
+};
+
+/**
+ * Step 6 — Backend Confirm Payment
+ * POST /api/billing/confirm-payment
+ * Body EXACTLY: { "PaymentIntentId": "pi_..." }
+ * Response is plain text: "Payment confirmed. Plan activated."
+ */
+export const confirmBackendPayment = async (paymentIntentId) => {
+  if (!paymentIntentId) {
+    throw new Error('PaymentIntent ID is missing for backend confirmation.');
+  }
+
+  return await authenticatedFetch(BILLING_ENDPOINTS.CONFIRM_PAYMENT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      PaymentIntentId: paymentIntentId,
+    }),
+  });
+};
+
+/**
+ * Step 7 — Get Billing Status
+ * GET /api/billing/status
+ * Response: { "hasPlan": true, "remainingApplications": 250 | 1000 }
+ */
+export const getBillingStatus = async (token = null) => {
+  if (token) {
+    // If specific token was explicitly provided
+    const res = await fetch(BILLING_ENDPOINTS.STATUS, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/plain, */*',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    const text = await res.text().catch(() => '');
     let data;
     try {
       data = JSON.parse(text);
     } catch {
       data = { message: text };
     }
-
-    if (!response.ok) {
-      const errorMessage =
-        data?.message ||
-        data?.error ||
-        text ||
-        `Failed to fetch billing status (Status ${response.status})`;
-      const error = new Error(errorMessage);
-      error.status = response.status;
-      error.data = data;
+    if (!res.ok) {
+      const error = new Error(data?.message || data?.error || `Status failed (${res.status})`);
+      error.status = res.status;
       throw error;
     }
-
-    // Persist billing status in storage
-    const billingInfo = {
-      hasPlan: Boolean(data.hasPlan),
-      remainingApplications: typeof data.remainingApplications === 'number' ? data.remainingApplications : 0,
-      ...data,
-    };
-
-    try {
-      const storage = localStorage.getItem('token') || localStorage.getItem('accessToken') ? localStorage : sessionStorage;
-      storage.setItem('billingStatus', JSON.stringify(billingInfo));
-      storage.setItem('hasPlan', String(Boolean(data.hasPlan)));
-    } catch {
-      // Storage access fail-safe
-    }
-
-    return billingInfo;
-  } catch (error) {
-    console.error('Billing status error:', error);
-    throw error;
+    return data;
   }
+
+  return await authenticatedFetch(BILLING_ENDPOINTS.STATUS, {
+    method: 'GET',
+  });
+};
+
+/**
+ * Recovery Flow
+ * POST /api/billing/recover
+ * Response: { "recovered": 1 }
+ */
+export const recoverBilling = async () => {
+  return await authenticatedFetch(BILLING_ENDPOINTS.RECOVER, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+};
+
+/**
+ * Trial Plan Selection
+ * POST /api/billing/select-trial
+ */
+export const selectTrialPlan = async () => {
+  return await authenticatedFetch(BILLING_ENDPOINTS.SELECT_TRIAL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
 };
 
 export default {
+  getStoredAuthToken,
+  getStoredRefreshToken,
+  setStoredTokens,
+  clearStoredTokens,
+  refreshAuthToken,
+  authenticatedFetch,
+  getBillingPlans,
+  getStripePublishableKey,
+  createPaymentIntent,
+  confirmBackendPayment,
   getBillingStatus,
+  recoverBilling,
+  selectTrialPlan,
 };
