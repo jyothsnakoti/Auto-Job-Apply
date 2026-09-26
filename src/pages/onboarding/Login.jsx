@@ -86,6 +86,11 @@ const Login = () => {
           data.data?.jwt ||
           '';
 
+        const refreshToken =
+          data.refreshToken ||
+          data.data?.refreshToken ||
+          '';
+
         const user = data.user || data.data?.user || (data.email ? { email: data.email } : null);
 
         const storage = formData.rememberMe ? localStorage : sessionStorage;
@@ -94,6 +99,8 @@ const Login = () => {
         // Clear alternate storage to prevent conflicting states
         altStorage.removeItem('authToken');
         altStorage.removeItem('token');
+        altStorage.removeItem('accessToken');
+        altStorage.removeItem('refreshToken');
         altStorage.removeItem('authUser');
         altStorage.removeItem('user');
 
@@ -101,12 +108,17 @@ const Login = () => {
           storage.setItem('authToken', token);
           storage.setItem('token', token);
         }
+        if (refreshToken) {
+          storage.setItem('refreshToken', refreshToken);
+        }
         if (user) {
           storage.setItem('authUser', JSON.stringify(user));
           storage.setItem('user', JSON.stringify(user));
         }
 
-        navigate('/dashboard');
+        const returnTo = location.state?.returnTo || '/dashboard';
+        const planState = location.state?.plan;
+        navigate(returnTo, { state: planState ? planState : undefined });
       } else {
         // Handle API error responses cleanly
         if (response.status === 401 || response.status === 403) {
