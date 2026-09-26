@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { AlertCircle, RefreshCw, Loader2 } from 'lucide-react';
 import logoSrc from '../assets/Background.svg';
+import { getBillingPlans } from '../services/api';
 
 const Plan = () => {
     const navigate = useNavigate();
@@ -10,6 +12,31 @@ const Plan = () => {
 
     const [hoveredCard, setHoveredCard] = useState(null);
     const [hoveredButton, setHoveredButton] = useState(null);
+    const [plans, setPlans] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    const fetchPlans = useCallback(async () => {
+        try {
+            setIsLoading(true);
+            setError(null);
+            const data = await getBillingPlans();
+            if (Array.isArray(data)) {
+                setPlans(data);
+            } else {
+                setPlans([]);
+            }
+        } catch (err) {
+            console.error('Failed to load billing plans:', err);
+            setError(err.message || 'Unable to load plans from server.');
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchPlans();
+    }, [fetchPlans]);
 
     useEffect(() => {
         const handleResize = () => setWindowWidth(window.innerWidth);
@@ -23,6 +50,7 @@ const Plan = () => {
 
     const pricingFeatures = [
         'Job discovery',
+
         'ATS matching',
         'Resume tailoring',
         'Automated applications',
@@ -325,177 +353,172 @@ const Plan = () => {
                     Choose a plan that fits your job search goals. No payment per individual application.
                 </p>
 
-                {/* THREE PLAN CARDS */}
-                <div style={styles.cardsGrid}>
-                    {/* 1. TRIAL PACK */}
-                    <div
-                        style={styles.card(false, hoveredCard === 'trial')}
-                        onMouseEnter={() => setHoveredCard('trial')}
-                        onMouseLeave={() => setHoveredCard(null)}
-                    >
-                        <h2 style={styles.planTitle}>Trial Pack</h2>
-
-                        <div style={styles.priceRow}>
-                            <span style={styles.priceAmount}>Free Plan</span>
-                        </div>
-
-                        <p style={styles.planLimit}>Upto 10 applications</p>
-
-                        <div style={styles.divider} />
-
-                        <div style={styles.featuresList}>
-                            {pricingFeatures.map((feature, idx) => (
-                                <div key={idx} style={styles.featureItem}>
-                                    <div style={styles.checkIcon}>
-                                        <svg viewBox="0 0 24 24" style={styles.checkSvg}>
-                                            <polyline points="20 6 9 17 4 12" />
-                                        </svg>
-                                    </div>
-                                    <span style={styles.featureText}>{feature}</span>
+                {/* LOADING STATE */}
+                {isLoading && (
+                    <div style={styles.cardsGrid}>
+                        {[1, 2, 3].map((i) => (
+                            <div
+                                key={`skeleton-${i}`}
+                                style={{
+                                    ...styles.card(false, false),
+                                    minHeight: '480px',
+                                    backgroundColor: '#FFFFFF',
+                                }}
+                                className="animate-pulse"
+                            >
+                                <div className="h-7 bg-slate-200 rounded-lg w-1/2 mb-4"></div>
+                                <div className="h-10 bg-slate-200 rounded-lg w-2/3 mb-3"></div>
+                                <div className="h-4 bg-slate-100 rounded-md w-1/3 mb-6"></div>
+                                <div className="h-px bg-slate-100 w-full mb-6"></div>
+                                <div className="space-y-3.5 flex-1 mb-8">
+                                    {[1, 2, 3, 4, 5, 6].map((f) => (
+                                        <div key={f} className="flex items-center gap-3">
+                                            <div className="w-5 h-5 rounded-full bg-slate-200 shrink-0"></div>
+                                            <div className="h-4 bg-slate-100 rounded w-4/5"></div>
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
-                        </div>
+                                <div className="h-12 bg-slate-200 rounded-xl w-full"></div>
+                            </div>
+                        ))}
+                    </div>
+                )}
 
+                {/* ERROR STATE */}
+                {!isLoading && error && (
+                    <div className="w-full max-w-md bg-white border border-red-200 rounded-2xl p-6 text-center shadow-sm my-8">
+                        <div className="w-12 h-12 rounded-full bg-red-50 text-red-500 flex items-center justify-center mx-auto mb-3">
+                            <AlertCircle size={26} />
+                        </div>
+                        <h3 className="text-slate-900 font-bold text-lg mb-1">Failed to load plans</h3>
+                        <p className="text-slate-600 text-sm mb-4">{error}</p>
                         <button
                             type="button"
-                            onClick={() => {
-                                navigate('/resume-setup');
-                            }}
-                            style={styles.ctaButton(hoveredButton === 'trial')}
-                            onMouseEnter={() => setHoveredButton('trial')}
-                            onMouseLeave={() => setHoveredButton(null)}
+                            onClick={fetchPlans}
+                            className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-colors cursor-pointer"
                         >
-                            <span>Get Started</span>
-                            <svg
-                                style={styles.arrowIcon(hoveredButton === 'trial')}
-                                viewBox="0 0 24 24"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                            >
-                                <path d="M5 12h14M12 5l7 7-7 7" />
-                            </svg>
+                            <RefreshCw size={16} />
+                            <span>Try Again</span>
                         </button>
                     </div>
+                )}
 
-                    {/* 2. BASIC PLAN */}
-                    <div
-                        style={styles.card(false, hoveredCard === 'basic')}
-                        onMouseEnter={() => setHoveredCard('basic')}
-                        onMouseLeave={() => setHoveredCard(null)}
-                    >
-                        <h2 style={styles.planTitle}>Basic Plan</h2>
-
-                        <div style={styles.priceRow}>
-                            <span style={styles.priceAmount}>$4.99</span>
-                            <span style={styles.pricePeriod}>/ month</span>
-                        </div>
-
-                        <p style={styles.planLimit}>Up to 250 applications</p>
-
-                        <div style={styles.divider} />
-
-                        <div style={styles.featuresList}>
-                            {pricingFeatures.map((feature, idx) => (
-                                <div key={idx} style={styles.featureItem}>
-                                    <div style={styles.checkIcon}>
-                                        <svg viewBox="0 0 24 24" style={styles.checkSvg}>
-                                            <polyline points="20 6 9 17 4 12" />
-                                        </svg>
-                                    </div>
-                                    <span style={styles.featureText}>{feature}</span>
-                                </div>
-                            ))}
-                        </div>
-
+                {/* EMPTY STATE */}
+                {!isLoading && !error && plans.length === 0 && (
+                    <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl p-8 text-center shadow-sm my-8">
+                        <p className="text-slate-600 text-sm mb-4">No subscription plans available right now.</p>
                         <button
                             type="button"
-                            onClick={() => {
-                                navigate('/payment', {
-                                    state: {
-                                        name: 'Basic Plan',
-                                        price: 4.99,
-                                        billing: '/ month',
-                                        applications: 'Up to 250 applications',
-                                    },
-                                });
-                            }}
-                            style={styles.ctaButton(hoveredButton === 'basic')}
-                            onMouseEnter={() => setHoveredButton('basic')}
-                            onMouseLeave={() => setHoveredButton(null)}
+                            onClick={fetchPlans}
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
                         >
-                            <span>Get Started</span>
-                            <svg
-                                style={styles.arrowIcon(hoveredButton === 'basic')}
-                                viewBox="0 0 24 24"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                            >
-                                <path d="M5 12h14M12 5l7 7-7 7" />
-                            </svg>
+                            <RefreshCw size={14} />
+                            <span>Refresh</span>
                         </button>
                     </div>
+                )}
 
-                    {/* 3. PRO PLAN */}
-                    <div
-                        style={styles.card(true, hoveredCard === 'pro')}
-                        onMouseEnter={() => setHoveredCard('pro')}
-                        onMouseLeave={() => setHoveredCard(null)}
-                    >
-                        {/* MOST POPULAR BADGE */}
-                        <span style={styles.popularBadge}>MOST POPULAR</span>
+                {/* BACKEND PLANS GRID */}
+                {!isLoading && !error && plans.length > 0 && (
+                    <div style={styles.cardsGrid}>
+                        {plans.map((plan) => {
+                            const isPro =
+                                plan.code?.toLowerCase().includes('pro') ||
+                                plan.name?.toLowerCase().includes('pro') ||
+                                Boolean(plan.isPopular);
+                            const isFree = plan.priceCents === 0 || !plan.priceCents;
+                            const priceText = isFree
+                                ? 'Free Plan'
+                                : `$${(plan.priceCents / 100).toFixed(2)}`;
+                            const periodText = plan.billingInterval ? `/ ${plan.billingInterval}` : '';
+                            const limitText = plan.applicationAllowance
+                                ? `Up to ${plan.applicationAllowance} applications`
+                                : '';
+                            const planKey = plan.code || String(plan.id) || plan.name;
+                            const features =
+                                Array.isArray(plan.features) && plan.features.length > 0
+                                    ? plan.features
+                                    : pricingFeatures;
 
-                        <h2 style={styles.planTitle}>Pro Plan</h2>
+                            const handlePlanClick = () => {
+                                if (isFree || plan.code === 'trial') {
+                                    navigate('/resume-setup', { state: { plan } });
+                                } else {
+                                    navigate('/payment', {
+                                        state: {
+                                            planId: plan.id,
+                                            name: plan.name,
+                                            code: plan.code,
+                                            price: plan.priceCents ? plan.priceCents / 100 : 0,
+                                            priceCents: plan.priceCents,
+                                            billing: periodText,
+                                            billingInterval: plan.billingInterval,
+                                            applications: limitText,
+                                            applicationAllowance: plan.applicationAllowance,
+                                        },
+                                    });
+                                }
+                            };
 
-                        <div style={styles.priceRow}>
-                            <span style={styles.priceAmount}>$12.99</span>
-                            <span style={styles.pricePeriod}>/ quarter</span>
-                        </div>
+                            return (
+                                <div
+                                    key={planKey}
+                                    style={styles.card(isPro, hoveredCard === planKey)}
+                                    onMouseEnter={() => setHoveredCard(planKey)}
+                                    onMouseLeave={() => setHoveredCard(null)}
+                                >
+                                    {isPro && (
+                                        <span style={styles.popularBadge}>MOST POPULAR</span>
+                                    )}
 
-                        <p style={styles.planLimit}>Up to 1000 applications</p>
+                                    <h2 style={styles.planTitle}>{plan.name}</h2>
 
-                        <div style={styles.divider} />
-
-                        <div style={styles.featuresList}>
-                            {pricingFeatures.map((feature, idx) => (
-                                <div key={idx} style={styles.featureItem}>
-                                    <div style={styles.checkIcon}>
-                                        <svg viewBox="0 0 24 24" style={styles.checkSvg}>
-                                            <polyline points="20 6 9 17 4 12" />
-                                        </svg>
+                                    <div style={styles.priceRow}>
+                                        <span style={styles.priceAmount}>{priceText}</span>
+                                        {periodText && (
+                                            <span style={styles.pricePeriod}>{periodText}</span>
+                                        )}
                                     </div>
-                                    <span style={styles.featureText}>{feature}</span>
-                                </div>
-                            ))}
-                        </div>
 
-                        <button
-                            type="button"
-                            onClick={() => {
-                                navigate('/payment', {
-                                    state: {
-                                        name: 'Pro Plan',
-                                        price: 12.99,
-                                        billing: '/ quarter',
-                                        applications: 'Up to 1000 applications',
-                                    },
-                                });
-                            }}
-                            style={styles.ctaButton(hoveredButton === 'pro')}
-                            onMouseEnter={() => setHoveredButton('pro')}
-                            onMouseLeave={() => setHoveredButton(null)}
-                        >
-                            <span>Get Started</span>
-                            <svg
-                                style={styles.arrowIcon(hoveredButton === 'pro')}
-                                viewBox="0 0 24 24"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                            >
-                                <path d="M5 12h14M12 5l7 7-7 7" />
-                            </svg>
-                        </button>
+                                    {limitText && <p style={styles.planLimit}>{limitText}</p>}
+
+                                    <div style={styles.divider} />
+
+                                    <div style={styles.featuresList}>
+                                        {features.map((feature, idx) => (
+                                            <div key={idx} style={styles.featureItem}>
+                                                <div style={styles.checkIcon}>
+                                                    <svg viewBox="0 0 24 24" style={styles.checkSvg}>
+                                                        <polyline points="20 6 9 17 4 12" />
+                                                    </svg>
+                                                </div>
+                                                <span style={styles.featureText}>{feature}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        onClick={handlePlanClick}
+                                        style={styles.ctaButton(hoveredButton === planKey)}
+                                        onMouseEnter={() => setHoveredButton(planKey)}
+                                        onMouseLeave={() => setHoveredButton(null)}
+                                    >
+                                        <span>Get Started</span>
+                                        <svg
+                                            style={styles.arrowIcon(hoveredButton === planKey)}
+                                            viewBox="0 0 24 24"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                        >
+                                            <path d="M5 12h14M12 5l7 7-7 7" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            );
+                        })}
                     </div>
-                </div>
+                )}
             </main>
         </div>
     );
