@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import logoSrc from '../assets/Background.svg';
+import { logoutUser, getOnboardingState, setOnboardingState } from '../services/api';
 
 const ContactSetup = () => {
     const navigate = useNavigate();
@@ -14,6 +15,16 @@ const ContactSetup = () => {
     const [linkedinUrl, setLinkedinUrl] = useState('');
     const [focusedField, setFocusedField] = useState(null); // 'phone' | 'linkedin'
     const [isHoveredContinue, setIsHoveredContinue] = useState(false);
+
+    useEffect(() => {
+        const savedState = getOnboardingState();
+        if (savedState.phone || savedState.phoneNumber) {
+            setPhoneNumber(savedState.phone || savedState.phoneNumber);
+        }
+        if (savedState.linkedinUrl || savedState.linkedin) {
+            setLinkedinUrl(savedState.linkedinUrl || savedState.linkedin);
+        }
+    }, []);
 
     useEffect(() => {
         const handleResize = () => setWindowWidth(window.innerWidth);
@@ -32,6 +43,13 @@ const ContactSetup = () => {
     ];
 
     const handleContinue = () => {
+        setOnboardingState({
+            phone: phoneNumber.trim(),
+            phoneNumber: phoneNumber.trim(),
+            linkedinUrl: linkedinUrl.trim(),
+            linkedin: linkedinUrl.trim(),
+        });
+
         navigate('/work-eligibility', {
             state: {
                 phoneNumber,

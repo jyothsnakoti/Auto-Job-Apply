@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import logoSrc from '../assets/Background.svg';
+import { logoutUser, getOnboardingState, setOnboardingState } from '../services/api';
 
 const FinalDetails = () => {
     const navigate = useNavigate();
@@ -26,6 +27,28 @@ const FinalDetails = () => {
 
     const [additionalNotes, setAdditionalNotes] = useState('');
     const [isHoveredContinue, setIsHoveredContinue] = useState(false);
+
+    useEffect(() => {
+        const savedState = getOnboardingState();
+        if (savedState.openToInPerson !== undefined) setOpenToInPerson(savedState.openToInPerson);
+        if (savedState.willingToRelocate !== undefined) setWillingToRelocate(savedState.willingToRelocate);
+        if (savedState.canStartImmediately !== undefined) setCanStartImmediately(savedState.canStartImmediately);
+        if (savedState.reliableTransportation !== undefined) setReliableTransportation(savedState.reliableTransportation);
+        if (savedState.needAccommodations !== undefined || savedState.workplaceAccommodations !== undefined) {
+            setWorkplaceAccommodations(savedState.needAccommodations ?? savedState.workplaceAccommodations);
+        }
+        if (savedState.activeGovernmentClearance !== undefined || savedState.governmentClearance !== undefined) {
+            setGovernmentClearance(savedState.activeGovernmentClearance ?? savedState.governmentClearance);
+        }
+        if (savedState.foreignGovernmentTies !== undefined || savedState.foreignTies !== undefined) {
+            setForeignTies(savedState.foreignGovernmentTies ?? savedState.foreignTies);
+        }
+        if (savedState.gender) setGender(savedState.gender);
+        if (savedState.raceEthnicity || savedState.ethnicity) setEthnicity(savedState.raceEthnicity || savedState.ethnicity);
+        if (savedState.veteranStatus !== undefined) setVeteranStatus(savedState.veteranStatus);
+        if (savedState.disabilityStatus !== undefined) setDisabilityStatus(savedState.disabilityStatus);
+        if (savedState.additionalNotes) setAdditionalNotes(savedState.additionalNotes);
+    }, []);
 
     useEffect(() => {
         const handleResize = () => setWindowWidth(window.innerWidth);
@@ -63,6 +86,25 @@ const FinalDetails = () => {
     ];
 
     const handleContinue = () => {
+        setOnboardingState({
+            openToInPerson,
+            willingToRelocate,
+            canStartImmediately,
+            reliableTransportation,
+            workplaceAccommodations,
+            needAccommodations: workplaceAccommodations,
+            governmentClearance,
+            activeGovernmentClearance: governmentClearance,
+            foreignTies,
+            foreignGovernmentTies: foreignTies,
+            gender,
+            ethnicity,
+            raceEthnicity: ethnicity,
+            veteranStatus,
+            disabilityStatus,
+            additionalNotes,
+        });
+
         navigate('/application-settings', {
             state: {
                 openToInPerson,

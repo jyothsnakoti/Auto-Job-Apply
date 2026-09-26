@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import logoSrc from '../assets/Background.svg';
-import { logoutUser } from '../services/api';
+import { logoutUser, getOnboardingState, setOnboardingState } from '../services/api';
 
 const LocationSetup = () => {
     const navigate = useNavigate();
@@ -22,8 +22,15 @@ const LocationSetup = () => {
     const [isCountryDropdownOpen, setIsCountryDropdownOpen] = useState(false);
     const [focusedField, setFocusedField] = useState(null); // 'address' | 'city' | 'state' | 'country'
     const [isHoveredContinue, setIsHoveredContinue] = useState(false);
+    const [validationError, setValidationError] = useState('');
 
     useEffect(() => {
+        const savedState = getOnboardingState();
+        if (savedState.addressLine1 || savedState.address) setAddress(savedState.addressLine1 || savedState.address);
+        if (savedState.city) setCity(savedState.city);
+        if (savedState.state || savedState.stateVal) setStateVal(savedState.state || savedState.stateVal);
+        if (savedState.country) setCountry(savedState.country);
+
         try {
             const storedUser =
                 localStorage.getItem('authUser') ||
@@ -88,6 +95,21 @@ const LocationSetup = () => {
     ];
 
     const handleContinue = () => {
+        setValidationError('');
+        if (!address.trim() || !city.trim() || !stateVal.trim() || !country.trim()) {
+            setValidationError('Please fill in all required location fields.');
+            return;
+        }
+
+        setOnboardingState({
+            addressLine1: address.trim(),
+            address: address.trim(),
+            city: city.trim(),
+            state: stateVal.trim(),
+            stateVal: stateVal.trim(),
+            country: country.trim(),
+        });
+
         navigate('/contact-setup', {
             state: {
                 address,

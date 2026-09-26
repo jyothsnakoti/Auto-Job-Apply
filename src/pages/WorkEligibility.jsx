@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import logoSrc from '../assets/Background.svg';
+import { logoutUser, getOnboardingState, setOnboardingState } from '../services/api';
 
 const WorkEligibility = () => {
     const navigate = useNavigate();
@@ -23,6 +24,28 @@ const WorkEligibility = () => {
     const [focusedBasis, setFocusedBasis] = useState(null);
 
     const [isHoveredContinue, setIsHoveredContinue] = useState(false);
+
+    useEffect(() => {
+        const savedState = getOnboardingState();
+        if (Array.isArray(savedState.citizenshipCountries) && savedState.citizenshipCountries.length > 0) {
+            setCitizenshipCountries(savedState.citizenshipCountries);
+        } else if (Array.isArray(savedState.citizenships) && savedState.citizenships.length > 0) {
+            setCitizenshipCountries(savedState.citizenships);
+        }
+
+        if (Array.isArray(savedState.addedCountries) && savedState.addedCountries.length > 0) {
+            setAddedCountries(savedState.addedCountries);
+        } else if (Array.isArray(savedState.workEligibility) && savedState.workEligibility.length > 0) {
+            setAddedCountries(
+                savedState.workEligibility.map((w) => ({
+                    country: w.country,
+                    isAuthorized: w.legallyAuthorized,
+                    requiresSponsorship: w.requiresSponsorship,
+                    authorizationBasis: w.authorizationBasis || '',
+                }))
+            );
+        }
+    }, []);
 
     useEffect(() => {
         const handleResize = () => setWindowWidth(window.innerWidth);
@@ -116,6 +139,20 @@ const WorkEligibility = () => {
     };
 
     const handleContinue = () => {
+        setOnboardingState({
+            citizenshipCountries,
+            citizenships: citizenshipCountries,
+            addedCountries,
+            workEligibility: addedCountries.map((item) => ({
+                country: item.country,
+                legallyAuthorized: item.isAuthorized !== undefined ? Boolean(item.isAuthorized) : true,
+                requiresSponsorship: Boolean(item.requiresSponsorship),
+                authorizationBasis: item.authorizationBasis || 'Citizen',
+                visaType: item.visaType || null,
+                authorizationStatus: item.authorizationStatus || 'active',
+            })),
+        });
+
         navigate('/final-details', {
             state: {
                 citizenshipCountries,

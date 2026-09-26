@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import logoSrc from '../assets/Background.svg';
+import { getOnboardingState, setOnboardingState } from '../services/api';
 
 const ResumeSetup = () => {
     const navigate = useNavigate();
@@ -14,6 +15,14 @@ const ResumeSetup = () => {
     const [fileError, setFileError] = useState('');
     const [isDragging, setIsDragging] = useState(false);
     const [isHoveredContinue, setIsHoveredContinue] = useState(false);
+
+    useEffect(() => {
+        const state = getOnboardingState();
+        if (state.resumeName && !selectedFile) {
+            // Placeholder representation of already uploaded file name
+            setSelectedFile({ name: state.resumeName, size: state.resumeSize || 1024 * 1024 * 1.2 });
+        }
+    }, []);
 
     useEffect(() => {
         const handleResize = () => setWindowWidth(window.innerWidth);
@@ -93,6 +102,10 @@ const ResumeSetup = () => {
 
     const handleContinue = () => {
         if (!selectedFile) return;
+        setOnboardingState({
+            resumeName: selectedFile?.name,
+            resumeSize: selectedFile?.size,
+        });
         navigate('/location-setup', { state: { resumeName: selectedFile?.name } });
     };
 

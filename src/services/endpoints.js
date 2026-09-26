@@ -19,10 +19,15 @@ export const BILLING_ENDPOINTS = {
   STATUS: `${API_BASE_URL}/api/billing/status`,
 };
 
+export const ONBOARDING_ENDPOINTS = {
+  SUBMIT: `${API_BASE_URL}/api/onboarding`,
+};
+
 export const ENDPOINTS = {
   BASE_URL: API_BASE_URL,
   AUTH: AUTH_ENDPOINTS,
   BILLING: BILLING_ENDPOINTS,
+  ONBOARDING: ONBOARDING_ENDPOINTS,
 };
 
 export default ENDPOINTS;
