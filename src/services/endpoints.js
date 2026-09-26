@@ -17,6 +17,9 @@ export const AUTH_ENDPOINTS = {
 
 export const BILLING_ENDPOINTS = {
   STATUS: `${API_BASE_URL}/api/billing/status`,
+  PLANS: `${API_BASE_URL}/api/billing/plans`,
+  SELECT_TRIAL: `${API_BASE_URL}/api/billing/select-trial`,
+  CREATE_PAYMENT_INTENT: `${API_BASE_URL}/api/billing/create-payment-intent`,
 };
 
 export const ONBOARDING_ENDPOINTS = {
