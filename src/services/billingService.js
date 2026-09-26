@@ -345,6 +345,47 @@ export const getBillingStatus = async (token = null) => {
 };
 
 /**
+ * Fetch user's billing renewal and payment history
+ * GET /api/billing/history
+ * Requires Authorization: Bearer <accessToken>
+ * @param {string} [token] - Optional explicit access token
+ * @returns {Promise<Array>} Array of history records
+ */
+export const getBillingHistory = async (token = null) => {
+  if (token) {
+    const cleanToken = sanitizeToken(token);
+    const headers = {
+      Accept: 'application/json, text/plain, */*',
+      Authorization: `Bearer ${cleanToken}`,
+    };
+    const response = await fetch(BILLING_ENDPOINTS.HISTORY, {
+      method: 'GET',
+      headers,
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      let errorData;
+      try {
+        errorData = JSON.parse(text);
+      } catch {
+        errorData = { message: text };
+      }
+      const error = new Error(errorData?.message || `Failed to fetch billing history (Status ${response.status})`);
+      error.status = response.status;
+      throw error;
+    }
+    const data = await response.json();
+    return Array.isArray(data) ? data : (data.history || data.data || []);
+  }
+
+  const data = await authenticatedFetch(BILLING_ENDPOINTS.HISTORY, {
+    method: 'GET',
+  });
+
+  return Array.isArray(data) ? data : (data?.history || data?.data || []);
+};
+
+/**
  * Recovery Flow
  * POST /api/billing/recover
  * Response: { "recovered": 1 }
@@ -383,6 +424,8 @@ export default {
   createPaymentIntent,
   confirmBackendPayment,
   getBillingStatus,
+  getBillingHistory,
   recoverBilling,
   selectTrialPlan,
 };
+

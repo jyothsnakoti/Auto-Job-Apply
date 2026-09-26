@@ -16,6 +16,7 @@ export {
   createPaymentIntent,
   confirmBackendPayment,
   getBillingStatus,
+  getBillingHistory,
   recoverBilling,
 } from './billingService';
 export { default as authService } from './authService';
