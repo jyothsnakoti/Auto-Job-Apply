@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, RefreshCw, Loader2 } from 'lucide-react';
 import logoSrc from '../assets/Background.svg';
-import { getBillingPlans } from '../services/api';
+import { getBillingPlans, selectTrialPlan, createPaymentIntent } from '../services/billingPlans';
 
 const Plan = () => {
     const navigate = useNavigate();
@@ -15,12 +15,18 @@ const Plan = () => {
     const [plans, setPlans] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [activatingPlanId, setActivatingPlanId] = useState(null);
+    const [actionError, setActionError] = useState('');
+    const hasFetchedRef = useRef(false);
 
-    const fetchPlans = useCallback(async () => {
+    const fetchPlans = useCallback(async (force = false) => {
+        if (hasFetchedRef.current && !force) return;
+        hasFetchedRef.current = true;
+
         try {
             setIsLoading(true);
             setError(null);
-            const data = await getBillingPlans();
+            const data = await getBillingPlans(null, force);
             if (Array.isArray(data)) {
                 setPlans(data);
             } else {
@@ -150,8 +156,8 @@ const Plan = () => {
             gridTemplateColumns: isMobile
                 ? '1fr'
                 : isTablet
-                ? 'repeat(2, 1fr)'
-                : 'repeat(3, 1fr)',
+                    ? 'repeat(2, 1fr)'
+                    : 'repeat(3, 1fr)',
             gap: 'clamp(18px, 1.5vw, 24px)',
             width: '100%',
             maxWidth: '1520px',
@@ -163,8 +169,8 @@ const Plan = () => {
                     ? 'linear-gradient(180deg, #FFFFFF 0%, #EDE9FE 100%)'
                     : 'linear-gradient(180deg, #FFFFFF 0%, #FAF5FF 100%)'
                 : isHovered
-                ? 'linear-gradient(180deg, #FFFFFF 0%, #F5F3FF 100%)'
-                : '#FFFFFF',
+                    ? 'linear-gradient(180deg, #FFFFFF 0%, #F5F3FF 100%)'
+                    : '#FFFFFF',
             borderRadius: '24px',
             padding: 'clamp(32px, 2.4vw, 42px) clamp(28px, 2.2vw, 38px)',
             border: isPro
@@ -172,15 +178,15 @@ const Plan = () => {
                     ? '2px solid #6366F1'
                     : '2px solid #818CF8'
                 : isHovered
-                ? '1px solid #A5B4FC'
-                : '1px solid #E2E8F0',
+                    ? '1px solid #A5B4FC'
+                    : '1px solid #E2E8F0',
             boxShadow: isPro
                 ? isHovered
                     ? '0px 25px 50px -10px rgba(79, 70, 229, 0.3), 0px 0px 0px 1px rgba(99, 102, 241, 0.2)'
                     : '0px 8px 24px rgba(79, 70, 229, 0.15)'
                 : isHovered
-                ? '0px 22px 45px -10px rgba(79, 70, 229, 0.18), 0px 0px 0px 1px rgba(99, 102, 241, 0.12)'
-                : '0px 8px 24px rgba(79, 70, 229, 0.08)',
+                    ? '0px 22px 45px -10px rgba(79, 70, 229, 0.18), 0px 0px 0px 1px rgba(99, 102, 241, 0.12)'
+                    : '0px 8px 24px rgba(79, 70, 229, 0.08)',
             transform: isHovered ? 'translateY(-8px)' : 'translateY(0)',
             transition: 'all 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
             display: 'flex',
@@ -353,6 +359,23 @@ const Plan = () => {
                     Choose a plan that fits your job search goals. No payment per individual application.
                 </p>
 
+                {/* ACTION ERROR ALERT */}
+                {actionError && (
+                    <div className="w-full max-w-2xl mb-6 p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center justify-between text-red-700 text-sm">
+                        <div className="flex items-center gap-2.5">
+                            <AlertCircle size={18} className="text-red-500 shrink-0" />
+                            <span className="font-medium">{actionError}</span>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setActionError('')}
+                            className="text-red-500 hover:text-red-700 font-bold ml-4 cursor-pointer text-xs uppercase tracking-wider"
+                        >
+                            Dismiss
+                        </button>
+                    </div>
+                )}
+
                 {/* LOADING STATE */}
                 {isLoading && (
                     <div style={styles.cardsGrid}>
@@ -394,7 +417,7 @@ const Plan = () => {
                         <p className="text-slate-600 text-sm mb-4">{error}</p>
                         <button
                             type="button"
-                            onClick={fetchPlans}
+                            onClick={() => fetchPlans(true)}
                             className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-colors cursor-pointer"
                         >
                             <RefreshCw size={16} />
@@ -409,7 +432,7 @@ const Plan = () => {
                         <p className="text-slate-600 text-sm mb-4">No subscription plans available right now.</p>
                         <button
                             type="button"
-                            onClick={fetchPlans}
+                            onClick={() => fetchPlans(true)}
                             className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
                         >
                             <RefreshCw size={14} />
@@ -430,33 +453,72 @@ const Plan = () => {
                             const priceText = isFree
                                 ? 'Free Plan'
                                 : `$${(plan.priceCents / 100).toFixed(2)}`;
-                            const periodText = plan.billingInterval ? `/ ${plan.billingInterval}` : '';
+                            const hasValidInterval =
+                                plan.billingInterval &&
+                                plan.billingInterval !== 'none' &&
+                                plan.billingInterval !== 'null';
+                            const periodText = hasValidInterval && !isFree ? `/ ${plan.billingInterval}` : '';
                             const limitText = plan.applicationAllowance
                                 ? `Up to ${plan.applicationAllowance} applications`
                                 : '';
                             const planKey = plan.code || String(plan.id) || plan.name;
+                            const isCurrentlyActivating = activatingPlanId === planKey;
                             const features =
                                 Array.isArray(plan.features) && plan.features.length > 0
                                     ? plan.features
                                     : pricingFeatures;
 
-                            const handlePlanClick = () => {
+                            const handlePlanClick = async () => {
                                 if (isFree || plan.code === 'trial') {
-                                    navigate('/resume-setup', { state: { plan } });
+                                    try {
+                                        setActivatingPlanId(planKey);
+                                        setActionError('');
+                                        await selectTrialPlan();
+                                        navigate('/resume-setup', { state: { plan } });
+                                    } catch (err) {
+                                        console.error('Free trial activation failed:', err);
+                                        const errMsg = err.message || 'Failed to activate free trial.';
+                                        setActionError(errMsg);
+                                        // If already activated (400), allow user to proceed
+                                        if (err.status === 400 || errMsg.toLowerCase().includes('already')) {
+                                            navigate('/resume-setup', { state: { plan } });
+                                        }
+                                    } finally {
+                                        setActivatingPlanId(null);
+                                    }
                                 } else {
-                                    navigate('/payment', {
-                                        state: {
-                                            planId: plan.id,
-                                            name: plan.name,
-                                            code: plan.code,
-                                            price: plan.priceCents ? plan.priceCents / 100 : 0,
-                                            priceCents: plan.priceCents,
-                                            billing: periodText,
-                                            billingInterval: plan.billingInterval,
-                                            applications: limitText,
-                                            applicationAllowance: plan.applicationAllowance,
-                                        },
-                                    });
+                                    // Paid plan: Basic or Pro
+                                    try {
+                                        setActivatingPlanId(planKey);
+                                        setActionError('');
+                                        const plancode = (
+                                            plan.code ||
+                                            (plan.name?.toLowerCase().includes('pro') ? 'pro' : 'basic')
+                                        ).toLowerCase();
+
+                                        const paymentData = await createPaymentIntent(plancode);
+                                        const clientSecret = paymentData?.clientSecret || '';
+
+                                        navigate('/payment', {
+                                            state: {
+                                                planId: plan.id,
+                                                name: plan.name,
+                                                code: plancode,
+                                                price: plan.priceCents ? plan.priceCents / 100 : 0,
+                                                priceCents: plan.priceCents,
+                                                billing: periodText,
+                                                billingInterval: plan.billingInterval,
+                                                applications: limitText,
+                                                applicationAllowance: plan.applicationAllowance,
+                                                clientSecret: clientSecret,
+                                            },
+                                        });
+                                    } catch (err) {
+                                        console.error('Create PaymentIntent failed:', err);
+                                        setActionError(err.message || 'Failed to initialize payment for this plan.');
+                                    } finally {
+                                        setActivatingPlanId(null);
+                                    }
                                 }
                             };
 
@@ -499,20 +561,30 @@ const Plan = () => {
 
                                     <button
                                         type="button"
+                                        disabled={isCurrentlyActivating}
                                         onClick={handlePlanClick}
                                         style={styles.ctaButton(hoveredButton === planKey)}
                                         onMouseEnter={() => setHoveredButton(planKey)}
                                         onMouseLeave={() => setHoveredButton(null)}
                                     >
-                                        <span>Get Started</span>
-                                        <svg
-                                            style={styles.arrowIcon(hoveredButton === planKey)}
-                                            viewBox="0 0 24 24"
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                        >
-                                            <path d="M5 12h14M12 5l7 7-7 7" />
-                                        </svg>
+                                        {isCurrentlyActivating ? (
+                                            <>
+                                                <Loader2 size={18} className="animate-spin" />
+                                                <span>Activating...</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span>Get Started</span>
+                                                <svg
+                                                    style={styles.arrowIcon(hoveredButton === planKey)}
+                                                    viewBox="0 0 24 24"
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                >
+                                                    <path d="M5 12h14M12 5l7 7-7 7" />
+                                                </svg>
+                                            </>
+                                        )}
                                     </button>
                                 </div>
                             );
