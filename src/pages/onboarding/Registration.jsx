@@ -18,7 +18,6 @@ const Registration = () => {
   const [isLinkedInLoading, setIsLinkedInLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-<<<<<<< HEAD
   const handleLinkedInSignup = () => {
     if (isLinkedInLoading || isSubmitting) return;
     setErrorMessage('');
@@ -39,7 +38,6 @@ const Registration = () => {
       }
     }
   };
-=======
   const password = formData.password || '';
   const isLengthValid = password.length >= 8 && password.length <= 15;
   const isUpperLowerValid = /[a-z]/.test(password) && /[A-Z]/.test(password);
@@ -57,7 +55,6 @@ const Registration = () => {
       setHideValidationBox(false);
     }
   }, [allCriteriaValid, password]);
->>>>>>> 72690731369f6a0d818d7b976f32050f4a5e0dd6
 
   const handleChange = (e) => {
     const { name, value } = e.target;
