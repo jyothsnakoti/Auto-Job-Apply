@@ -1,74 +1,79 @@
-// Base API configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://192.168.33.82:8081';
+import { BILLING_ENDPOINTS } from './endpoints';
+import { getStoredTokens, fetchWithAuth } from './authService';
 
 /**
- * Retrieve the stored auth token from localStorage or sessionStorage
+ * Fetch Billing Status
+ * GET /api/billing/status
+ * @param {string} [token] - Optional explicit access token. If omitted, uses stored token.
+ * @returns {Promise<{ remainingApplications: number, hasPlan: boolean }>}
  */
-export const getAuthToken = () => {
-  return (
-    localStorage.getItem('authToken') ||
-    localStorage.getItem('token') ||
-    sessionStorage.getItem('authToken') ||
-    sessionStorage.getItem('token') ||
-    ''
-  );
-};
-
-/**
- * Helper to handle fetch responses for both text and JSON payloads
- */
-const handleResponse = async (response, defaultError) => {
-  const text = await response.text().catch(() => '');
-  let data;
+export const getBillingStatus = async (token = null) => {
   try {
-    data = JSON.parse(text);
-  } catch {
-    data = { message: text };
-  }
+    const accessToken = token || getStoredTokens().accessToken;
 
-  if (!response.ok) {
-    const errorMessage =
-      data?.message ||
-      data?.error ||
-      text ||
-      `${defaultError} (Status ${response.status})`;
-    throw new Error(errorMessage);
-  }
-
-  return data;
-};
-
-/**
- * Fetch available billing plans
- * GET /api/billing/plans
- * @param {string} [token] - Optional Bearer token (defaults to stored token)
- * @returns {Promise<Array>} Array of plan objects
- */
-export const getBillingPlans = async (token) => {
-  try {
-    const authToken = token || getAuthToken();
     const headers = {
       'Content-Type': 'application/json',
       'Accept': 'application/json, text/plain, */*',
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
     };
 
-    if (authToken) {
-      headers['Authorization'] = `Bearer ${authToken}`;
+    let response;
+    if (token) {
+      // Use direct fetch if specific token was passed
+      response = await fetch(BILLING_ENDPOINTS.STATUS, {
+        method: 'GET',
+        headers,
+      });
+    } else {
+      // Use fetchWithAuth for automatic token refresh on 401
+      response = await fetchWithAuth(BILLING_ENDPOINTS.STATUS, {
+        method: 'GET',
+        headers,
+      });
     }
 
-    const response = await fetch(`${API_BASE_URL}/api/billing/plans`, {
-      method: 'GET',
-      headers,
-    });
+    const text = await response.text().catch(() => '');
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { message: text };
+    }
 
-    return await handleResponse(response, 'Failed to fetch billing plans');
+    if (!response.ok) {
+      const errorMessage =
+        data?.message ||
+        data?.error ||
+        text ||
+        `Failed to fetch billing status (Status ${response.status})`;
+      const error = new Error(errorMessage);
+      error.status = response.status;
+      error.data = data;
+      throw error;
+    }
+
+    // Persist billing status in storage
+    const billingInfo = {
+      hasPlan: Boolean(data.hasPlan),
+      remainingApplications: typeof data.remainingApplications === 'number' ? data.remainingApplications : 0,
+      ...data,
+    };
+
+    try {
+      const storage = localStorage.getItem('token') || localStorage.getItem('accessToken') ? localStorage : sessionStorage;
+      storage.setItem('billingStatus', JSON.stringify(billingInfo));
+      storage.setItem('hasPlan', String(Boolean(data.hasPlan)));
+    } catch {
+      // Storage access fail-safe
+    }
+
+    return billingInfo;
   } catch (error) {
-    console.error('Fetch billing plans error:', error);
+    console.error('Billing status error:', error);
     throw error;
   }
 };
 
 export default {
-  getBillingPlans,
-  getAuthToken,
+  getBillingStatus,
 };

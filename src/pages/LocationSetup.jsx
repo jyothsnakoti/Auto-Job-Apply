@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import logoSrc from '../assets/Background.svg';
+import { logoutUser } from '../services/api';
 
 const LocationSetup = () => {
     const navigate = useNavigate();
@@ -10,15 +11,33 @@ const LocationSetup = () => {
         typeof window !== 'undefined' ? window.innerWidth : 1440
     );
 
+    // User email state
+    const [userEmail, setUserEmail] = useState('nareshpulluri79@gmail.com');
+
     // Form state
     const [address, setAddress] = useState('');
     const [city, setCity] = useState('');
     const [stateVal, setStateVal] = useState('');
     const [country, setCountry] = useState('');
     const [isCountryDropdownOpen, setIsCountryDropdownOpen] = useState(false);
-    const [workMode, setWorkMode] = useState(''); // 'remote' | 'hybrid' | 'on-site'
     const [focusedField, setFocusedField] = useState(null); // 'address' | 'city' | 'state' | 'country'
     const [isHoveredContinue, setIsHoveredContinue] = useState(false);
+
+    useEffect(() => {
+        try {
+            const storedUser =
+                localStorage.getItem('authUser') ||
+                sessionStorage.getItem('authUser') ||
+                localStorage.getItem('user') ||
+                sessionStorage.getItem('user');
+            if (storedUser) {
+                const parsed = JSON.parse(storedUser);
+                if (parsed.email) setUserEmail(parsed.email);
+            }
+        } catch {
+            // keep default
+        }
+    }, []);
 
     useEffect(() => {
         const handleResize = () => setWindowWidth(window.innerWidth);
@@ -75,9 +94,18 @@ const LocationSetup = () => {
                 city,
                 state: stateVal,
                 country,
-                workMode,
             },
         });
+    };
+
+    const handleLogout = async () => {
+        try {
+            await logoutUser();
+        } catch (err) {
+            console.error('Logout error:', err);
+        } finally {
+            navigate('/');
+        }
     };
 
     const styles = {
@@ -92,7 +120,7 @@ const LocationSetup = () => {
         },
         navbar: {
             width: '100%',
-            height: '80px',
+            height: '76px',
             backgroundColor: '#FFFFFF',
             borderBottom: '1px solid #E2E8F0',
             display: 'flex',
@@ -117,7 +145,7 @@ const LocationSetup = () => {
         brandText: {
             fontFamily: '"Plus Jakarta Sans", sans-serif',
             fontWeight: '700',
-            fontSize: 'clamp(22px, 1.6vw, 26px)',
+            fontSize: 'clamp(20px, 1.5vw, 24px)',
             color: '#00509F',
             letterSpacing: '-0.02em',
             margin: 0,
@@ -125,11 +153,11 @@ const LocationSetup = () => {
         userArea: {
             display: 'flex',
             alignItems: 'center',
-            gap: isMobile ? '14px' : '28px',
+            gap: isMobile ? '14px' : '24px',
         },
         userEmail: {
             fontFamily: '"Plus Jakarta Sans", sans-serif',
-            fontSize: isMobile ? '14px' : '15.5px',
+            fontSize: isMobile ? '13px' : '14.5px',
             color: '#64748B',
             fontWeight: '500',
         },
@@ -138,9 +166,9 @@ const LocationSetup = () => {
             border: 'none',
             display: 'inline-flex',
             alignItems: 'center',
-            gap: '8px',
+            gap: '7px',
             fontFamily: '"Plus Jakarta Sans", sans-serif',
-            fontSize: '16px',
+            fontSize: '14.5px',
             fontWeight: '600',
             color: '#0F172A',
             cursor: 'pointer',
@@ -149,8 +177,8 @@ const LocationSetup = () => {
             transition: 'opacity 0.2s ease',
         },
         logoutSvg: {
-            width: '18px',
-            height: '18px',
+            width: '17px',
+            height: '17px',
             stroke: '#0F172A',
             strokeWidth: '2.2',
             fill: 'none',
@@ -162,7 +190,7 @@ const LocationSetup = () => {
             flexGrow: 1,
             paddingLeft: isMobile ? '16px' : isTablet ? '28px' : 'clamp(32px, 3.5vw, 64px)',
             paddingRight: isMobile ? '16px' : isTablet ? '28px' : 'clamp(32px, 3.5vw, 64px)',
-            paddingTop: isMobile ? '24px' : 'clamp(32px, 3vw, 48px)',
+            paddingTop: isMobile ? '24px' : 'clamp(32px, 3vw, 44px)',
             paddingBottom: isMobile ? '40px' : 'clamp(48px, 4vw, 70px)',
             display: 'flex',
             justifyContent: 'center',
@@ -171,19 +199,19 @@ const LocationSetup = () => {
         },
         mainCard: {
             width: '100%',
-            maxWidth: '1520px',
+            maxWidth: '1400px',
             backgroundColor: '#FFFFFF',
             border: '1px solid #E2E8F0',
             borderRadius: isMobile ? '20px' : '28px',
-            boxShadow: '0px 10px 30px rgba(79, 70, 229, 0.08)',
-            padding: isMobile ? '24px 20px' : isTablet ? '36px 32px' : 'clamp(36px, 3vw, 48px)',
+            boxShadow: '0px 10px 30px rgba(79, 70, 229, 0.06)',
+            padding: isMobile ? '24px 20px' : isTablet ? '36px 32px' : 'clamp(36px, 3vw, 46px)',
             boxSizing: 'border-box',
             display: 'flex',
             flexDirection: 'column',
         },
         progressSection: {
             width: '100%',
-            marginBottom: 'clamp(28px, 2.5vw, 36px)',
+            marginBottom: 'clamp(24px, 2.2vw, 32px)',
         },
         progressHeaderRow: {
             display: 'flex',
@@ -193,7 +221,7 @@ const LocationSetup = () => {
         },
         progressLabel: {
             fontFamily: '"Plus Jakarta Sans", sans-serif',
-            fontSize: '16px',
+            fontSize: '15px',
             fontWeight: '500',
             color: '#64748B',
         },
@@ -204,7 +232,7 @@ const LocationSetup = () => {
             alignItems: 'center',
             gap: '8px',
             fontFamily: '"Plus Jakarta Sans", sans-serif',
-            fontSize: '15px',
+            fontSize: '14.5px',
             fontWeight: '600',
             color: '#0F172A',
             cursor: 'pointer',
@@ -221,17 +249,17 @@ const LocationSetup = () => {
         progressBarFill: {
             width: '33.33%',
             height: '100%',
-            background: 'linear-gradient(90deg, #4F46E5, #A855F7)',
+            background: 'linear-gradient(90deg, #4F46E5, #9333EA)',
             borderRadius: '9999px',
             transition: 'width 0.4s ease',
         },
         contentGrid: {
             display: 'grid',
             gridTemplateColumns: isDesktop ? '0.75fr 1.25fr' : '1fr',
-            gap: isDesktop ? 'clamp(40px, 3.5vw, 56px)' : '36px',
-            alignItems: 'stretch',
+            gap: isDesktop ? 'clamp(36px, 3.5vw, 54px)' : '32px',
+            alignItems: 'start',
             width: '100%',
-            marginTop: 'clamp(16px, 1.5vw, 24px)',
+            marginTop: 'clamp(14px, 1.2vw, 20px)',
         },
         // Left Column
         leftCol: {
@@ -243,9 +271,9 @@ const LocationSetup = () => {
             backgroundColor: '#EFF6FF',
             border: '1px solid #DBEAFE',
             borderRadius: '9999px',
-            padding: '7px 14px',
+            padding: '6px 14px',
             fontFamily: '"Plus Jakarta Sans", sans-serif',
-            fontSize: '12px',
+            fontSize: '11.5px',
             fontWeight: '700',
             letterSpacing: '0.6px',
             color: '#2563EB',
@@ -264,23 +292,23 @@ const LocationSetup = () => {
             fontFamily: '"Plus Jakarta Sans", sans-serif',
             fontWeight: '800',
             fontSize: 'clamp(28px, 2.3vw, 36px)',
-            lineHeight: '1.15',
+            lineHeight: '1.18',
             letterSpacing: '-0.8px',
             color: '#0F172A',
             margin: '0 0 clamp(14px, 1.2vw, 18px) 0',
         },
         leftDesc: {
             fontFamily: '"Plus Jakarta Sans", sans-serif',
-            fontSize: '16px',
-            lineHeight: '26px',
+            fontSize: '15px',
+            lineHeight: '25px',
             color: '#475569',
-            margin: '0 0 clamp(28px, 2.5vw, 36px) 0',
-            maxWidth: '500px',
+            margin: '0 0 clamp(24px, 2.2vw, 32px) 0',
+            maxWidth: '460px',
         },
         benefitsList: {
             display: 'flex',
             flexDirection: 'column',
-            gap: 'clamp(16px, 1.4vw, 20px)',
+            gap: 'clamp(14px, 1.3vw, 18px)',
             padding: 0,
             margin: 0,
             listStyle: 'none',
@@ -292,8 +320,8 @@ const LocationSetup = () => {
             gap: '12px',
         },
         benefitIconWrapper: {
-            width: '22px',
-            height: '22px',
+            width: '20px',
+            height: '20px',
             borderRadius: '50%',
             backgroundColor: '#EFF6FF',
             border: '1px solid #BFDBFE',
@@ -304,8 +332,8 @@ const LocationSetup = () => {
             marginTop: '2px',
         },
         benefitCheckSvg: {
-            width: '12px',
-            height: '12px',
+            width: '11px',
+            height: '11px',
             stroke: '#2563EB',
             strokeWidth: '2.5',
             fill: 'none',
@@ -314,8 +342,8 @@ const LocationSetup = () => {
         },
         benefitText: {
             fontFamily: '"Plus Jakarta Sans", sans-serif',
-            fontSize: '15.5px',
-            lineHeight: '24px',
+            fontSize: '14.5px',
+            lineHeight: '23px',
             color: '#334155',
             fontWeight: '500',
         },
@@ -332,7 +360,7 @@ const LocationSetup = () => {
         rightHeading: {
             fontFamily: '"Plus Jakarta Sans", sans-serif',
             fontWeight: '800',
-            fontSize: 'clamp(24px, 2vw, 30px)',
+            fontSize: 'clamp(22px, 1.8vw, 28px)',
             lineHeight: '1.2',
             color: '#0F172A',
             margin: '0 0 10px 0',
@@ -342,15 +370,15 @@ const LocationSetup = () => {
         },
         rightDesc: {
             fontFamily: '"Plus Jakarta Sans", sans-serif',
-            fontSize: '15px',
-            lineHeight: '24px',
+            fontSize: '14px',
+            lineHeight: '22px',
             color: '#64748B',
-            margin: '0 0 clamp(24px, 2vw, 32px) 0',
+            margin: '0 0 clamp(22px, 1.8vw, 28px) 0',
         },
         formFieldsGroup: {
             display: 'flex',
             flexDirection: 'column',
-            gap: '20px',
+            gap: '18px',
             width: '100%',
         },
         fieldLabel: {
@@ -388,7 +416,7 @@ const LocationSetup = () => {
             borderRadius: '12px',
             border: isFocused ? '1.5px solid #2563EB' : '1px solid #E2E8F0',
             backgroundColor: '#FFFFFF',
-            fontSize: '15px',
+            fontSize: '14.5px',
             fontFamily: '"Plus Jakarta Sans", sans-serif',
             color: '#0F172A',
             outline: 'none',
@@ -410,7 +438,7 @@ const LocationSetup = () => {
             borderRadius: '12px',
             border: isOpen ? '1.5px solid #2563EB' : '1px solid #E2E8F0',
             backgroundColor: '#FFFFFF',
-            fontSize: '15px',
+            fontSize: '14.5px',
             fontFamily: '"Plus Jakarta Sans", sans-serif',
             color: country ? '#0F172A' : '#94A3B8',
             cursor: 'pointer',
@@ -446,7 +474,7 @@ const LocationSetup = () => {
         },
         dropdownItem: (isSelected) => ({
             padding: '10px 16px',
-            fontSize: '14.5px',
+            fontSize: '14px',
             fontFamily: '"Plus Jakarta Sans", sans-serif',
             color: isSelected ? '#2563EB' : '#1E293B',
             backgroundColor: isSelected ? '#EFF6FF' : 'transparent',
@@ -456,82 +484,14 @@ const LocationSetup = () => {
             justifyContent: 'space-between',
             transition: 'background-color 0.15s ease',
         }),
-        workModeGrid: {
-            display: 'grid',
-            gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)',
-            gap: '12px',
-            width: '100%',
-        },
-        workModeCard: (isSelected) => ({
-            border: isSelected ? '2px solid #2563EB' : '1px solid #E2E8F0',
-            backgroundColor: isSelected ? '#FFFFFF' : '#FFFFFF',
-            borderRadius: '14px',
-            padding: '16px 14px',
-            cursor: 'pointer',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between',
-            minHeight: '108px',
-            transition: 'all 0.2s ease',
-            boxSizing: 'border-box',
-            position: 'relative',
-        }),
-        workModeTopRow: {
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            width: '100%',
-            marginBottom: '12px',
-        },
-        workModeIconBox: (isSelected) => ({
-            width: '36px',
-            height: '36px',
-            borderRadius: '10px',
-            backgroundColor: isSelected ? '#2563EB' : '#F1F5F9',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: isSelected ? '#FFFFFF' : '#64748B',
-            transition: 'all 0.2s ease',
-        }),
-        radioCircle: (isSelected) => ({
-            width: '18px',
-            height: '18px',
-            borderRadius: '50%',
-            border: isSelected ? '2px solid #2563EB' : '2px solid #CBD5E1',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: '#FFFFFF',
-            transition: 'all 0.2s ease',
-        }),
-        radioDot: {
-            width: '8px',
-            height: '8px',
-            borderRadius: '50%',
-            backgroundColor: '#2563EB',
-        },
-        workModeTitle: {
-            fontFamily: '"Plus Jakarta Sans", sans-serif',
-            fontSize: '15px',
-            fontWeight: '700',
-            color: '#0F172A',
-            margin: '0 0 2px 0',
-        },
-        workModeSubtitle: {
-            fontFamily: '"Plus Jakarta Sans", sans-serif',
-            fontSize: '12.5px',
-            color: '#64748B',
-            margin: 0,
-        },
         continueBtn: (isHovered) => ({
-            width: isMobile ? '100%' : '160px',
-            height: '48px',
+            width: isMobile ? '100%' : '145px',
+            height: '46px',
             borderRadius: '12px',
             background: 'linear-gradient(90deg, #3B82F6, #4F46E5)',
             color: '#FFFFFF',
             fontFamily: '"Plus Jakarta Sans", sans-serif',
-            fontSize: '16px',
+            fontSize: '15px',
             fontWeight: '700',
             border: 'none',
             cursor: 'pointer',
@@ -578,10 +538,10 @@ const LocationSetup = () => {
 
                 {/* Right: Email & Logout */}
                 <div style={styles.userArea}>
-                    <span style={styles.userEmail}>nareshpulluri79@gmail.com</span>
+                    <span style={styles.userEmail}>{userEmail}</span>
                     <button
                         type="button"
-                        onClick={() => navigate('/')}
+                        onClick={handleLogout}
                         style={styles.logoutBtn}
                         aria-label="Log out"
                     >
@@ -823,126 +783,6 @@ const LocationSetup = () => {
                                             ))}
                                         </ul>
                                     )}
-                                </div>
-
-                                {/* WORK MODE */}
-                                <div>
-                                    <label style={styles.fieldLabel}>WORK MODE</label>
-                                    <div style={styles.workModeGrid}>
-                                        {/* REMOTE */}
-                                        <div
-                                            style={styles.workModeCard(workMode === 'remote')}
-                                            onClick={() => setWorkMode('remote')}
-                                            role="button"
-                                            tabIndex={0}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter' || e.key === ' ') setWorkMode('remote');
-                                            }}
-                                        >
-                                            <div style={styles.workModeTopRow}>
-                                                <div style={styles.workModeIconBox(workMode === 'remote')}>
-                                                    <svg
-                                                        viewBox="0 0 24 24"
-                                                        style={{
-                                                            width: '18px',
-                                                            height: '18px',
-                                                            stroke: 'currentColor',
-                                                            strokeWidth: '2.2',
-                                                            fill: 'none',
-                                                        }}
-                                                    >
-                                                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                                                        <polyline points="9 22 9 12 15 12 15 22" />
-                                                    </svg>
-                                                </div>
-                                                <div style={styles.radioCircle(workMode === 'remote')}>
-                                                    {workMode === 'remote' && <div style={styles.radioDot} />}
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <p style={styles.workModeTitle}>Remote</p>
-                                                <p style={styles.workModeSubtitle}>Work from anywhere</p>
-                                            </div>
-                                        </div>
-
-                                        {/* HYBRID */}
-                                        <div
-                                            style={styles.workModeCard(workMode === 'hybrid')}
-                                            onClick={() => setWorkMode('hybrid')}
-                                            role="button"
-                                            tabIndex={0}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter' || e.key === ' ') setWorkMode('hybrid');
-                                            }}
-                                        >
-                                            <div style={styles.workModeTopRow}>
-                                                <div style={styles.workModeIconBox(workMode === 'hybrid')}>
-                                                    <svg
-                                                        viewBox="0 0 24 24"
-                                                        style={{
-                                                            width: '18px',
-                                                            height: '18px',
-                                                            stroke: 'currentColor',
-                                                            strokeWidth: '2.2',
-                                                            fill: 'none',
-                                                        }}
-                                                    >
-                                                        <rect x="4" y="2" width="16" height="20" rx="2" />
-                                                        <path d="M9 22v-4h6v4" />
-                                                        <path d="M8 6h.01" />
-                                                        <path d="M16 6h.01" />
-                                                        <path d="M8 10h.01" />
-                                                        <path d="M16 10h.01" />
-                                                        <path d="M8 14h.01" />
-                                                        <path d="M16 14h.01" />
-                                                    </svg>
-                                                </div>
-                                                <div style={styles.radioCircle(workMode === 'hybrid')}>
-                                                    {workMode === 'hybrid' && <div style={styles.radioDot} />}
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <p style={styles.workModeTitle}>Hybrid</p>
-                                                <p style={styles.workModeSubtitle}>Office + remote</p>
-                                            </div>
-                                        </div>
-
-                                        {/* ON-SITE */}
-                                        <div
-                                            style={styles.workModeCard(workMode === 'on-site')}
-                                            onClick={() => setWorkMode('on-site')}
-                                            role="button"
-                                            tabIndex={0}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter' || e.key === ' ') setWorkMode('on-site');
-                                            }}
-                                        >
-                                            <div style={styles.workModeTopRow}>
-                                                <div style={styles.workModeIconBox(workMode === 'on-site')}>
-                                                    <svg
-                                                        viewBox="0 0 24 24"
-                                                        style={{
-                                                            width: '18px',
-                                                            height: '18px',
-                                                            stroke: 'currentColor',
-                                                            strokeWidth: '2.2',
-                                                            fill: 'none',
-                                                        }}
-                                                    >
-                                                        <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-                                                        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-                                                    </svg>
-                                                </div>
-                                                <div style={styles.radioCircle(workMode === 'on-site')}>
-                                                    {workMode === 'on-site' && <div style={styles.radioDot} />}
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <p style={styles.workModeTitle}>On-site</p>
-                                                <p style={styles.workModeSubtitle}>At company location</p>
-                                            </div>
-                                        </div>
-                                    </div>
                                 </div>
                             </div>
 

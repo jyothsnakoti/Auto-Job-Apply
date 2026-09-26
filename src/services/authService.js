@@ -1,5 +1,68 @@
-// Base API configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://192.168.33.82:8081';
+import { AUTH_ENDPOINTS } from './endpoints';
+
+/**
+ * Retrieve saved tokens from localStorage or sessionStorage
+ */
+export const getStoredTokens = () => {
+  const localStorageToken = localStorage.getItem('authToken') || localStorage.getItem('token') || localStorage.getItem('accessToken');
+  const localStorageRefresh = localStorage.getItem('refreshToken');
+
+  if (localStorageToken || localStorageRefresh) {
+    return {
+      accessToken: localStorageToken || '',
+      refreshToken: localStorageRefresh || '',
+      storageType: 'local',
+    };
+  }
+
+  const sessionStorageToken = sessionStorage.getItem('authToken') || sessionStorage.getItem('token') || sessionStorage.getItem('accessToken');
+  const sessionStorageRefresh = sessionStorage.getItem('refreshToken');
+
+  return {
+    accessToken: sessionStorageToken || '',
+    refreshToken: sessionStorageRefresh || '',
+    storageType: 'session',
+  };
+};
+
+/**
+ * Save access & refresh tokens to storage
+ * @param {Object} tokens - { accessToken, refreshToken }
+ * @param {boolean} rememberMe - Whether to use localStorage (true) or sessionStorage (false)
+ */
+export const saveAuthTokens = ({ accessToken, refreshToken }, rememberMe = null) => {
+  const current = getStoredTokens();
+  const isLocal = rememberMe !== null ? rememberMe : current.storageType === 'local';
+  const targetStorage = isLocal ? localStorage : sessionStorage;
+  const otherStorage = isLocal ? sessionStorage : localStorage;
+
+  // Clear stale tokens from the other storage
+  otherStorage.removeItem('authToken');
+  otherStorage.removeItem('token');
+  otherStorage.removeItem('accessToken');
+  otherStorage.removeItem('refreshToken');
+
+  if (accessToken) {
+    targetStorage.setItem('authToken', accessToken);
+    targetStorage.setItem('token', accessToken);
+    targetStorage.setItem('accessToken', accessToken);
+  }
+
+  if (refreshToken) {
+    targetStorage.setItem('refreshToken', refreshToken);
+  }
+};
+
+/**
+ * Clear all auth data from storage
+ */
+export const clearAuthTokens = () => {
+  const keys = ['authToken', 'token', 'accessToken', 'refreshToken', 'authUser', 'user', 'pendingVerificationEmail'];
+  keys.forEach((key) => {
+    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
+  });
+};
 
 /**
  * Helper to handle fetch responses for both text and JSON payloads
@@ -19,7 +82,10 @@ const handleResponse = async (response, defaultError) => {
       data?.error ||
       text ||
       `${defaultError} (Status ${response.status})`;
-    throw new Error(errorMessage);
+    const error = new Error(errorMessage);
+    error.status = response.status;
+    error.data = data;
+    throw error;
   }
 
   return data;
@@ -32,7 +98,7 @@ const handleResponse = async (response, defaultError) => {
  */
 export const signupUser = async ({ name, email, password }) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/auth/signup`, {
+    const response = await fetch(AUTH_ENDPOINTS.SIGNUP, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -53,13 +119,64 @@ export const signupUser = async ({ name, email, password }) => {
 };
 
 /**
+ * Login user
+ * POST /api/auth/login
+ * @param {Object} credentials - { email, password, rememberMe }
+ */
+export const loginUser = async ({ email, password, rememberMe = false }) => {
+  try {
+    const response = await fetch(AUTH_ENDPOINTS.LOGIN, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/plain, */*',
+      },
+      body: JSON.stringify({
+        email,
+        password,
+      }),
+    });
+
+    const data = await handleResponse(response, 'Login failed');
+
+    const accessToken =
+      data.accessToken ||
+      data.token ||
+      data.jwt ||
+      data.data?.accessToken ||
+      data.data?.token ||
+      '';
+
+    const refreshToken =
+      data.refreshToken ||
+      data.data?.refreshToken ||
+      '';
+
+    const user = data.user || data.data?.user || (data.email ? { email: data.email } : null);
+
+    saveAuthTokens({ accessToken, refreshToken }, rememberMe);
+
+    const storage = rememberMe ? localStorage : sessionStorage;
+    if (user) {
+      storage.setItem('authUser', JSON.stringify(user));
+      storage.setItem('user', JSON.stringify(user));
+    }
+
+    return { ...data, accessToken, refreshToken, user };
+  } catch (error) {
+    console.error('Login error:', error);
+    throw error;
+  }
+};
+
+/**
  * Verify OTP for account confirmation
  * POST /api/auth/verify-otp
  * @param {Object} data - { email, otp }
  */
 export const verifyOtp = async ({ email, otp }) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/auth/verify-otp`, {
+    const response = await fetch(AUTH_ENDPOINTS.VERIFY_OTP, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -85,7 +202,7 @@ export const verifyOtp = async ({ email, otp }) => {
  */
 export const resendOtp = async ({ email }) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/auth/resend-otp`, {
+    const response = await fetch(AUTH_ENDPOINTS.RESEND_OTP, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -103,9 +220,176 @@ export const resendOtp = async ({ email }) => {
   }
 };
 
-export default {
-  signupUser,
-  verifyOtp,
-  resendOtp,
+/**
+ * Refresh Authentication Token
+ * POST /api/auth/refresh
+ * @param {string|Object} [tokenOrPayload] - Optional explicit refreshToken string or { refreshToken } object
+ * @returns {Promise<{ accessToken: string, refreshToken: string, ... }>}
+ */
+export const refreshAuthToken = async (tokenOrPayload) => {
+  try {
+    let token = '';
+    if (typeof tokenOrPayload === 'string') {
+      token = tokenOrPayload;
+    } else if (tokenOrPayload && typeof tokenOrPayload === 'object') {
+      token = tokenOrPayload.refreshToken || tokenOrPayload.token || '';
+    }
+
+    if (!token) {
+      const stored = getStoredTokens();
+      token = stored.refreshToken || stored.accessToken;
+    }
+
+    const payload = token ? { refreshToken: token } : {};
+
+    const response = await fetch(AUTH_ENDPOINTS.REFRESH, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/plain, */*',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await handleResponse(response, 'Token refresh failed');
+
+    const newAccessToken =
+      data.accessToken ||
+      data.token ||
+      data.jwt ||
+      data.data?.accessToken ||
+      data.data?.token ||
+      '';
+
+    const newRefreshToken =
+      data.refreshToken ||
+      data.data?.refreshToken ||
+      token;
+
+    if (newAccessToken || newRefreshToken) {
+      saveAuthTokens({
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken,
+      });
+    }
+
+    return {
+      accessToken: newAccessToken,
+      refreshToken: newRefreshToken,
+      ...data,
+    };
+  } catch (error) {
+    console.error('Refresh token error:', error);
+    throw error;
+  }
 };
 
+/**
+ * Alias for refreshAuthToken
+ */
+export const refreshToken = refreshAuthToken;
+
+/**
+ * Logout / Sign out user
+ * POST /api/auth/logout
+ * @param {string|Object} [tokenOrPayload] - Optional explicit refreshToken string or { refreshToken } object
+ */
+export const logoutUser = async (tokenOrPayload) => {
+  try {
+    let token = '';
+    if (typeof tokenOrPayload === 'string') {
+      token = tokenOrPayload;
+    } else if (tokenOrPayload && typeof tokenOrPayload === 'object') {
+      token = tokenOrPayload.refreshToken || tokenOrPayload.token || '';
+    }
+
+    if (!token) {
+      const stored = getStoredTokens();
+      token = stored.refreshToken || stored.accessToken;
+    }
+
+    const payload = token ? { refreshToken: token } : {};
+
+    const response = await fetch(AUTH_ENDPOINTS.LOGOUT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/plain, */*',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    // Always clear tokens from client storage
+    clearAuthTokens();
+
+    return await handleResponse(response, 'Logout failed');
+  } catch (error) {
+    // Clear storage even if network/server failed
+    clearAuthTokens();
+    console.error('Logout error:', error);
+    throw error;
+  }
+};
+
+/**
+ * Alias for logoutUser
+ */
+export const signOutUser = logoutUser;
+
+/**
+ * Fetch wrapper that attaches Bearer token and automatically refreshes token on 401
+ * @param {string} url - Request URL
+ * @param {Object} options - Fetch options
+ */
+export const fetchWithAuth = async (url, options = {}) => {
+  const { accessToken } = getStoredTokens();
+
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    ...(options.headers || {}),
+  };
+
+  let response = await fetch(url, {
+    ...options,
+    headers,
+  });
+
+  // If unauthorized (401), attempt token refresh and retry original request once
+  if (response.status === 401) {
+    try {
+      const refreshed = await refreshAuthToken();
+      if (refreshed?.accessToken) {
+        const retryHeaders = {
+          ...headers,
+          Authorization: `Bearer ${refreshed.accessToken}`,
+        };
+        response = await fetch(url, {
+          ...options,
+          headers: retryHeaders,
+        });
+      }
+    } catch (refreshErr) {
+      console.warn('Session expired. Unable to refresh token.', refreshErr);
+      clearAuthTokens();
+      throw refreshErr;
+    }
+  }
+
+  return response;
+};
+
+export default {
+  signupUser,
+  loginUser,
+  verifyOtp,
+  resendOtp,
+  refreshToken,
+  refreshAuthToken,
+  logoutUser,
+  signOutUser,
+  getStoredTokens,
+  saveAuthTokens,
+  clearAuthTokens,
+  fetchWithAuth,
+};
