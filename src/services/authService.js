@@ -4,24 +4,28 @@ import { AUTH_ENDPOINTS } from './endpoints';
  * Retrieve saved tokens from localStorage or sessionStorage
  */
 export const getStoredTokens = () => {
-  const localStorageToken = localStorage.getItem('authToken') || localStorage.getItem('token') || localStorage.getItem('accessToken');
-  const localStorageRefresh = localStorage.getItem('refreshToken');
+  const localToken =
+    localStorage.getItem('authToken') ||
+    localStorage.getItem('token') ||
+    localStorage.getItem('accessToken') ||
+    '';
+  const sessionToken =
+    sessionStorage.getItem('authToken') ||
+    sessionStorage.getItem('token') ||
+    sessionStorage.getItem('accessToken') ||
+    '';
 
-  if (localStorageToken || localStorageRefresh) {
-    return {
-      accessToken: localStorageToken || '',
-      refreshToken: localStorageRefresh || '',
-      storageType: 'local',
-    };
-  }
+  const localRefresh = localStorage.getItem('refreshToken') || '';
+  const sessionRefresh = sessionStorage.getItem('refreshToken') || '';
 
-  const sessionStorageToken = sessionStorage.getItem('authToken') || sessionStorage.getItem('token') || sessionStorage.getItem('accessToken');
-  const sessionStorageRefresh = sessionStorage.getItem('refreshToken');
+  const accessToken = localToken || sessionToken || '';
+  const refreshToken = localRefresh || sessionRefresh || '';
+  const storageType = localToken || localRefresh ? 'local' : 'session';
 
   return {
-    accessToken: sessionStorageToken || '',
-    refreshToken: sessionStorageRefresh || '',
-    storageType: 'session',
+    accessToken,
+    refreshToken,
+    storageType,
   };
 };
 
@@ -54,10 +58,53 @@ export const saveAuthTokens = ({ accessToken, refreshToken }, rememberMe = null)
 };
 
 /**
+ * Retrieve saved user info from localStorage or sessionStorage
+ */
+export const getStoredUser = () => {
+  try {
+    const raw =
+      localStorage.getItem('authUser') ||
+      sessionStorage.getItem('authUser') ||
+      localStorage.getItem('user') ||
+      sessionStorage.getItem('user');
+
+    if (raw) {
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      if (parsed) {
+        const email =
+          parsed.email ||
+          parsed.userEmail ||
+          localStorage.getItem('userEmail') ||
+          sessionStorage.getItem('userEmail') ||
+          '';
+        const name =
+          parsed.name ||
+          parsed.fullName ||
+          (email ? email.split('@')[0] : '');
+        return { email, name, ...parsed };
+      }
+    }
+
+    const email =
+      localStorage.getItem('userEmail') ||
+      sessionStorage.getItem('userEmail') ||
+      sessionStorage.getItem('pendingVerificationEmail') ||
+      '';
+
+    return {
+      email,
+      name: email ? email.split('@')[0] : '',
+    };
+  } catch {
+    return { email: '', name: '' };
+  }
+};
+
+/**
  * Clear all auth data from storage
  */
 export const clearAuthTokens = () => {
-  const keys = ['authToken', 'token', 'accessToken', 'refreshToken', 'authUser', 'user', 'pendingVerificationEmail'];
+  const keys = ['authToken', 'token', 'accessToken', 'refreshToken', 'authUser', 'user', 'userEmail', 'pendingVerificationEmail'];
   keys.forEach((key) => {
     localStorage.removeItem(key);
     sessionStorage.removeItem(key);
@@ -152,15 +199,14 @@ export const loginUser = async ({ email, password, rememberMe = false }) => {
       data.data?.refreshToken ||
       '';
 
-    const user = data.user || data.data?.user || (data.email ? { email: data.email } : null);
+    const user = data.user || data.data?.user || (data.email ? { email: data.email } : { email: email.trim() });
 
     saveAuthTokens({ accessToken, refreshToken }, rememberMe);
 
     const storage = rememberMe ? localStorage : sessionStorage;
-    if (user) {
-      storage.setItem('authUser', JSON.stringify(user));
-      storage.setItem('user', JSON.stringify(user));
-    }
+    storage.setItem('authUser', JSON.stringify(user));
+    storage.setItem('user', JSON.stringify(user));
+    storage.setItem('userEmail', user.email || email.trim());
 
     return { ...data, accessToken, refreshToken, user };
   } catch (error) {
@@ -355,8 +401,8 @@ export const fetchWithAuth = async (url, options = {}) => {
     headers,
   });
 
-  // If unauthorized (401), attempt token refresh and retry original request once
-  if (response.status === 401) {
+  // If unauthorized (401 or 403), attempt token refresh and retry original request once
+  if (response.status === 401 || response.status === 403) {
     try {
       const refreshed = await refreshAuthToken();
       if (refreshed?.accessToken) {
@@ -370,9 +416,7 @@ export const fetchWithAuth = async (url, options = {}) => {
         });
       }
     } catch (refreshErr) {
-      console.warn('Session expired. Unable to refresh token.', refreshErr);
-      clearAuthTokens();
-      throw refreshErr;
+      console.warn('Session expired or unable to refresh token on ' + response.status, refreshErr);
     }
   }
 

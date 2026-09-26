@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
+import { getStoredUser } from "../services/api";
 
 const Profile = () => {
   // Personal Info State
@@ -8,6 +9,12 @@ const Profile = () => {
   const [email, setEmail] = useState("nareshpulluri79@gmail.com");
   const [phone, setPhone] = useState("+91 98765 43210");
   const [linkedin, setLinkedin] = useState("https://www.linkedin.com/in/nareshp");
+
+  useEffect(() => {
+    const user = getStoredUser();
+    if (user.email) setEmail(user.email);
+    if (user.name || user.fullName) setFullName(user.name || user.fullName);
+  }, []);
 
   // Location & Work Auth State
   const [currentLocation, setCurrentLocation] = useState("Bengaluru, Karnataka, India");

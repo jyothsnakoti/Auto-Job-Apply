@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import logoSrc from '../assets/Background.svg';
-import { logoutUser, getOnboardingState, setOnboardingState } from '../services/api';
+import { logoutUser, getStoredUser, getOnboardingState, setOnboardingState } from '../services/api';
 
 const LocationSetup = () => {
     const navigate = useNavigate();
@@ -25,25 +25,14 @@ const LocationSetup = () => {
     const [validationError, setValidationError] = useState('');
 
     useEffect(() => {
+        const user = getStoredUser();
+        if (user.email) setUserEmail(user.email);
+
         const savedState = getOnboardingState();
         if (savedState.addressLine1 || savedState.address) setAddress(savedState.addressLine1 || savedState.address);
         if (savedState.city) setCity(savedState.city);
         if (savedState.state || savedState.stateVal) setStateVal(savedState.state || savedState.stateVal);
         if (savedState.country) setCountry(savedState.country);
-
-        try {
-            const storedUser =
-                localStorage.getItem('authUser') ||
-                sessionStorage.getItem('authUser') ||
-                localStorage.getItem('user') ||
-                sessionStorage.getItem('user');
-            if (storedUser) {
-                const parsed = JSON.parse(storedUser);
-                if (parsed.email) setUserEmail(parsed.email);
-            }
-        } catch {
-            // keep default
-        }
     }, []);
 
     useEffect(() => {
@@ -118,16 +107,6 @@ const LocationSetup = () => {
                 country,
             },
         });
-    };
-
-    const handleLogout = async () => {
-        try {
-            await logoutUser();
-        } catch (err) {
-            console.error('Logout error:', err);
-        } finally {
-            navigate('/');
-        }
     };
 
     const styles = {
@@ -558,22 +537,9 @@ const LocationSetup = () => {
                     <span style={styles.brandText}>Auto Jobs Apply</span>
                 </a>
 
-                {/* Right: Email & Logout */}
+                {/* Right: Email */}
                 <div style={styles.userArea}>
-                    <span style={styles.userEmail}>{userEmail}</span>
-                    <button
-                        type="button"
-                        onClick={handleLogout}
-                        style={styles.logoutBtn}
-                        aria-label="Log out"
-                    >
-                        <svg viewBox="0 0 24 24" style={styles.logoutSvg}>
-                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                            <polyline points="16 17 21 12 16 7" />
-                            <line x1="21" y1="12" x2="9" y2="12" />
-                        </svg>
-                        <span>Log out</span>
-                    </button>
+                    <span style={styles.userEmail}>{userEmail || 'nareshpulluri79@gmail.com'}</span>
                 </div>
             </header>
 

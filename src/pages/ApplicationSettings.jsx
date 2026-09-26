@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import logoSrc from '../assets/Background.svg';
 import {
     logoutUser,
+    getStoredUser,
     getOnboardingState,
     setOnboardingState,
     buildOnboardingPayload,
@@ -15,6 +16,9 @@ const ApplicationSettings = () => {
     const [windowWidth, setWindowWidth] = useState(
         typeof window !== 'undefined' ? window.innerWidth : 1440
     );
+
+    // User email state
+    const [userEmail, setUserEmail] = useState('');
 
     // Form states
     const [resumeTailoring, setResumeTailoring] = useState('job-specific'); // 'original' | 'job-specific'
@@ -30,6 +34,9 @@ const ApplicationSettings = () => {
     const [toastMessage, setToastMessage] = useState('');
 
     useEffect(() => {
+        const user = getStoredUser();
+        if (user.email) setUserEmail(user.email);
+
         const savedState = getOnboardingState();
         if (savedState.resumeOptimization || savedState.resumeTailoring) {
             setResumeTailoring(savedState.resumeOptimization || savedState.resumeTailoring);
@@ -561,22 +568,9 @@ const ApplicationSettings = () => {
                     <span style={styles.brandText}>Auto Jobs Apply</span>
                 </a>
 
-                {/* Right: Email & Logout */}
+                {/* Right: Email */}
                 <div style={styles.userArea}>
-                    <span style={styles.userEmail}>nareshpulluri79@gmail.com</span>
-                    <button
-                        type="button"
-                        onClick={() => navigate('/')}
-                        style={styles.logoutBtn}
-                        aria-label="Log out"
-                    >
-                        <svg viewBox="0 0 24 24" style={styles.logoutSvg}>
-                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                            <polyline points="16 17 21 12 16 7" />
-                            <line x1="21" y1="12" x2="9" y2="12" />
-                        </svg>
-                        <span>Log out</span>
-                    </button>
+                    <span style={styles.userEmail}>{userEmail || 'nareshpulluri79@gmail.com'}</span>
                 </div>
             </header>
 

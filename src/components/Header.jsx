@@ -1,31 +1,28 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { logoutUser } from "../services/api";
+import { logoutUser, getStoredUser } from "../services/api";
 
 const Header = () => {
   const navigate = useNavigate();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [userName, setUserName] = useState("Jyothsna");
+  const [userEmail, setUserEmail] = useState("");
   const [userInitial, setUserInitial] = useState("J");
   const dropdownRef = useRef(null);
 
   useEffect(() => {
     try {
-      const storedUser =
-        localStorage.getItem("authUser") ||
-        sessionStorage.getItem("authUser") ||
-        localStorage.getItem("user") ||
-        sessionStorage.getItem("user");
-
-      if (storedUser) {
-        const parsed = JSON.parse(storedUser);
+      const user = getStoredUser();
+      if (user) {
+        if (user.email) setUserEmail(user.email);
         const name =
-          parsed.name ||
-          parsed.fullName ||
-          (parsed.email ? parsed.email.split("@")[0] : "Jyothsna");
+          user.name ||
+          user.fullName ||
+          (user.email ? user.email.split("@")[0] : "Jyothsna");
         setUserName(name);
-        setUserInitial(name.charAt(0).toUpperCase() || "J");
+        const initialChar = (user.email ? user.email.charAt(0) : name.charAt(0)).toUpperCase() || "J";
+        setUserInitial(initialChar);
       }
     } catch {
       // Keep default fallback
@@ -108,9 +105,9 @@ const Header = () => {
             </span>
           </div>
 
-          {/* Name */}
-          <span className="text-[13px] font-medium text-[#1E293B]">
-            {userName}
+          {/* Name / Email */}
+          <span className="text-[13px] font-medium text-[#1E293B] max-w-[200px] truncate" title={userEmail || userName}>
+            {userEmail || userName}
           </span>
 
           {/* Dropdown Arrow */}
@@ -131,11 +128,11 @@ const Header = () => {
 
         {/* Dropdown Menu */}
         {isDropdownOpen && (
-          <div className="absolute right-0 mt-2 w-[180px] rounded-[14px] bg-white border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
+          <div className="absolute right-0 mt-2 w-[220px] rounded-[14px] bg-white border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)] p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
             <div className="px-3 py-2 border-b border-slate-100">
               <p className="text-[11px] font-medium text-slate-400">Signed in as</p>
-              <p className="text-[13px] font-semibold text-slate-800 truncate">
-                {userName}
+              <p className="text-[13px] font-semibold text-slate-800 truncate" title={userEmail || userName}>
+                {userEmail || userName}
               </p>
             </div>
 

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
+import { User, Mail, Lock, Eye, EyeOff, ArrowRight, Check } from 'lucide-react';
 import AuthLayout from './AuthLayout';
 import { signupUser } from '../../services/api';
 
@@ -12,8 +12,28 @@ const Registration = () => {
     password: '',
   });
   const [showPassword, setShowPassword] = useState(false);
+  const [isPasswordFocused, setIsPasswordFocused] = useState(false);
+  const [hideValidationBox, setHideValidationBox] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  const password = formData.password || '';
+  const isLengthValid = password.length >= 8 && password.length <= 15;
+  const isUpperLowerValid = /[a-z]/.test(password) && /[A-Z]/.test(password);
+  const isNumSpecialValid = /\d/.test(password) && /[^A-Za-z0-9]/.test(password);
+  const allCriteriaValid = isLengthValid && isUpperLowerValid && isNumSpecialValid;
+
+  // Auto close validation box once all criteria are met
+  useEffect(() => {
+    if (allCriteriaValid && password.length > 0) {
+      const timer = setTimeout(() => {
+        setHideValidationBox(true);
+      }, 450);
+      return () => clearTimeout(timer);
+    } else {
+      setHideValidationBox(false);
+    }
+  }, [allCriteriaValid, password]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -29,6 +49,12 @@ const Registration = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMessage('');
+
+    if (!allCriteriaValid) {
+      setErrorMessage('Please ensure your password meets all required criteria.');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -156,6 +182,13 @@ const Registration = () => {
                 placeholder="Create a strong password"
                 value={formData.password}
                 onChange={handleChange}
+                onFocus={() => {
+                  setIsPasswordFocused(true);
+                  if (!allCriteriaValid) setHideValidationBox(false);
+                }}
+                onBlur={() => {
+                  setIsPasswordFocused(false);
+                }}
                 className="w-full h-12 pl-11 pr-11 border border-slate-200 rounded-xl text-sm font-['Inter',sans-serif] text-slate-900 placeholder:text-slate-400 bg-white transition-all duration-200 outline-none focus:border-indigo-500 focus:ring-3 focus:ring-indigo-500/15"
                 required
               />
@@ -171,6 +204,65 @@ const Registration = () => {
             <p className="text-slate-400 text-[11.5px] font-normal mt-1.5 leading-normal font-['Inter',sans-serif]">
               Use at least 8 characters with a mix of letters, numbers and symbols.
             </p>
+
+            {/* Dynamic Password Validation Requirements Box */}
+            {((isPasswordFocused || password.length > 0) && !hideValidationBox && !allCriteriaValid) && (
+              <div className="mt-2.5 p-3.5 bg-slate-50/90 border border-slate-200/80 rounded-2xl flex flex-col gap-2 animate-in fade-in zoom-in-95 duration-200">
+                {/* 8-15 characters */}
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`w-4 h-4 rounded-full flex items-center justify-center transition-all duration-200 ${
+                      isLengthValid ? 'bg-emerald-500 text-white shadow-sm' : 'bg-slate-200/80 text-slate-400'
+                    }`}
+                  >
+                    <Check size={11} strokeWidth={3} />
+                  </div>
+                  <span
+                    className={`text-[12px] font-['Inter',sans-serif] transition-colors duration-200 ${
+                      isLengthValid ? 'text-slate-800 font-medium' : 'text-slate-400 font-normal'
+                    }`}
+                  >
+                    8-15 characters
+                  </span>
+                </div>
+
+                {/* Upper & lowercase letters */}
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`w-4 h-4 rounded-full flex items-center justify-center transition-all duration-200 ${
+                      isUpperLowerValid ? 'bg-emerald-500 text-white shadow-sm' : 'bg-slate-200/80 text-slate-400'
+                    }`}
+                  >
+                    <Check size={11} strokeWidth={3} />
+                  </div>
+                  <span
+                    className={`text-[12px] font-['Inter',sans-serif] transition-colors duration-200 ${
+                      isUpperLowerValid ? 'text-slate-800 font-medium' : 'text-slate-400 font-normal'
+                    }`}
+                  >
+                    Upper & lowercase letters
+                  </span>
+                </div>
+
+                {/* Number & special character */}
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`w-4 h-4 rounded-full flex items-center justify-center transition-all duration-200 ${
+                      isNumSpecialValid ? 'bg-emerald-500 text-white shadow-sm' : 'bg-slate-200/80 text-slate-400'
+                    }`}
+                  >
+                    <Check size={11} strokeWidth={3} />
+                  </div>
+                  <span
+                    className={`text-[12px] font-['Inter',sans-serif] transition-colors duration-200 ${
+                      isNumSpecialValid ? 'text-slate-800 font-medium' : 'text-slate-400 font-normal'
+                    }`}
+                  >
+                    Number & special character
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Submit Button */}

@@ -203,8 +203,10 @@ export const submitOnboarding = async (payloadOrState = null, token = null) => {
       const errorMessage =
         data?.message ||
         data?.error ||
-        text ||
-        `Onboarding failed (Status ${response.status})`;
+        (typeof data === 'string' && data ? data : '') ||
+        (response.status === 403
+          ? 'Onboarding failed (Status 403 Forbidden). Please verify your account credentials or active plan.'
+          : `Onboarding failed (Status ${response.status})`);
       const error = new Error(errorMessage);
       error.status = response.status;
       error.data = data;

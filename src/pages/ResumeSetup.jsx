@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import logoSrc from '../assets/Background.svg';
-import { getOnboardingState, setOnboardingState } from '../services/api';
+import { logoutUser, getStoredUser, getOnboardingState, setOnboardingState } from '../services/api';
 
 const ResumeSetup = () => {
     const navigate = useNavigate();
@@ -11,15 +11,18 @@ const ResumeSetup = () => {
         typeof window !== 'undefined' ? window.innerWidth : 1440
     );
 
+    const [userEmail, setUserEmail] = useState('');
     const [selectedFile, setSelectedFile] = useState(null);
     const [fileError, setFileError] = useState('');
     const [isDragging, setIsDragging] = useState(false);
     const [isHoveredContinue, setIsHoveredContinue] = useState(false);
 
     useEffect(() => {
+        const user = getStoredUser();
+        if (user.email) setUserEmail(user.email);
+
         const state = getOnboardingState();
         if (state.resumeName && !selectedFile) {
-            // Placeholder representation of already uploaded file name
             setSelectedFile({ name: state.resumeName, size: state.resumeSize || 1024 * 1024 * 1.2 });
         }
     }, []);
@@ -564,22 +567,9 @@ const ResumeSetup = () => {
                     <span style={styles.brandText}>Auto Jobs Apply</span>
                 </a>
 
-                {/* Right: Email & Logout */}
+                {/* Right: Email */}
                 <div style={styles.userArea}>
-                    <span style={styles.userEmail}>nareshpulluri79@gmail.com</span>
-                    <button
-                        type="button"
-                        onClick={() => navigate('/')}
-                        style={styles.logoutBtn}
-                        aria-label="Log out"
-                    >
-                        <svg viewBox="0 0 24 24" style={styles.logoutSvg}>
-                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                            <polyline points="16 17 21 12 16 7" />
-                            <line x1="21" y1="12" x2="9" y2="12" />
-                        </svg>
-                        <span>Log out</span>
-                    </button>
+                    <span style={styles.userEmail}>{userEmail || 'nareshpulluri79@gmail.com'}</span>
                 </div>
             </header>
 
