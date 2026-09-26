@@ -1,10 +1,36 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { logoutUser } from "../services/api";
 
 const Header = () => {
   const navigate = useNavigate();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const [userName, setUserName] = useState("Jyothsna");
+  const [userInitial, setUserInitial] = useState("J");
   const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    try {
+      const storedUser =
+        localStorage.getItem("authUser") ||
+        sessionStorage.getItem("authUser") ||
+        localStorage.getItem("user") ||
+        sessionStorage.getItem("user");
+
+      if (storedUser) {
+        const parsed = JSON.parse(storedUser);
+        const name =
+          parsed.name ||
+          parsed.fullName ||
+          (parsed.email ? parsed.email.split("@")[0] : "Jyothsna");
+        setUserName(name);
+        setUserInitial(name.charAt(0).toUpperCase() || "J");
+      }
+    } catch {
+      // Keep default fallback
+    }
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -27,10 +53,20 @@ const Header = () => {
     };
   }, []);
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
+    if (isSigningOut) return;
+    setIsSigningOut(true);
     setIsDropdownOpen(false);
-    // Navigate to login page
-    navigate("/login");
+
+    try {
+      await logoutUser();
+    } catch (err) {
+      console.error("Logout error:", err);
+    } finally {
+      setIsSigningOut(false);
+      // Redirect to home page
+      navigate("/");
+    }
   };
 
   return (
@@ -68,13 +104,13 @@ const Header = () => {
           {/* Avatar */}
           <div className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-[#E2E8F0]">
             <span className="text-[13px] font-semibold text-[#475569]">
-              J
+              {userInitial}
             </span>
           </div>
 
           {/* Name */}
           <span className="text-[13px] font-medium text-[#1E293B]">
-            Jyothsna
+            {userName}
           </span>
 
           {/* Dropdown Arrow */}
@@ -99,14 +135,15 @@ const Header = () => {
             <div className="px-3 py-2 border-b border-slate-100">
               <p className="text-[11px] font-medium text-slate-400">Signed in as</p>
               <p className="text-[13px] font-semibold text-slate-800 truncate">
-                Jyothsna
+                {userName}
               </p>
             </div>
 
             <button
               type="button"
               onClick={handleSignOut}
-              className="mt-1 flex w-full items-center gap-2 px-3 py-2 rounded-[8px] text-[13px] font-medium text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors cursor-pointer text-left"
+              disabled={isSigningOut}
+              className="mt-1 flex w-full items-center gap-2 px-3 py-2 rounded-[8px] text-[13px] font-medium text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors cursor-pointer text-left disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <svg
                 width="16"
@@ -123,7 +160,7 @@ const Header = () => {
                 <polyline points="16 17 21 12 16 7" />
                 <line x1="21" y1="12" x2="9" y2="12" />
               </svg>
-              <span>Sign out</span>
+              <span>{isSigningOut ? "Signing out..." : "Sign out"}</span>
             </button>
           </div>
         )}
@@ -132,4 +169,4 @@ const Header = () => {
   );
 };
 
-export default Header;
+export default Header;

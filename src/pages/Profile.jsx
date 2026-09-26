@@ -19,7 +19,6 @@ const Profile = () => {
     "Canada",
     "United Kingdom",
   ]);
-  const [workMode, setWorkMode] = useState("Remote");
 
   // Diversity & Inclusion State
   const [gender, setGender] = useState("Male");
@@ -27,33 +26,11 @@ const Profile = () => {
   const [veteran, setVeteran] = useState("No");
   const [disability, setDisability] = useState("No");
 
-  // Skills & Experience State
-  const [experienceRange, setExperienceRange] = useState("5+ years");
-  const [education, setEducation] = useState("Bachelor's Degree");
-  const [totalExperience, setTotalExperience] = useState("5");
-  const [skills, setSkills] = useState([
-    "React",
-    "UI/UX Design",
-    "JavaScript",
-    "Figma",
-    "TypeScript",
-    "Node.js",
-  ]);
-  const [newSkillInput, setNewSkillInput] = useState("");
-  const [isAddingSkill, setIsAddingSkill] = useState(false);
-
-  const removeSkill = (skillToRemove) => {
-    setSkills(skills.filter((s) => s !== skillToRemove));
-  };
-
-  const handleAddSkill = (e) => {
-    e.preventDefault();
-    if (newSkillInput.trim() && !skills.includes(newSkillInput.trim())) {
-      setSkills([...skills, newSkillInput.trim()]);
-      setNewSkillInput("");
-      setIsAddingSkill(false);
-    }
-  };
+  // Work Preferences State (replacing Skills & Experience as shown in Image 2)
+  const [inPersonWork, setInPersonWork] = useState("Yes");
+  const [startImmediately, setStartImmediately] = useState("Yes");
+  const [reliableTransportation, setReliableTransportation] = useState("No");
+  const [workplaceAccommodations, setWorkplaceAccommodations] = useState("Prefer Not to say");
 
   const removeCountry = (cToRemove) => {
     setTargetCountries(targetCountries.filter((c) => c !== cToRemove));
@@ -208,14 +185,6 @@ const Profile = () => {
                       Upload and manage your resumes.
                     </p>
                   </div>
-
-                  <button
-                    type="button"
-                    className="h-[36px] px-3.5 rounded-[10px] bg-[#4F46E5] hover:bg-[#4338CA] text-white text-[12.5px] font-medium flex items-center gap-1.5 shadow-2xs active:scale-[0.99] transition-all cursor-pointer whitespace-nowrap shrink-0"
-                  >
-                    <span>+</span>
-                    <span>Upload Resume</span>
-                  </button>
                 </div>
 
                 {/* Uploaded Resume Card */}
@@ -251,11 +220,20 @@ const Profile = () => {
                     </svg>
                   </button>
                 </div>
+
+                {/* Upload Resume Button (Below file box as in Image 2) */}
+                <button
+                  type="button"
+                  className="w-full mt-4 h-[40px] px-4 rounded-[10px] bg-[#4F46E5] hover:bg-[#4338CA] text-white text-[13px] font-semibold flex items-center justify-center gap-1.5 shadow-2xs active:scale-[0.99] transition-all cursor-pointer"
+                >
+                  <span className="text-base leading-none font-normal">+</span>
+                  <span>Upload Resume</span>
+                </button>
               </div>
             </div>
           </div>
 
-          {/* Middle Row: Location & Work Authorization Card (Full Width) */}
+          {/* Middle Row: Location & Work Authorization Card (Full Width - Work Mode Removed) */}
           <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-6 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col gap-5 w-full">
             {/* Header */}
             <div className="flex items-start justify-between gap-4">
@@ -285,7 +263,7 @@ const Profile = () => {
               {/* Current Location (10 Cols) */}
               <div className="lg:col-span-10 flex flex-col gap-1.5">
                 <label className="text-[12.5px] font-medium text-[#64748B]">
-                  Current Location
+                  Address
                 </label>
                 <div className="flex items-center justify-between h-[42px] px-3.5 rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#0F172A] font-medium">
                   <div className="flex items-center gap-2 min-w-0">
@@ -393,106 +371,9 @@ const Profile = () => {
                 </div>
               </div>
             </div>
-
-            {/* Work Mode Preference (3 Large Option Cards) */}
-            <div className="flex flex-col gap-2 pt-1">
-              <label className="text-[12.5px] font-medium text-[#64748B]">
-                Work Mode Preference
-              </label>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {[
-                  {
-                    id: "Remote",
-                    title: "Remote",
-                    desc: "Work from anywhere",
-                    icon: (active) => (
-                      <svg
-                        className={`w-4 h-4 transition-colors ${
-                          active ? "text-[#4F46E5]" : "text-slate-500"
-                        }`}
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      >
-                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                        <polyline points="9 22 9 12 15 12 15 22" />
-                      </svg>
-                    ),
-                  },
-                  {
-                    id: "Hybrid",
-                    title: "Hybrid",
-                    desc: "Office + remote",
-                    icon: (active) => (
-                      <svg
-                        className={`w-4 h-4 transition-colors ${
-                          active ? "text-[#4F46E5]" : "text-slate-500"
-                        }`}
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      >
-                        <rect x="4" y="2" width="16" height="20" rx="2" ry="2" />
-                        <path d="M9 22v-4h6v4" />
-                        <path d="M8 6h.01M16 6h.01M8 10h.01M16 10h.01M8 14h.01M16 14h.01" />
-                      </svg>
-                    ),
-                  },
-                  {
-                    id: "On-site",
-                    title: "On-site",
-                    desc: "At company location",
-                    icon: (active) => (
-                      <svg
-                        className={`w-4 h-4 transition-colors ${
-                          active ? "text-[#4F46E5]" : "text-slate-500"
-                        }`}
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      >
-                        <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-                        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-                      </svg>
-                    ),
-                  },
-                ].map((item) => {
-                  const isActive = workMode === item.id;
-                  return (
-                    <div
-                      key={item.id}
-                      onClick={() => setWorkMode(item.id)}
-                      className={`p-4 rounded-[14px] cursor-pointer transition-all ${
-                        isActive
-                          ? "border-2 border-[#4F46E5] bg-white shadow-xs"
-                          : "border border-[#E2E8F0] bg-white hover:border-slate-300"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 text-[14.5px] font-bold text-[#0F172A]">
-                        {item.icon(isActive)}
-                        <span>{item.title}</span>
-                      </div>
-                      <p
-                        className={`text-[12px] mt-1 transition-colors ${
-                          isActive
-                            ? "text-[#4F46E5] font-medium"
-                            : "text-[#64748B]"
-                        }`}
-                      >
-                        {item.desc}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
           </div>
 
-          {/* Bottom Row: Diversity & Inclusion + Skills & Experience */}
+          {/* Bottom Row: Diversity & Inclusion + Work Preferences (Replacing Skills & Experience) */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full items-stretch">
             {/* 1. Diversity & Inclusion (Optional) */}
             <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-6 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col justify-between">
@@ -613,17 +494,17 @@ const Profile = () => {
               </div>
             </div>
 
-            {/* 2. Skills & Experience */}
+            {/* 2. Work Preferences (Replacing Skills & Experience as shown in Image 2) */}
             <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-6 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col justify-between">
               <div>
                 {/* Header */}
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex flex-col">
                     <h2 className="text-[16px] font-bold text-[#0F172A]">
-                      Skills & Experience
+                      Work Preferences
                     </h2>
                     <p className="text-[12.5px] text-[#64748B] mt-0.5">
-                      Add your skills and experience to get better job matches.
+                      Help us match you with inclusive employers.
                     </p>
                   </div>
 
@@ -639,123 +520,93 @@ const Profile = () => {
                   </button>
                 </div>
 
-                {/* Top 3 Field Inputs */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mt-5">
-                  {/* Years of Experience */}
+                {/* 2x2 Dropdowns Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5">
+                  {/* Open to in-person work? */}
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[12.5px] font-medium text-[#64748B]">
-                      Years of Experience
+                      Open to in-person work?
                     </label>
                     <div className="relative">
                       <select
-                        value={experienceRange}
-                        onChange={(e) => setExperienceRange(e.target.value)}
-                        className="w-full h-[40px] px-3 pr-7 rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#0F172A] font-medium outline-none focus:border-slate-400 appearance-none cursor-pointer"
+                        value={inPersonWork}
+                        onChange={(e) => setInPersonWork(e.target.value)}
+                        className="w-full h-[40px] px-3.5 pr-8 rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#0F172A] font-medium outline-none focus:border-slate-400 appearance-none cursor-pointer"
                       >
-                        <option>1-3 years</option>
-                        <option>3-5 years</option>
-                        <option>5+ years</option>
-                        <option>8+ years</option>
+                        <option>Yes</option>
+                        <option>No</option>
+                        <option>Hybrid only</option>
+                        <option>Prefer not to say</option>
                       </select>
-                      <svg className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-3.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                      <svg className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-3.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
                         <path d="m6 9 6 6 6-6" />
                       </svg>
                     </div>
                   </div>
 
-                  {/* Highest Education */}
+                  {/* Can start immediately? */}
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[12.5px] font-medium text-[#64748B]">
-                      Highest Education
+                      Can start immediately?
                     </label>
                     <div className="relative">
                       <select
-                        value={education}
-                        onChange={(e) => setEducation(e.target.value)}
-                        className="w-full h-[40px] px-3 pr-7 rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#0F172A] font-medium outline-none focus:border-slate-400 appearance-none cursor-pointer truncate"
+                        value={startImmediately}
+                        onChange={(e) => setStartImmediately(e.target.value)}
+                        className="w-full h-[40px] px-3.5 pr-8 rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#0F172A] font-medium outline-none focus:border-slate-400 appearance-none cursor-pointer"
                       >
-                        <option>Bachelor's Degree</option>
-                        <option>Master's Degree</option>
-                        <option>PhD</option>
-                        <option>High School</option>
+                        <option>Yes</option>
+                        <option>No</option>
+                        <option>2 weeks notice</option>
+                        <option>1 month notice</option>
                       </select>
-                      <svg className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-3.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                      <svg className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-3.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
                         <path d="m6 9 6 6 6-6" />
                       </svg>
                     </div>
                   </div>
 
-                  {/* Total Experience (Years) */}
+                  {/* Reliable transportation? */}
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[12.5px] font-medium text-[#64748B]">
-                      Total Experience (Years)
+                      Reliable transportation?
                     </label>
-                    <input
-                      type="number"
-                      value={totalExperience}
-                      onChange={(e) => setTotalExperience(e.target.value)}
-                      className="h-[40px] px-3.5 rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#0F172A] font-medium outline-none focus:border-slate-400 transition-colors"
-                    />
+                    <div className="relative">
+                      <select
+                        value={reliableTransportation}
+                        onChange={(e) => setReliableTransportation(e.target.value)}
+                        className="w-full h-[40px] px-3.5 pr-8 rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#0F172A] font-medium outline-none focus:border-slate-400 appearance-none cursor-pointer"
+                      >
+                        <option>No</option>
+                        <option>Yes</option>
+                        <option>Public transit</option>
+                        <option>Prefer not to say</option>
+                      </select>
+                      <svg className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-3.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                        <path d="m6 9 6 6 6-6" />
+                      </svg>
+                    </div>
                   </div>
-                </div>
 
-                {/* Key Skills Tags */}
-                <div className="flex flex-col gap-2 mt-4.5">
-                  <label className="text-[12.5px] font-medium text-[#64748B]">
-                    Key Skills
-                  </label>
-
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {skills.map((skill) => (
-                      <span
-                        key={skill}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] bg-[#F1F5F9] text-[#334155] text-[12.5px] font-medium hover:bg-slate-200/80 transition-colors"
+                  {/* Need workplace accommodations? */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[12.5px] font-medium text-[#64748B]">
+                      Need workplace accommodations?
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={workplaceAccommodations}
+                        onChange={(e) => setWorkplaceAccommodations(e.target.value)}
+                        className="w-full h-[40px] px-3.5 pr-8 rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#0F172A] font-medium outline-none focus:border-slate-400 appearance-none cursor-pointer"
                       >
-                        <span>{skill}</span>
-                        <button
-                          type="button"
-                          onClick={() => removeSkill(skill)}
-                          className="text-slate-400 hover:text-slate-700 cursor-pointer text-[12px]"
-                        >
-                          ✕
-                        </button>
-                      </span>
-                    ))}
-
-                    {isAddingSkill ? (
-                      <form onSubmit={handleAddSkill} className="inline-flex items-center gap-1">
-                        <input
-                          type="text"
-                          autoFocus
-                          value={newSkillInput}
-                          onChange={(e) => setNewSkillInput(e.target.value)}
-                          placeholder="Skill name..."
-                          className="h-[32px] px-2.5 text-[12.5px] rounded-[8px] border border-indigo-400 outline-none w-[110px]"
-                        />
-                        <button
-                          type="submit"
-                          className="h-[32px] px-2 bg-[#4F46E5] text-white text-[12px] font-medium rounded-[8px] cursor-pointer"
-                        >
-                          Add
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setIsAddingSkill(false)}
-                          className="h-[32px] px-2 bg-slate-100 text-slate-600 text-[12px] rounded-[8px] cursor-pointer"
-                        >
-                          ✕
-                        </button>
-                      </form>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setIsAddingSkill(true)}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-[8px] border border-dashed border-[#818CF8] bg-[#EEF2FF]/60 text-[#4F46E5] text-[12.5px] font-medium hover:bg-[#EEF2FF] transition-colors cursor-pointer"
-                      >
-                        <span>+</span>
-                        <span>Add Skill</span>
-                      </button>
-                    )}
+                        <option>Prefer Not to say</option>
+                        <option>No</option>
+                        <option>Yes</option>
+                      </select>
+                      <svg className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-3.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                        <path d="m6 9 6 6 6-6" />
+                      </svg>
+                    </div>
                   </div>
                 </div>
               </div>
