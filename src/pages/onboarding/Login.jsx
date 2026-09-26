@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
 import AuthLayout from './AuthLayout';
-import { loginUser, getBillingStatus } from '../../services/api';
+import { loginUser, getBillingStatus, initiateLinkedInAuth } from '../../services/api';
 
 const validateEmail = (email) => {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -18,7 +18,8 @@ const Login = () => {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState('');
+  const [isLinkedInLoading, setIsLinkedInLoading] = useState(false);
+  const [error, setError] = useState(location.state?.info || '');
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -27,6 +28,27 @@ const Login = () => {
       ...prev,
       [name]: type === 'checkbox' ? checked : value,
     }));
+  };
+
+  const handleLinkedInLogin = () => {
+    if (isLinkedInLoading || isSubmitting) return;
+    setError('');
+    setIsLinkedInLoading(true);
+
+    try {
+      initiateLinkedInAuth({
+        rememberMe: formData.rememberMe,
+      });
+    } catch (err) {
+      setIsLinkedInLoading(false);
+      if (err.code === 'LINKEDIN_NOT_CONFIGURED') {
+        setError(
+          'LinkedIn sign-in is not configured. Please provide VITE_LINKEDIN_CLIENT_ID in your environment.'
+        );
+      } else {
+        setError(err.message || 'Failed to initiate LinkedIn sign-in.');
+      }
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -276,19 +298,29 @@ const Login = () => {
             {/* LinkedIn Button */}
             <button
               type="button"
-              onClick={() => navigate('/plan')}
-              className="h-11 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50/80 active:bg-slate-100 text-slate-700 hover:text-slate-900 font-['Inter',sans-serif] text-xs sm:text-[13px] font-medium rounded-xl flex items-center justify-center gap-2 transition-all duration-200 shadow-xs cursor-pointer px-3 whitespace-nowrap"
+              onClick={handleLinkedInLogin}
+              disabled={isLinkedInLoading || isSubmitting}
+              className="h-11 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50/80 active:bg-slate-100 text-slate-700 hover:text-slate-900 font-['Inter',sans-serif] text-xs sm:text-[13px] font-medium rounded-xl flex items-center justify-center gap-2 transition-all duration-200 shadow-xs cursor-pointer px-3 whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="#0A66C2"
-                className="shrink-0"
-              >
-                <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z" />
-              </svg>
-              <span>LinkedIn</span>
+              {isLinkedInLoading ? (
+                <>
+                  <Loader2 size={16} className="animate-spin text-[#0A66C2]" />
+                  <span>Connecting...</span>
+                </>
+              ) : (
+                <>
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="#0A66C2"
+                    className="shrink-0"
+                  >
+                    <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z" />
+                  </svg>
+                  <span>LinkedIn</span>
+                </>
+              )}
             </button>
           </div>
         </form>
@@ -298,4 +330,5 @@ const Login = () => {
 };
 
 export default Login;
+
 

@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
+import { getBillingStatus } from "../services/billingService";
 
 const CheckIcon = () => (
   <svg
@@ -42,6 +43,54 @@ const UpgradePlan = () => {
   const [selectedPlan, setSelectedPlan] = useState("Pro");
   const [autoPay, setAutoPay] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+
+  // Billing status state
+  const [billing, setBilling] = useState(() => {
+    try {
+      const raw = localStorage.getItem("billingStatus") || sessionStorage.getItem("billingStatus");
+      if (raw) return JSON.parse(raw);
+    } catch {
+      // ignore
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    const fetchStatus = async () => {
+      try {
+        const data = await getBillingStatus();
+        if (data) setBilling(data);
+      } catch (err) {
+        console.warn("[UpgradePlan] Failed to fetch billing status:", err);
+      }
+    };
+    fetchStatus();
+
+    const handleBillingUpdate = (e) => {
+      if (e?.detail) setBilling(e.detail);
+      else fetchStatus();
+    };
+    window.addEventListener("billingStatusUpdated", handleBillingUpdate);
+    window.addEventListener("storage", handleBillingUpdate);
+    return () => {
+      window.removeEventListener("billingStatusUpdated", handleBillingUpdate);
+      window.removeEventListener("storage", handleBillingUpdate);
+    };
+  }, []);
+
+  const hasPlan = Boolean(billing?.hasPlan);
+  const planTitle = hasPlan ? (billing?.planName || "Active Plan") : "No active plan";
+  const applicationAllowance = typeof billing?.applicationAllowance === "number" ? billing.applicationAllowance : 0;
+  const usedApplications = typeof billing?.usedApplications === "number" ? billing.usedApplications : 0;
+  const remainingApplications = typeof billing?.remainingApplications === "number" ? billing.remainingApplications : 0;
+  const rawInterval = (billing?.billingInterval || "month").toLowerCase().trim();
+  const intervalDisplay = rawInterval ? `applications / ${rawInterval}` : "applications";
+
+  const progress =
+    applicationAllowance > 0
+      ? (usedApplications / applicationAllowance) * 100
+      : 0;
+  const clampedProgress = Math.min(100, Math.max(0, progress));
 
   // Form states for Add A New Card modal
   const [cardName, setCardName] = useState("");
@@ -92,10 +141,10 @@ const UpgradePlan = () => {
                     CURRENT PLAN
                   </span>
                   <span className="text-[16.5px] font-bold text-[#0F172A] leading-tight">
-                    Basic Plan
+                    {planTitle}
                   </span>
                   <span className="text-[12px] text-[#64748B] mt-0.5">
-                    250 applications / month
+                    {hasPlan ? `${applicationAllowance} ${intervalDisplay}` : "0 applications remaining"}
                   </span>
                 </div>
               </div>
@@ -103,11 +152,11 @@ const UpgradePlan = () => {
               {/* Progress Bar Container */}
               <div className="flex flex-col gap-1.5 flex-1 min-w-[200px] max-w-[320px]">
                 <div className="w-full h-[7px] bg-slate-100 rounded-full overflow-hidden">
-                  <div className="bg-[#4F46E5] h-full rounded-full" style={{ width: "59.2%" }} />
+                  <div className="bg-[#4F46E5] h-full rounded-full transition-all duration-300" style={{ width: `${clampedProgress}%` }} />
                 </div>
                 <div className="flex items-center justify-between text-[11.5px] text-[#64748B]">
-                  <span>148 used</span>
-                  <span>102 remaining</span>
+                  <span>{usedApplications} used</span>
+                  <span>{remainingApplications} remaining</span>
                 </div>
               </div>
             </div>

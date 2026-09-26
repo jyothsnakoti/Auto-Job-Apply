@@ -1,12 +1,23 @@
 export * from './endpoints';
 export * from './authService';
-export * from './billingService';
 export * from './billingPlans';
 export * from './onboardingService';
 export * from './profileService';
 export * from './personalProfileService';
 export * from './locationProfileService';
 export * from './settingsProfileService';
+export {
+  getStoredAuthToken,
+  getStoredRefreshToken,
+  setStoredTokens,
+  clearStoredTokens,
+  authenticatedFetch,
+  getStripePublishableKey,
+  createPaymentIntent,
+  confirmBackendPayment,
+  getBillingStatus,
+  recoverBilling,
+} from './billingService';
 export { default as authService } from './authService';
 export { default as billingService } from './billingService';
 export { default as onboardingService } from './onboardingService';
