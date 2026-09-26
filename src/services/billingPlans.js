@@ -1,5 +1,10 @@
 import { BILLING_ENDPOINTS } from './endpoints';
 import { getStoredTokens, fetchWithAuth } from './authService';
+import {
+  toggleAutopay,
+  createCardUpdateIntent,
+  confirmCardUpdate,
+} from './billingService';
 
 /**
  * Retrieve the stored auth token from localStorage or sessionStorage
@@ -231,10 +236,16 @@ export const createPaymentIntent = async (plancode, token = null) => {
   }
 };
 
+export { toggleAutopay, createCardUpdateIntent, confirmCardUpdate };
+
 export default {
   getBillingPlans,
   selectTrialPlan,
   selectTrial,
   createPaymentIntent,
+  toggleAutopay,
+  createCardUpdateIntent,
+  confirmCardUpdate,
   getAuthToken,
 };
+

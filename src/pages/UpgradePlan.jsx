@@ -1,6 +1,12 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
+import {
+  toggleAutopay,
+  getBillingStatus,
+  createCardUpdateIntent,
+  confirmCardUpdate,
+} from "../services/billingService";
 
 const CheckIcon = () => (
   <svg
@@ -41,16 +47,148 @@ const billingData = [
 const UpgradePlan = () => {
   const [selectedPlan, setSelectedPlan] = useState("Pro");
   const [autoPay, setAutoPay] = useState(false);
+  const [isTogglingAutoPay, setIsTogglingAutoPay] = useState(false);
+  const [autoPayError, setAutoPayError] = useState("");
+  const [autoPayMessage, setAutoPayMessage] = useState("");
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [billingInfo, setBillingInfo] = useState(null);
 
-  // Form states for Add A New Card modal
+  // Saved Card Details State
+  const [savedCard, setSavedCard] = useState({
+    brand: "VISA",
+    last4: "4242",
+    exp: "04/29",
+  });
+
+  // Modal Card Form States
   const [cardName, setCardName] = useState("");
   const [cardNumber, setCardNumber] = useState("");
   const [expiryDate, setExpiryDate] = useState("");
+  const [cvv, setCvv] = useState("");
+  const [isUpdatingCard, setIsUpdatingCard] = useState(false);
+  const [cardUpdateError, setCardUpdateError] = useState("");
+  const [cardUpdateSuccess, setCardUpdateSuccess] = useState("");
 
-  const handleModalSubmit = (e) => {
+  useEffect(() => {
+    const fetchStatus = async () => {
+      try {
+        const data = await getBillingStatus();
+        if (data) {
+          setBillingInfo(data);
+          if (data.autoPay !== undefined) {
+            setAutoPay(Boolean(data.autoPay));
+          }
+          if (data.cardLast4 || data.cardLastFour) {
+            setSavedCard((prev) => ({
+              ...prev,
+              last4: data.cardLast4 || data.cardLastFour || prev.last4,
+              brand: (data.cardBrand || prev.brand).toUpperCase(),
+              exp: data.cardExp || data.cardExpiry || prev.exp,
+            }));
+          }
+        }
+      } catch (err) {
+        console.warn("Could not load billing status in UpgradePlan:", err);
+      }
+    };
+    fetchStatus();
+  }, []);
+
+  const handleToggleAutoPay = async () => {
+    if (isTogglingAutoPay) return;
+    const nextState = !autoPay;
+    try {
+      setIsTogglingAutoPay(true);
+      setAutoPayError("");
+      setAutoPayMessage("");
+      const result = await toggleAutopay(nextState);
+      setAutoPay(nextState);
+      setAutoPayMessage(result?.message || "Auto-pay updated.");
+    } catch (err) {
+      console.error("Failed to toggle auto-pay:", err);
+      setAutoPayError(err.message || "Failed to update auto-pay.");
+    } finally {
+      setIsTogglingAutoPay(false);
+    }
+  };
+
+  const formatCardNumberInput = (value) => {
+    const cleaned = value.replace(/\D/g, "").substring(0, 16);
+    const parts = cleaned.match(/.{1,4}/g);
+    return parts ? parts.join(" ") : cleaned;
+  };
+
+  const formatExpiryInput = (value) => {
+    const cleaned = value.replace(/\D/g, "").substring(0, 4);
+    if (cleaned.length >= 3) {
+      return `${cleaned.substring(0, 2)}/${cleaned.substring(2, 4)}`;
+    }
+    return cleaned;
+  };
+
+  const handleModalSubmit = async (e) => {
     e.preventDefault();
-    setIsPaymentModalOpen(false);
+    if (isUpdatingCard) return;
+
+    try {
+      setIsUpdatingCard(true);
+      setCardUpdateError("");
+      setCardUpdateSuccess("");
+
+      // Step 1: Create Stripe SetupIntent on the backend
+      const intentRes = await createCardUpdateIntent();
+      const clientSecret = intentRes?.clientSecret || "";
+
+      // Extract setupIntentId (Stripe format: seti_12345_secret_67890 -> seti_12345)
+      const setupIntentId = clientSecret.includes("_secret_")
+        ? clientSecret.split("_secret_")[0]
+        : clientSecret;
+
+      if (!setupIntentId) {
+        throw new Error("Invalid SetupIntent client secret returned from server.");
+      }
+
+      // Step 2: Confirm card update with backend
+      const confirmRes = await confirmCardUpdate(setupIntentId);
+
+      // Determine brand & last 4 digits for UI feedback
+      const cleanNum = cardNumber.replace(/\s+/g, "");
+      const last4 = cleanNum.slice(-4) || "4242";
+      const exp = expiryDate || "04/29";
+      let brand = "CARD";
+      if (cleanNum.startsWith("4")) brand = "VISA";
+      else if (cleanNum.startsWith("5")) brand = "MASTERCARD";
+      else if (cleanNum.startsWith("3")) brand = "AMEX";
+      else if (cleanNum.startsWith("6")) brand = "DISCOVER";
+
+      setSavedCard({
+        brand,
+        last4,
+        exp,
+      });
+
+      const successMsg =
+        typeof confirmRes === "string"
+          ? confirmRes
+          : confirmRes?.message || "Card updated successfully.";
+      setCardUpdateSuccess(successMsg);
+
+      // Reset form fields and close modal smoothly
+      setTimeout(() => {
+        setIsPaymentModalOpen(false);
+        setCardName("");
+        setCardNumber("");
+        setExpiryDate("");
+        setCvv("");
+        setCardUpdateSuccess("");
+        setCardUpdateError("");
+      }, 1200);
+    } catch (err) {
+      console.error("Failed to update card details:", err);
+      setCardUpdateError(err.message || "Failed to update card details.");
+    } finally {
+      setIsUpdatingCard(false);
+    }
   };
 
   return (
@@ -283,25 +421,29 @@ const UpgradePlan = () => {
 
                     <button
                       type="button"
-                      onClick={() => setIsPaymentModalOpen(true)}
+                      onClick={() => {
+                        setCardUpdateError("");
+                        setCardUpdateSuccess("");
+                        setIsPaymentModalOpen(true);
+                      }}
                       className="text-[12.5px] font-medium text-[#2563EB] hover:text-[#1D4ED8] transition-colors cursor-pointer"
                     >
                       Update payment details
                     </button>
                   </div>
 
-                  {/* Visa Card Box */}
+                  {/* Card Display Box */}
                   <div className="p-3 rounded-[12px] border border-slate-100 bg-[#F8FAFC] flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <div className="px-2.5 py-1 rounded-[6px] bg-[#1E293B] text-white text-[11px] font-bold tracking-wider">
-                        VISA
+                      <div className="px-2.5 py-1 rounded-[6px] bg-[#1E293B] text-white text-[11px] font-bold tracking-wider uppercase">
+                        {savedCard.brand}
                       </div>
                       <div className="flex flex-col">
                         <span className="text-[13px] font-medium text-[#0F172A]">
-                          •••• •••• •••• 4242
+                          •••• •••• •••• {savedCard.last4}
                         </span>
                         <span className="text-[11px] text-[#94A3B8]">
-                          Exp 04/29
+                          Exp {savedCard.exp}
                         </span>
                       </div>
                     </div>
@@ -328,20 +470,52 @@ const UpgradePlan = () => {
 
                     <button
                       type="button"
-                      onClick={() => setAutoPay(!autoPay)}
-                      className={`w-10 h-5.5 rounded-full transition-colors relative cursor-pointer ${autoPay ? "bg-[#4F46E5]" : "bg-slate-300"
+                      disabled={isTogglingAutoPay}
+                      onClick={handleToggleAutoPay}
+                      className={`w-10 h-5.5 rounded-full transition-colors relative cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${autoPay ? "bg-[#4F46E5]" : "bg-slate-300"
                         }`}
+                      aria-label="Toggle Auto-pay"
                     >
                       <span
                         className={`block w-4.5 h-4.5 rounded-full bg-white shadow-md transform transition-transform ${autoPay ? "translate-x-5" : "translate-x-0.5"
-                          } top-0.5 absolute`}
-                      />
+                          } top-0.5 absolute flex items-center justify-center`}
+                      >
+                        {isTogglingAutoPay && (
+                          <span className="w-2.5 h-2.5 rounded-full border-2 border-indigo-600 border-t-transparent animate-spin" />
+                        )}
+                      </span>
                     </button>
                   </div>
 
                   <p className="text-[12px] text-[#64748B] leading-snug">
                     Automatically renew monthly via saved card. You'll never run out of credits.
                   </p>
+
+                  {autoPayError && (
+                    <div className="p-2.5 bg-red-50 border border-red-200 rounded-lg text-red-600 text-[11.5px] font-medium leading-tight flex items-center justify-between">
+                      <span>{autoPayError}</span>
+                      <button
+                        type="button"
+                        onClick={() => setAutoPayError("")}
+                        className="text-red-500 hover:text-red-700 ml-2 font-bold cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+
+                  {autoPayMessage && (
+                    <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-700 text-[11.5px] font-medium leading-tight flex items-center justify-between">
+                      <span>{autoPayMessage}</span>
+                      <button
+                        type="button"
+                        onClick={() => setAutoPayMessage("")}
+                        className="text-emerald-500 hover:text-emerald-700 ml-2 font-bold cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
 
                   <button
                     type="button"
@@ -405,25 +579,65 @@ const UpgradePlan = () => {
         </main>
       </div>
 
-      {/* Add A New Card Modal Popup */}
+      {/* Add A New Card / Update Payment Details Modal Popup */}
       {isPaymentModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-[2px] p-4">
-          <div className="w-full max-w-[430px] rounded-[20px] bg-white p-6 shadow-2xl relative animate-in fade-in zoom-in-95 duration-150">
+          <div className="w-full max-w-[440px] rounded-[20px] bg-white p-6 shadow-2xl relative animate-in fade-in zoom-in-95 duration-150">
             {/* Modal Header */}
-            <div className="flex items-center justify-between pb-4">
-              <h3 className="text-[17px] font-bold text-[#0F172A]">
-                Add A New Card
-              </h3>
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div>
+                <h3 className="text-[17px] font-bold text-[#0F172A]">
+                  Update Payment Details
+                </h3>
+                <p className="text-[12px] text-[#64748B] mt-0.5">
+                  Enter your card details to replace your saved payment method.
+                </p>
+              </div>
               <button
                 type="button"
-                onClick={() => setIsPaymentModalOpen(false)}
-                className="text-slate-900 hover:text-slate-600 transition-colors p-1 cursor-pointer"
+                disabled={isUpdatingCard}
+                onClick={() => {
+                  if (!isUpdatingCard) {
+                    setIsPaymentModalOpen(false);
+                    setCardUpdateError("");
+                    setCardUpdateSuccess("");
+                  }
+                }}
+                className="text-slate-400 hover:text-slate-700 transition-colors p-1 cursor-pointer disabled:opacity-40"
               >
                 <svg className="w-5 h-5 stroke-[2.5]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
+
+            {/* Error Notification inside Modal */}
+            {cardUpdateError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-[12px] text-red-600 text-[12px] font-medium leading-tight flex items-center justify-between">
+                <span>{cardUpdateError}</span>
+                <button
+                  type="button"
+                  onClick={() => setCardUpdateError("")}
+                  className="text-red-500 hover:text-red-700 ml-2 font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {/* Success Notification inside Modal */}
+            {cardUpdateSuccess && (
+              <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-[12px] text-emerald-700 text-[12px] font-medium leading-tight flex items-center justify-between">
+                <span>{cardUpdateSuccess}</span>
+                <button
+                  type="button"
+                  onClick={() => setCardUpdateSuccess("")}
+                  className="text-emerald-500 hover:text-emerald-700 ml-2 font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
 
             {/* Modal Form */}
             <form onSubmit={handleModalSubmit} className="flex flex-col gap-4">
@@ -439,10 +653,11 @@ const UpgradePlan = () => {
                   <input
                     type="text"
                     required
-                    placeholder="Enter Your name"
+                    disabled={isUpdatingCard}
+                    placeholder="Enter full name"
                     value={cardName}
                     onChange={(e) => setCardName(e.target.value)}
-                    className="w-full bg-transparent text-[13px] text-slate-800 placeholder:text-[#94A3B8] outline-none"
+                    className="w-full bg-transparent text-[13px] text-slate-800 placeholder:text-[#94A3B8] outline-none disabled:opacity-60"
                   />
                 </div>
               </div>
@@ -450,7 +665,7 @@ const UpgradePlan = () => {
               {/* Field 2: Debit/Credit card number */}
               <div className="flex flex-col gap-1.5">
                 <label className="text-[13px] font-medium text-slate-800">
-                  Debit/Credit card number <span className="text-red-500">*</span>
+                  Debit/Credit Card Number <span className="text-red-500">*</span>
                 </label>
                 <div className="flex items-center gap-2.5 rounded-[12px] bg-[#F8FAFC] border border-[#E2E8F0] px-3.5 py-2.5 focus-within:border-[#004B97] focus-within:bg-white focus-within:ring-1 focus-within:ring-[#004B97] transition-all">
                   <svg className="w-4 h-4 text-[#64748B] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -460,44 +675,90 @@ const UpgradePlan = () => {
                   <input
                     type="text"
                     required
-                    placeholder="Enter your card details"
+                    disabled={isUpdatingCard}
+                    placeholder="1234 5678 9012 3456"
+                    maxLength={19}
                     value={cardNumber}
-                    onChange={(e) => setCardNumber(e.target.value)}
-                    className="w-full bg-transparent text-[13px] text-slate-800 placeholder:text-[#94A3B8] outline-none"
+                    onChange={(e) => setCardNumber(formatCardNumberInput(e.target.value))}
+                    className="w-full bg-transparent text-[13px] text-slate-800 placeholder:text-[#94A3B8] outline-none font-mono disabled:opacity-60"
                   />
                 </div>
               </div>
 
-              {/* Field 3: Expiry Date */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[13px] font-medium text-slate-800">
-                  Expiry Date <span className="text-red-500">*</span>
-                </label>
-                <div className="flex items-center gap-2.5 rounded-[12px] bg-[#F8FAFC] border border-[#E2E8F0] px-3.5 py-2.5 focus-within:border-[#004B97] focus-within:bg-white focus-within:ring-1 focus-within:ring-[#004B97] transition-all">
-                  <svg className="w-4 h-4 text-[#64748B] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                    <line x1="16" y1="2" x2="16" y2="6" />
-                    <line x1="8" y1="2" x2="8" y2="6" />
-                    <line x1="3" y1="10" x2="21" y2="10" />
-                  </svg>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Enter Expiry Date"
-                    value={expiryDate}
-                    onChange={(e) => setExpiryDate(e.target.value)}
-                    className="w-full bg-transparent text-[13px] text-slate-800 placeholder:text-[#94A3B8] outline-none"
-                  />
+              {/* Row: Expiry Date & CVV */}
+              <div className="grid grid-cols-2 gap-3">
+                {/* Field 3: Expiry Date */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[13px] font-medium text-slate-800">
+                    Expiry Date <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex items-center gap-2.5 rounded-[12px] bg-[#F8FAFC] border border-[#E2E8F0] px-3.5 py-2.5 focus-within:border-[#004B97] focus-within:bg-white focus-within:ring-1 focus-within:ring-[#004B97] transition-all">
+                    <svg className="w-4 h-4 text-[#64748B] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                      <line x1="16" y1="2" x2="16" y2="6" />
+                      <line x1="8" y1="2" x2="8" y2="6" />
+                      <line x1="3" y1="10" x2="21" y2="10" />
+                    </svg>
+                    <input
+                      type="text"
+                      required
+                      disabled={isUpdatingCard}
+                      placeholder="MM/YY"
+                      maxLength={5}
+                      value={expiryDate}
+                      onChange={(e) => setExpiryDate(formatExpiryInput(e.target.value))}
+                      className="w-full bg-transparent text-[13px] text-slate-800 placeholder:text-[#94A3B8] outline-none font-mono disabled:opacity-60"
+                    />
+                  </div>
+                </div>
+
+                {/* Field 4: CVV / CVC */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[13px] font-medium text-slate-800">
+                    CVC / CVV <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex items-center gap-2.5 rounded-[12px] bg-[#F8FAFC] border border-[#E2E8F0] px-3.5 py-2.5 focus-within:border-[#004B97] focus-within:bg-white focus-within:ring-1 focus-within:ring-[#004B97] transition-all">
+                    <svg className="w-4 h-4 text-[#64748B] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0110 0v4" />
+                    </svg>
+                    <input
+                      type="password"
+                      required
+                      disabled={isUpdatingCard}
+                      placeholder="•••"
+                      maxLength={4}
+                      value={cvv}
+                      onChange={(e) => setCvv(e.target.value.replace(/\D/g, "").substring(0, 4))}
+                      className="w-full bg-transparent text-[13px] text-slate-800 placeholder:text-[#94A3B8] outline-none font-mono disabled:opacity-60"
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* Submit Button */}
-              <div className="flex justify-end pt-2">
+              {/* Submit Buttons */}
+              <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100 mt-2">
+                <button
+                  type="button"
+                  disabled={isUpdatingCard}
+                  onClick={() => setIsPaymentModalOpen(false)}
+                  className="px-4 py-2.5 rounded-[10px] border border-[#E2E8F0] hover:bg-slate-50 text-slate-600 font-medium text-[13px] transition-all cursor-pointer disabled:opacity-50"
+                >
+                  Cancel
+                </button>
                 <button
                   type="submit"
-                  className="px-7 py-2.5 rounded-[10px] bg-[#004B97] hover:bg-[#003B77] text-white font-medium text-[13.5px] shadow-sm transition-all cursor-pointer"
+                  disabled={isUpdatingCard}
+                  className="px-6 py-2.5 rounded-[10px] bg-[#004B97] hover:bg-[#003B77] text-white font-medium text-[13.5px] shadow-sm transition-all cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  Submit
+                  {isUpdatingCard ? (
+                    <>
+                      <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                      <span>Updating Card...</span>
+                    </>
+                  ) : (
+                    <span>Update Card</span>
+                  )}
                 </button>
               </div>
             </form>

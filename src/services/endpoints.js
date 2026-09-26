@@ -20,6 +20,9 @@ export const BILLING_ENDPOINTS = {
   PLANS: `${API_BASE_URL}/api/billing/plans`,
   SELECT_TRIAL: `${API_BASE_URL}/api/billing/select-trial`,
   CREATE_PAYMENT_INTENT: `${API_BASE_URL}/api/billing/create-payment-intent`,
+  TOGGLE_AUTOPAY: `${API_BASE_URL}/api/billing/toggle-autopay`,
+  CREATE_CARD_UPDATE_INTENT: `${API_BASE_URL}/api/billing/create-card-update-intent`,
+  CONFIRM_CARD_UPDATE: `${API_BASE_URL}/api/billing/confirm-card-update`,
 };
 
 export const ENDPOINTS = {
