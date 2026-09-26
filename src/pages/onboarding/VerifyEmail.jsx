@@ -215,16 +215,6 @@ const VerifyEmail = ({ email: propEmail }) => {
           </button>
         </div>
 
-        {/* Success Alert Message */}
-        {successMessage && (
-          <div className="mb-4 p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs sm:text-[13px] font-medium flex items-center gap-2 animate-in fade-in">
-            <svg className="w-4 h-4 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-            <span>{successMessage}</span>
-          </div>
-        )}
-
         {/* Error Alert Message */}
         {errorMessage && (
           <div className="mb-4 p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs sm:text-[13px] font-medium flex items-center gap-2 animate-in fade-in">
@@ -238,10 +228,10 @@ const VerifyEmail = ({ email: propEmail }) => {
         )}
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           {/* OTP Input Section */}
           <div className="flex flex-col">
-            <label className="text-[#334155] text-[14px] font-semibold mb-3 block">
+            <label className="text-[#334155] text-[13.5px] font-semibold mb-2.5 block">
               Enter 6-digit verification code
             </label>
             <div
@@ -274,13 +264,20 @@ const VerifyEmail = ({ email: propEmail }) => {
                 );
               })}
             </div>
+
+            {/* Success Alert Message (Below OTP Inputs as in Image 1) */}
+            {successMessage && (
+              <div className="mt-3.5 p-2.5 px-3.5 rounded-lg bg-[#E6FDF4] border border-[#A7F3D0] text-[#059669] text-xs sm:text-[13px] font-medium flex items-center gap-2 animate-in fade-in">
+                <span>{successMessage}</span>
+              </div>
+            )}
           </div>
 
           {/* Submit CTA Button */}
           <button
             type="submit"
             disabled={isSubmitting || otp.some((d) => !d || !/^\d$/.test(d))}
-            className="group w-full h-12 mt-2 bg-gradient-to-r from-[#5748f2] to-[#7633e8] hover:from-[#4f3ee8] hover:to-[#6d2bd8] text-white font-semibold text-sm sm:text-[15px] rounded-xl flex items-center justify-center gap-2 shadow-[0px_4px_6px_-4px_#6366F140,0px_10px_15px_-3px_#6366F140] hover:shadow-[0px_6px_10px_-4px_#6366F160,0px_14px_20px_-3px_#6366F160] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
+            className="group w-full h-12 mt-1 bg-gradient-to-r from-[#5748f2] to-[#7633e8] hover:from-[#4f3ee8] hover:to-[#6d2bd8] text-white font-semibold text-sm sm:text-[15px] rounded-xl flex items-center justify-center gap-2 shadow-[0px_4px_6px_-4px_#6366F140,0px_10px_15px_-3px_#6366F140] hover:shadow-[0px_6px_10px_-4px_#6366F160,0px_14px_20px_-3px_#6366F160] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
           >
             <span>{isSubmitting ? 'Verifying...' : 'Verify & Continue'}</span>
             {!isSubmitting && (
@@ -299,15 +296,19 @@ const VerifyEmail = ({ email: propEmail }) => {
             <button
               type="button"
               onClick={handleResend}
-              disabled={isResending}
-              className="inline-flex items-center gap-1.5 text-[#4F46E5] hover:text-indigo-800 text-xs sm:text-[13px] font-bold cursor-pointer border-none bg-transparent p-0 transition-colors disabled:opacity-60"
+              disabled={isResending || timer > 0}
+              className={`inline-flex items-center gap-1.5 text-xs sm:text-[13px] font-semibold border-none bg-transparent p-0 transition-colors ${
+                timer > 0 || isResending
+                  ? 'text-[#4F46E5]/70 cursor-not-allowed'
+                  : 'text-[#4F46E5] hover:text-indigo-800 cursor-pointer font-bold'
+              }`}
             >
               <RefreshCw size={13} className={isResending ? 'animate-spin' : ''} />
               <span>
                 {isResending
                   ? 'Sending...'
                   : timer > 0
-                  ? `Resend code (${formatTimer(timer)})`
+                  ? `Resend code ${formatTimer(timer)}`
                   : 'Resend code'}
               </span>
             </button>

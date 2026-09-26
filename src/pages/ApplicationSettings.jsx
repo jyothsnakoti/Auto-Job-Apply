@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import logoSrc from '../assets/Background.svg';
+import {
+    logoutUser,
+    getStoredUser,
+    getOnboardingState,
+    setOnboardingState,
+    buildOnboardingPayload,
+    submitOnboarding,
+} from '../services/api';
 
 const ApplicationSettings = () => {
     const navigate = useNavigate();
@@ -9,17 +17,45 @@ const ApplicationSettings = () => {
         typeof window !== 'undefined' ? window.innerWidth : 1440
     );
 
+    // User email state
+    const [userEmail, setUserEmail] = useState('');
+
     // Form states
-    const [resumeTailoring, setResumeTailoring] = useState(null); // 'original' | 'job-specific'
-    const [autoApproveEdits, setAutoApproveEdits] = useState(null); // true | false
-
-    const [automationMode, setAutomationMode] = useState(null); // 'automatic' | 'review-before-submit'
-
-    const [coverLetterMode, setCoverLetterMode] = useState(null); // 'auto-generate' | 'none'
-
-    const [questionMode, setQuestionMode] = useState(null); // 'saved-answers' | 'ask-when-needed'
+    const [resumeTailoring, setResumeTailoring] = useState('job-specific'); // 'original' | 'job-specific'
+    const [autoApproveEdits, setAutoApproveEdits] = useState(true); // true | false
+    const [automationMode, setAutomationMode] = useState('automatic'); // 'automatic' | 'review-before-submit'
+    const [coverLetterMode, setCoverLetterMode] = useState('auto-generate'); // 'auto-generate' | 'none'
+    const [questionMode, setQuestionMode] = useState('saved-answers'); // 'saved-answers' | 'ask-when-needed'
 
     const [isHoveredContinue, setIsHoveredContinue] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [errorMessage, setErrorMessage] = useState('');
+    const [showToast, setShowToast] = useState(false);
+    const [toastMessage, setToastMessage] = useState('');
+
+    useEffect(() => {
+        const user = getStoredUser();
+        if (user.email) setUserEmail(user.email);
+
+        const savedState = getOnboardingState();
+        if (savedState.resumeOptimization || savedState.resumeTailoring) {
+            setResumeTailoring(savedState.resumeOptimization || savedState.resumeTailoring);
+        }
+        if (savedState.autoApproveEdits !== undefined) {
+            setAutoApproveEdits(savedState.autoApproveEdits);
+        }
+        if (savedState.automationMode) {
+            setAutomationMode(savedState.automationMode);
+        } else if (savedState.reviewBeforeSubmit !== undefined) {
+            setAutomationMode(savedState.reviewBeforeSubmit ? 'review-before-submit' : 'automatic');
+        }
+        if (savedState.coverLetterMode) {
+            setCoverLetterMode(savedState.coverLetterMode);
+        }
+        if (savedState.questionMode) {
+            setQuestionMode(savedState.questionMode);
+        }
+    }, []);
 
     useEffect(() => {
         const handleResize = () => setWindowWidth(window.innerWidth);
@@ -37,9 +73,54 @@ const ApplicationSettings = () => {
         'Fully automated applications',
     ];
 
-    const handleContinue = () => {
-        // Final onboarding step completed, navigate to dashboard
-        navigate('/dashboard');
+    const handleContinue = async () => {
+        if (isSubmitting) return;
+        setErrorMessage('');
+
+        // Update current settings to common state
+        const updatedState = setOnboardingState({
+            resumeOptimization: resumeTailoring || 'job-specific',
+            resumeTailoring: resumeTailoring || 'job-specific',
+            autoApproveEdits: autoApproveEdits !== null ? autoApproveEdits : true,
+            reviewBeforeSubmit: automationMode === 'review-before-submit',
+            automationMode: automationMode || 'automatic',
+            coverLetterMode: coverLetterMode || 'auto-generate',
+            questionMode: questionMode || 'saved-answers',
+        });
+
+        // Validation of collected onboarding fields
+        if (!updatedState.addressLine1 && !updatedState.address) {
+            setErrorMessage('Location address is missing. Please go back to Step 2 and enter your address.');
+            return;
+        }
+
+        if (!updatedState.phone && !updatedState.phoneNumber) {
+            setErrorMessage('Phone number is missing. Please go back to Step 3 and enter your phone number.');
+            return;
+        }
+
+        setIsSubmitting(true);
+
+        try {
+            const payload = buildOnboardingPayload(updatedState);
+            const response = await submitOnboarding(payload);
+
+            // Display success toast notification
+            const successMsg = response?.message || 'Onboarding completed successfully!';
+            setToastMessage(successMsg);
+            setShowToast(true);
+
+            // Navigate to dashboard after toast
+            setTimeout(() => {
+                navigate('/dashboard');
+            }, 1400);
+        } catch (error) {
+            console.error('Failed to complete onboarding:', error);
+            setErrorMessage(
+                error.message || 'An error occurred while saving your onboarding details. Please try again.'
+            );
+            setIsSubmitting(false);
+        }
     };
 
     const styles = {
@@ -487,22 +568,9 @@ const ApplicationSettings = () => {
                     <span style={styles.brandText}>Auto Jobs Apply</span>
                 </a>
 
-                {/* Right: Email & Logout */}
+                {/* Right: Email */}
                 <div style={styles.userArea}>
-                    <span style={styles.userEmail}>nareshpulluri79@gmail.com</span>
-                    <button
-                        type="button"
-                        onClick={() => navigate('/')}
-                        style={styles.logoutBtn}
-                        aria-label="Log out"
-                    >
-                        <svg viewBox="0 0 24 24" style={styles.logoutSvg}>
-                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                            <polyline points="16 17 21 12 16 7" />
-                            <line x1="21" y1="12" x2="9" y2="12" />
-                        </svg>
-                        <span>Log out</span>
-                    </button>
+                    <span style={styles.userEmail}>{userEmail || 'nareshpulluri79@gmail.com'}</span>
                 </div>
             </header>
 
@@ -583,6 +651,42 @@ const ApplicationSettings = () => {
 
                         {/* RIGHT FORM CARD */}
                         <div style={styles.rightCard}>
+                            {errorMessage && (
+                                <div
+                                    style={{
+                                        marginBottom: '20px',
+                                        padding: '12px 16px',
+                                        backgroundColor: '#FEF2F2',
+                                        border: '1px solid #FECACA',
+                                        borderRadius: '12px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '10px',
+                                        color: '#B91C1C',
+                                        fontSize: '13.5px',
+                                        fontFamily: '"Plus Jakarta Sans", sans-serif',
+                                        fontWeight: '500',
+                                    }}
+                                >
+                                    <svg
+                                        viewBox="0 0 24 24"
+                                        style={{
+                                            width: '18px',
+                                            height: '18px',
+                                            stroke: '#DC2626',
+                                            strokeWidth: '2',
+                                            fill: 'none',
+                                            flexShrink: 0,
+                                        }}
+                                    >
+                                        <circle cx="12" cy="12" r="10" />
+                                        <line x1="12" y1="8" x2="12" y2="12" />
+                                        <line x1="12" y1="16" x2="12.01" y2="16" />
+                                    </svg>
+                                    <span>{errorMessage}</span>
+                                </div>
+                            )}
+
                             {/* SECTION 1: RESUME TAILORING */}
                             <div>
                                 <label style={styles.sectionLabel}>RESUME TAILORING</label>
@@ -762,19 +866,98 @@ const ApplicationSettings = () => {
                             <button
                                 type="button"
                                 onClick={handleContinue}
-                                style={styles.continueBtn(isHoveredContinue)}
+                                disabled={isSubmitting}
+                                style={{
+                                    ...styles.continueBtn(isHoveredContinue),
+                                    opacity: isSubmitting ? 0.7 : 1,
+                                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                                }}
                                 onMouseEnter={() => setIsHoveredContinue(true)}
                                 onMouseLeave={() => setIsHoveredContinue(false)}
                             >
-                                <span>Continue</span>
-                                <svg viewBox="0 0 24 24" style={styles.arrowSvg}>
-                                    <path d="M5 12h14M12 5l7 7-7 7" />
-                                </svg>
+                                <span>{isSubmitting ? 'Completing Setup...' : 'Continue'}</span>
+                                {!isSubmitting && (
+                                    <svg viewBox="0 0 24 24" style={styles.arrowSvg}>
+                                        <path d="M5 12h14M12 5l7 7-7 7" />
+                                    </svg>
+                                )}
                             </button>
                         </div>
                     </div>
                 </div>
             </main>
+            {/* TOAST NOTIFICATION POPUP */}
+            {showToast && (
+                <div
+                    style={{
+                        position: 'fixed',
+                        top: '24px',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        zIndex: 9999,
+                        backgroundColor: '#FFFFFF',
+                        border: '1.5px solid #10B981',
+                        borderRadius: '16px',
+                        boxShadow: '0 20px 30px -10px rgba(16, 185, 129, 0.2), 0 10px 15px -3px rgba(0, 0, 0, 0.08)',
+                        padding: '14px 22px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        maxWidth: '90vw',
+                        animation: 'fadeInSlideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+                    }}
+                >
+                    <div
+                        style={{
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '50%',
+                            backgroundColor: '#ECFDF5',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                        }}
+                    >
+                        <svg
+                            viewBox="0 0 24 24"
+                            style={{
+                                width: '18px',
+                                height: '18px',
+                                stroke: '#10B981',
+                                strokeWidth: '2.5',
+                                fill: 'none',
+                                strokeLinecap: 'round',
+                                strokeLinejoin: 'round',
+                            }}
+                        >
+                            <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span
+                            style={{
+                                fontFamily: '"Plus Jakarta Sans", sans-serif',
+                                fontSize: '14.5px',
+                                fontWeight: '700',
+                                color: '#065F46',
+                            }}
+                        >
+                            {toastMessage || 'Onboarding completed!'}
+                        </span>
+                        <span
+                            style={{
+                                fontFamily: '"Plus Jakarta Sans", sans-serif',
+                                fontSize: '12.5px',
+                                color: '#64748B',
+                                marginTop: '1px',
+                            }}
+                        >
+                            Redirecting you to the dashboard...
+                        </span>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

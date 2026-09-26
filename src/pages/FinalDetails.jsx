@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import logoSrc from '../assets/Background.svg';
+import { logoutUser, getStoredUser, getOnboardingState, setOnboardingState } from '../services/api';
 
 const FinalDetails = () => {
     const navigate = useNavigate();
@@ -8,6 +9,9 @@ const FinalDetails = () => {
     const [windowWidth, setWindowWidth] = useState(
         typeof window !== 'undefined' ? window.innerWidth : 1440
     );
+
+    // User email state
+    const [userEmail, setUserEmail] = useState('');
 
     // Form states
     const [openToInPerson, setOpenToInPerson] = useState(null);
@@ -26,6 +30,31 @@ const FinalDetails = () => {
 
     const [additionalNotes, setAdditionalNotes] = useState('');
     const [isHoveredContinue, setIsHoveredContinue] = useState(false);
+
+    useEffect(() => {
+        const user = getStoredUser();
+        if (user.email) setUserEmail(user.email);
+
+        const savedState = getOnboardingState();
+        if (savedState.openToInPerson !== undefined) setOpenToInPerson(savedState.openToInPerson);
+        if (savedState.willingToRelocate !== undefined) setWillingToRelocate(savedState.willingToRelocate);
+        if (savedState.canStartImmediately !== undefined) setCanStartImmediately(savedState.canStartImmediately);
+        if (savedState.reliableTransportation !== undefined) setReliableTransportation(savedState.reliableTransportation);
+        if (savedState.needAccommodations !== undefined || savedState.workplaceAccommodations !== undefined) {
+            setWorkplaceAccommodations(savedState.needAccommodations ?? savedState.workplaceAccommodations);
+        }
+        if (savedState.activeGovernmentClearance !== undefined || savedState.governmentClearance !== undefined) {
+            setGovernmentClearance(savedState.activeGovernmentClearance ?? savedState.governmentClearance);
+        }
+        if (savedState.foreignGovernmentTies !== undefined || savedState.foreignTies !== undefined) {
+            setForeignTies(savedState.foreignGovernmentTies ?? savedState.foreignTies);
+        }
+        if (savedState.gender) setGender(savedState.gender);
+        if (savedState.raceEthnicity || savedState.ethnicity) setEthnicity(savedState.raceEthnicity || savedState.ethnicity);
+        if (savedState.veteranStatus !== undefined) setVeteranStatus(savedState.veteranStatus);
+        if (savedState.disabilityStatus !== undefined) setDisabilityStatus(savedState.disabilityStatus);
+        if (savedState.additionalNotes) setAdditionalNotes(savedState.additionalNotes);
+    }, []);
 
     useEffect(() => {
         const handleResize = () => setWindowWidth(window.innerWidth);
@@ -63,6 +92,25 @@ const FinalDetails = () => {
     ];
 
     const handleContinue = () => {
+        setOnboardingState({
+            openToInPerson,
+            willingToRelocate,
+            canStartImmediately,
+            reliableTransportation,
+            workplaceAccommodations,
+            needAccommodations: workplaceAccommodations,
+            governmentClearance,
+            activeGovernmentClearance: governmentClearance,
+            foreignTies,
+            foreignGovernmentTies: foreignTies,
+            gender,
+            ethnicity,
+            raceEthnicity: ethnicity,
+            veteranStatus,
+            disabilityStatus,
+            additionalNotes,
+        });
+
         navigate('/application-settings', {
             state: {
                 openToInPerson,
@@ -572,22 +620,9 @@ const FinalDetails = () => {
                     <span style={styles.brandText}>Auto Jobs Apply</span>
                 </a>
 
-                {/* Right: Email & Logout */}
+                {/* Right: Email */}
                 <div style={styles.userArea}>
-                    <span style={styles.userEmail}>nareshpulluri79@gmail.com</span>
-                    <button
-                        type="button"
-                        onClick={() => navigate('/')}
-                        style={styles.logoutBtn}
-                        aria-label="Log out"
-                    >
-                        <svg viewBox="0 0 24 24" style={styles.logoutSvg}>
-                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                            <polyline points="16 17 21 12 16 7" />
-                            <line x1="21" y1="12" x2="9" y2="12" />
-                        </svg>
-                        <span>Log out</span>
-                    </button>
+                    <span style={styles.userEmail}>{userEmail || 'nareshpulluri79@gmail.com'}</span>
                 </div>
             </header>
 
