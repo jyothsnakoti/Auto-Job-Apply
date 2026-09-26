@@ -62,13 +62,16 @@ export const getOnboardingProfile = async (token = null) => {
 export { updatePersonalProfile } from './personalProfileService';
 export { updateLocationProfile } from './locationProfileService';
 export { updateProfileSettings } from './settingsProfileService';
+export { updateWorkPreferencesProfile } from './workPreferencesProfileService';
 import { updatePersonalProfile } from './personalProfileService';
 import { updateLocationProfile } from './locationProfileService';
 import { updateProfileSettings } from './settingsProfileService';
+import { updateWorkPreferencesProfile } from './workPreferencesProfileService';
 
 export default {
   getOnboardingProfile,
   updatePersonalProfile,
   updateLocationProfile,
   updateProfileSettings,
+  updateWorkPreferencesProfile,
 };
