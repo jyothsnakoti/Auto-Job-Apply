@@ -23,6 +23,7 @@ export const BILLING_ENDPOINTS = {
   CREATE_PAYMENT_INTENT: `${API_BASE_URL}/api/billing/create-payment-intent`,
   CONFIRM_PAYMENT: `${API_BASE_URL}/api/billing/confirm-payment`,
   STATUS: `${API_BASE_URL}/api/billing/status`,
+  HISTORY: `${API_BASE_URL}/api/billing/history`,
   RECOVER: `${API_BASE_URL}/api/billing/recover`,
   SELECT_TRIAL: `${API_BASE_URL}/api/billing/select-trial`,
 };
