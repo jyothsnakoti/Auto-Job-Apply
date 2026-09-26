@@ -4,7 +4,7 @@
  */
 
 import { BILLING_ENDPOINTS } from './endpoints';
-import { getStoredTokens, saveAuthTokens, clearAuthTokens, refreshAuthToken as authRefresh } from './authService';
+import { getStoredTokens, saveAuthTokens, clearAuthTokens, refreshAuthToken as authRefresh, fetchWithAuth } from './authService';
 
 /**
  * Clean and sanitize stored token string (strips quotes, whitespace, Bearer prefix)
@@ -209,6 +209,9 @@ export const getStripePublishableKey = async () => {
     if (typeof data === 'object' && data?.publishableKey) {
       return data.publishableKey;
     }
+    if (typeof data === 'string' && data.startsWith('pk_')) {
+      return data.trim();
+    }
   } catch (err) {
     // Rethrow auth errors so UI knows authentication failed
     if (err?.status === 401 || err?.status === 403 || err?.isAuthError) {
@@ -238,6 +241,9 @@ export const createPaymentIntent = async (plancode) => {
 
   if (typeof res === 'object' && res?.clientSecret) {
     return res.clientSecret;
+  }
+  if (typeof res === 'string' && res.includes('_secret_')) {
+    return res.trim();
   }
   throw new Error('Backend did not return a valid clientSecret for PaymentIntent creation.');
 };
@@ -270,18 +276,19 @@ export const confirmBackendPayment = async (paymentIntentId) => {
  * Response: { "hasPlan": true, "remainingApplications": 250 | 1000 }
  */
 export const getBillingStatus = async (token = null) => {
+  let data;
   if (token) {
     // If specific token was explicitly provided
+    const headers = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/plain, */*',
+      Authorization: `Bearer ${token}`,
+    };
     const res = await fetch(BILLING_ENDPOINTS.STATUS, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json, text/plain, */*',
-        Authorization: `Bearer ${token}`,
-      },
+      headers,
     });
     const text = await res.text().catch(() => '');
-    let data;
     try {
       data = JSON.parse(text);
     } catch {
@@ -292,12 +299,49 @@ export const getBillingStatus = async (token = null) => {
       error.status = res.status;
       throw error;
     }
-    return data;
+  } else {
+    data = await authenticatedFetch(BILLING_ENDPOINTS.STATUS, {
+      method: 'GET',
+    });
   }
 
-  return await authenticatedFetch(BILLING_ENDPOINTS.STATUS, {
-    method: 'GET',
-  });
+  const billingInfo = {
+    hasPlan: Boolean(data?.hasPlan),
+    planName: data?.planName || (data?.hasPlan ? 'Active Plan' : 'No active plan'),
+    applicationAllowance:
+      typeof data?.applicationAllowance === 'number'
+        ? data.applicationAllowance
+        : typeof data?.remainingApplications === 'number'
+        ? data.remainingApplications
+        : 0,
+    usedApplications: typeof data?.usedApplications === 'number' ? data.usedApplications : 0,
+    remainingApplications: typeof data?.remainingApplications === 'number' ? data.remainingApplications : 0,
+    billingInterval: data?.billingInterval || 'month',
+    ...(typeof data === 'object' ? data : {}),
+  };
+
+  try {
+    const storage =
+      localStorage.getItem('token') ||
+      localStorage.getItem('accessToken') ||
+      localStorage.getItem('authToken')
+        ? localStorage
+        : sessionStorage;
+    storage.setItem('billingStatus', JSON.stringify(billingInfo));
+    storage.setItem('hasPlan', String(Boolean(data?.hasPlan)));
+  } catch {
+    // storage fail-safe
+  }
+
+  if (typeof window !== 'undefined') {
+    try {
+      window.dispatchEvent(new CustomEvent('billingStatusUpdated', { detail: billingInfo }));
+    } catch {
+      // Event dispatch fail-safe
+    }
+  }
+
+  return billingInfo;
 };
 
 /**

@@ -170,6 +170,122 @@ export const loginUser = async ({ email, password, rememberMe = false }) => {
 };
 
 /**
+ * Get LinkedIn OAuth configuration from environment
+ */
+export const getLinkedInConfig = () => {
+  const clientId = import.meta.env.VITE_LINKEDIN_CLIENT_ID || '';
+  const redirectUri =
+    import.meta.env.VITE_LINKEDIN_REDIRECT_URI ||
+    (typeof window !== 'undefined'
+      ? `${window.location.origin}/auth/linkedin/callback`
+      : 'http://localhost:5173/auth/linkedin/callback');
+  const scope = import.meta.env.VITE_LINKEDIN_SCOPE || 'openid profile email';
+
+  return {
+    clientId,
+    redirectUri,
+    scope,
+    isConfigured: Boolean(clientId),
+  };
+};
+
+/**
+ * Start the LinkedIn OAuth authorization redirect
+ * Generates and saves a cryptographically random state to prevent CSRF
+ * @param {Object} options - { returnTo?: string, rememberMe?: boolean }
+ */
+export const initiateLinkedInAuth = (options = {}) => {
+  const config = getLinkedInConfig();
+
+  if (!config.clientId) {
+    const error = new Error('LinkedIn OAuth is not configured. Please set VITE_LINKEDIN_CLIENT_ID in your environment.');
+    error.code = 'LINKEDIN_NOT_CONFIGURED';
+    throw error;
+  }
+
+  // Generate secure random state
+  const array = new Uint8Array(16);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(array);
+  } else {
+    for (let i = 0; i < 16; i++) {
+      array[i] = Math.floor(Math.random() * 256);
+    }
+  }
+  const state = Array.from(array, (byte) => byte.toString(16).padStart(2, '0')).join('');
+
+  if (typeof sessionStorage !== 'undefined') {
+    sessionStorage.setItem('linkedin_oauth_state', state);
+    if (options.returnTo) {
+      sessionStorage.setItem('linkedin_return_to', options.returnTo);
+    }
+    sessionStorage.setItem('linkedin_remember_me', String(options.rememberMe !== false));
+  }
+
+  const authUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${encodeURIComponent(
+    config.clientId
+  )}&redirect_uri=${encodeURIComponent(config.redirectUri)}&state=${encodeURIComponent(
+    state
+  )}&scope=${encodeURIComponent(config.scope)}`;
+
+  if (typeof window !== 'undefined') {
+    window.location.href = authUrl;
+  }
+};
+
+/**
+ * Exchange LinkedIn authorization code for Auto Jobs Apply JWT & refresh token
+ * POST /api/auth/linkedin
+ * @param {Object} payload - { code, redirectUri, rememberMe }
+ * @returns {Promise<{ accessToken: string, refreshToken: string, user?: Object }>}
+ */
+export const loginWithLinkedIn = async ({ code, redirectUri, rememberMe = true }) => {
+  try {
+    const response = await fetch(AUTH_ENDPOINTS.LINKEDIN, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/plain, */*',
+      },
+      body: JSON.stringify({
+        code,
+        redirectUri,
+      }),
+    });
+
+    const data = await handleResponse(response, 'LinkedIn sign-in failed');
+
+    const accessToken =
+      data.accessToken ||
+      data.token ||
+      data.jwt ||
+      data.data?.accessToken ||
+      data.data?.token ||
+      '';
+
+    const refreshToken =
+      data.refreshToken ||
+      data.data?.refreshToken ||
+      '';
+
+    const user = data.user || data.data?.user || (data.email ? { email: data.email } : null);
+
+    saveAuthTokens({ accessToken, refreshToken }, rememberMe);
+
+    const storage = rememberMe ? localStorage : sessionStorage;
+    if (user) {
+      storage.setItem('authUser', JSON.stringify(user));
+      storage.setItem('user', JSON.stringify(user));
+    }
+
+    return { ...data, accessToken, refreshToken, user };
+  } catch (error) {
+    console.error('LinkedIn authentication error:', error);
+    throw error;
+  }
+};
+
+/**
  * Verify OTP for account confirmation
  * POST /api/auth/verify-otp
  * @param {Object} data - { email, otp }
@@ -382,6 +498,9 @@ export const fetchWithAuth = async (url, options = {}) => {
 export default {
   signupUser,
   loginUser,
+  loginWithLinkedIn,
+  getLinkedInConfig,
+  initiateLinkedInAuth,
   verifyOtp,
   resendOtp,
   refreshToken,

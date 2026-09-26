@@ -9,6 +9,7 @@ export const API_BASE_URL =
 export const AUTH_ENDPOINTS = {
   SIGNUP: `${API_BASE_URL}/api/auth/signup`,
   LOGIN: `${API_BASE_URL}/api/auth/login`,
+  LINKEDIN: `${API_BASE_URL}/api/auth/linkedin`,
   VERIFY_OTP: `${API_BASE_URL}/api/auth/verify-otp`,
   RESEND_OTP: `${API_BASE_URL}/api/auth/resend-otp`,
   REFRESH: `${API_BASE_URL}/api/auth/refresh`,
