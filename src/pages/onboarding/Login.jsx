@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
 import AuthLayout from './AuthLayout';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://192.168.33.82:8081';
+import { loginUser, getBillingStatus } from '../../services/api';
 
 const validateEmail = (email) => {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -57,84 +56,36 @@ const Login = () => {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: emailTrimmed,
-          password: password,
-        }),
+      const loginResult = await loginUser({
+        email: emailTrimmed,
+        password: password,
+        rememberMe: formData.rememberMe,
       });
 
-      let data = {};
+      // Hit billing status endpoint
       try {
-        data = await response.json();
-      } catch {
-        // Non-JSON response
-      }
-
-      if (response.ok) {
-        // Extract token & user if provided
-        const token =
-          data.token ||
-          data.accessToken ||
-          data.jwt ||
-          data.data?.token ||
-          data.data?.accessToken ||
-          data.data?.jwt ||
-          '';
-
-        const refreshToken =
-          data.refreshToken ||
-          data.data?.refreshToken ||
-          '';
-
-        const user = data.user || data.data?.user || (data.email ? { email: data.email } : null);
-
-        const storage = formData.rememberMe ? localStorage : sessionStorage;
-        const altStorage = formData.rememberMe ? sessionStorage : localStorage;
-
-        // Clear alternate storage to prevent conflicting states
-        altStorage.removeItem('authToken');
-        altStorage.removeItem('token');
-        altStorage.removeItem('accessToken');
-        altStorage.removeItem('refreshToken');
-        altStorage.removeItem('authUser');
-        altStorage.removeItem('user');
-
-        if (token) {
-          storage.setItem('authToken', token);
-          storage.setItem('token', token);
-        }
-        if (refreshToken) {
-          storage.setItem('refreshToken', refreshToken);
-        }
-        if (user) {
-          storage.setItem('authUser', JSON.stringify(user));
-          storage.setItem('user', JSON.stringify(user));
-        }
-
-        const returnTo = location.state?.returnTo || '/dashboard';
-        const planState = location.state?.plan;
-        navigate(returnTo, { state: planState ? planState : undefined });
-      } else {
-        // Handle API error responses cleanly
-        if (response.status === 401 || response.status === 403) {
-          setError(data.message || data.error || 'Invalid email or password.');
-        } else if (response.status === 404) {
-          setError(data.message || data.error || 'Account not found. Please check your credentials.');
-        } else if (response.status === 422) {
-          setError(data.message || data.error || 'Invalid input details provided.');
-        } else if (response.status >= 500) {
-          setError('Server error. Please try again later.');
+        const billing = await getBillingStatus(loginResult.accessToken);
+        if (billing && billing.hasPlan === true) {
+          navigate('/dashboard');
         } else {
-          setError(data.message || data.error || 'Login failed. Please check your credentials and try again.');
+          navigate('/plan');
         }
+      } catch (billingErr) {
+        console.warn('Could not fetch billing status, redirecting to /plan:', billingErr);
+        navigate('/plan');
       }
-    } catch {
-      setError('Unable to connect to the server. Please try again.');
+    } catch (err) {
+      if (err.status === 401 || err.status === 403) {
+        setError(err.message || 'Invalid email or password.');
+      } else if (err.status === 404) {
+        setError(err.message || 'Account not found. Please check your credentials.');
+      } else if (err.status === 422) {
+        setError(err.message || 'Invalid input details provided.');
+      } else if (err.status >= 500) {
+        setError('Server error. Please try again later.');
+      } else {
+        setError(err.message || 'Unable to connect to the server. Please try again.');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -293,6 +244,7 @@ const Login = () => {
             {/* Google Button */}
             <button
               type="button"
+              onClick={() => navigate('/plan')}
               className="h-11 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50/80 active:bg-slate-100 text-slate-700 hover:text-slate-900 font-['Inter',sans-serif] text-xs sm:text-[13px] font-medium rounded-xl flex items-center justify-center gap-2 transition-all duration-200 shadow-xs cursor-pointer px-3 whitespace-nowrap"
             >
               <svg
@@ -324,6 +276,7 @@ const Login = () => {
             {/* LinkedIn Button */}
             <button
               type="button"
+              onClick={() => navigate('/plan')}
               className="h-11 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50/80 active:bg-slate-100 text-slate-700 hover:text-slate-900 font-['Inter',sans-serif] text-xs sm:text-[13px] font-medium rounded-xl flex items-center justify-center gap-2 transition-all duration-200 shadow-xs cursor-pointer px-3 whitespace-nowrap"
             >
               <svg
