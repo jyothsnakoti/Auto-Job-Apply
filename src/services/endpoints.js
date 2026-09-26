@@ -1,13 +1,15 @@
 /**
  * Centralized API Endpoints Configuration
+ * Uses relative API routes so Vite proxy forwards requests cleanly to backend
  */
 
 export const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || 'http://192.168.33.82:8081';
+  import.meta.env.VITE_API_BASE_URL || '';
 
 export const AUTH_ENDPOINTS = {
   SIGNUP: `${API_BASE_URL}/api/auth/signup`,
   LOGIN: `${API_BASE_URL}/api/auth/login`,
+  LINKEDIN: `${API_BASE_URL}/api/auth/linkedin`,
   VERIFY_OTP: `${API_BASE_URL}/api/auth/verify-otp`,
   RESEND_OTP: `${API_BASE_URL}/api/auth/resend-otp`,
   REFRESH: `${API_BASE_URL}/api/auth/refresh`,
@@ -16,19 +18,27 @@ export const AUTH_ENDPOINTS = {
 };
 
 export const BILLING_ENDPOINTS = {
-  STATUS: `${API_BASE_URL}/api/billing/status`,
   PLANS: `${API_BASE_URL}/api/billing/plans`,
-  SELECT_TRIAL: `${API_BASE_URL}/api/billing/select-trial`,
+  STRIPE_KEY: `${API_BASE_URL}/api/billing/stripe-key`,
   CREATE_PAYMENT_INTENT: `${API_BASE_URL}/api/billing/create-payment-intent`,
   TOGGLE_AUTOPAY: `${API_BASE_URL}/api/billing/toggle-autopay`,
   CREATE_CARD_UPDATE_INTENT: `${API_BASE_URL}/api/billing/create-card-update-intent`,
   CONFIRM_CARD_UPDATE: `${API_BASE_URL}/api/billing/confirm-card-update`,
+  CONFIRM_PAYMENT: `${API_BASE_URL}/api/billing/confirm-payment`,
+  STATUS: `${API_BASE_URL}/api/billing/status`,
+  RECOVER: `${API_BASE_URL}/api/billing/recover`,
+  SELECT_TRIAL: `${API_BASE_URL}/api/billing/select-trial`,
+};
+
+export const ONBOARDING_ENDPOINTS = {
+  SUBMIT: `${API_BASE_URL}/api/onboarding`,
 };
 
 export const ENDPOINTS = {
   BASE_URL: API_BASE_URL,
   AUTH: AUTH_ENDPOINTS,
   BILLING: BILLING_ENDPOINTS,
+  ONBOARDING: ONBOARDING_ENDPOINTS,
 };
 
 export default ENDPOINTS;

@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
+import { User, Mail, Lock, Eye, EyeOff, ArrowRight, Loader2 ,Check } from 'lucide-react';
 import AuthLayout from './AuthLayout';
-import { signupUser } from '../../services/api';
+import { signupUser, initiateLinkedInAuth } from '../../services/api';
 
 const Registration = () => {
   const navigate = useNavigate();
@@ -12,8 +12,49 @@ const Registration = () => {
     password: '',
   });
   const [showPassword, setShowPassword] = useState(false);
+  const [isPasswordFocused, setIsPasswordFocused] = useState(false);
+  const [hideValidationBox, setHideValidationBox] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLinkedInLoading, setIsLinkedInLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  const handleLinkedInSignup = () => {
+    if (isLinkedInLoading || isSubmitting) return;
+    setErrorMessage('');
+    setIsLinkedInLoading(true);
+
+    try {
+      initiateLinkedInAuth({
+        rememberMe: true,
+      });
+    } catch (err) {
+      setIsLinkedInLoading(false);
+      if (err.code === 'LINKEDIN_NOT_CONFIGURED') {
+        setErrorMessage(
+          'LinkedIn sign-in is not configured. Please provide VITE_LINKEDIN_CLIENT_ID in your environment.'
+        );
+      } else {
+        setErrorMessage(err.message || 'Failed to initiate LinkedIn sign-in.');
+      }
+    }
+  };
+  const password = formData.password || '';
+  const isLengthValid = password.length >= 8 && password.length <= 15;
+  const isUpperLowerValid = /[a-z]/.test(password) && /[A-Z]/.test(password);
+  const isNumSpecialValid = /\d/.test(password) && /[^A-Za-z0-9]/.test(password);
+  const allCriteriaValid = isLengthValid && isUpperLowerValid && isNumSpecialValid;
+
+  // Auto close validation box once all criteria are met
+  useEffect(() => {
+    if (allCriteriaValid && password.length > 0) {
+      const timer = setTimeout(() => {
+        setHideValidationBox(true);
+      }, 450);
+      return () => clearTimeout(timer);
+    } else {
+      setHideValidationBox(false);
+    }
+  }, [allCriteriaValid, password]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -29,6 +70,12 @@ const Registration = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMessage('');
+
+    if (!allCriteriaValid) {
+      setErrorMessage('Please ensure your password meets all required criteria.');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -156,6 +203,13 @@ const Registration = () => {
                 placeholder="Create a strong password"
                 value={formData.password}
                 onChange={handleChange}
+                onFocus={() => {
+                  setIsPasswordFocused(true);
+                  if (!allCriteriaValid) setHideValidationBox(false);
+                }}
+                onBlur={() => {
+                  setIsPasswordFocused(false);
+                }}
                 className="w-full h-12 pl-11 pr-11 border border-slate-200 rounded-xl text-sm font-['Inter',sans-serif] text-slate-900 placeholder:text-slate-400 bg-white transition-all duration-200 outline-none focus:border-indigo-500 focus:ring-3 focus:ring-indigo-500/15"
                 required
               />
@@ -171,6 +225,65 @@ const Registration = () => {
             <p className="text-slate-400 text-[11.5px] font-normal mt-1.5 leading-normal font-['Inter',sans-serif]">
               Use at least 8 characters with a mix of letters, numbers and symbols.
             </p>
+
+            {/* Dynamic Password Validation Requirements Box */}
+            {((isPasswordFocused || password.length > 0) && !hideValidationBox && !allCriteriaValid) && (
+              <div className="mt-2.5 p-3.5 bg-slate-50/90 border border-slate-200/80 rounded-2xl flex flex-col gap-2 animate-in fade-in zoom-in-95 duration-200">
+                {/* 8-15 characters */}
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`w-4 h-4 rounded-full flex items-center justify-center transition-all duration-200 ${
+                      isLengthValid ? 'bg-emerald-500 text-white shadow-sm' : 'bg-slate-200/80 text-slate-400'
+                    }`}
+                  >
+                    <Check size={11} strokeWidth={3} />
+                  </div>
+                  <span
+                    className={`text-[12px] font-['Inter',sans-serif] transition-colors duration-200 ${
+                      isLengthValid ? 'text-slate-800 font-medium' : 'text-slate-400 font-normal'
+                    }`}
+                  >
+                    8-15 characters
+                  </span>
+                </div>
+
+                {/* Upper & lowercase letters */}
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`w-4 h-4 rounded-full flex items-center justify-center transition-all duration-200 ${
+                      isUpperLowerValid ? 'bg-emerald-500 text-white shadow-sm' : 'bg-slate-200/80 text-slate-400'
+                    }`}
+                  >
+                    <Check size={11} strokeWidth={3} />
+                  </div>
+                  <span
+                    className={`text-[12px] font-['Inter',sans-serif] transition-colors duration-200 ${
+                      isUpperLowerValid ? 'text-slate-800 font-medium' : 'text-slate-400 font-normal'
+                    }`}
+                  >
+                    Upper & lowercase letters
+                  </span>
+                </div>
+
+                {/* Number & special character */}
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`w-4 h-4 rounded-full flex items-center justify-center transition-all duration-200 ${
+                      isNumSpecialValid ? 'bg-emerald-500 text-white shadow-sm' : 'bg-slate-200/80 text-slate-400'
+                    }`}
+                  >
+                    <Check size={11} strokeWidth={3} />
+                  </div>
+                  <span
+                    className={`text-[12px] font-['Inter',sans-serif] transition-colors duration-200 ${
+                      isNumSpecialValid ? 'text-slate-800 font-medium' : 'text-slate-400 font-normal'
+                    }`}
+                  >
+                    Number & special character
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Submit Button */}
@@ -252,18 +365,29 @@ const Registration = () => {
             {/* LinkedIn Button */}
             <button
               type="button"
-              className="h-11 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50/80 active:bg-slate-100 text-slate-700 hover:text-slate-900 font-['Inter',sans-serif] text-xs sm:text-[13px] font-medium rounded-xl flex items-center justify-center gap-2 transition-all duration-200 shadow-xs cursor-pointer px-3 whitespace-nowrap"
+              onClick={handleLinkedInSignup}
+              disabled={isLinkedInLoading || isSubmitting}
+              className="h-11 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50/80 active:bg-slate-100 text-slate-700 hover:text-slate-900 font-['Inter',sans-serif] text-xs sm:text-[13px] font-medium rounded-xl flex items-center justify-center gap-2 transition-all duration-200 shadow-xs cursor-pointer px-3 whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="#0A66C2"
-                className="shrink-0"
-              >
-                <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z" />
-              </svg>
-              <span>Continue with LinkedIn</span>
+              {isLinkedInLoading ? (
+                <>
+                  <Loader2 size={16} className="animate-spin text-[#0A66C2]" />
+                  <span>Connecting...</span>
+                </>
+              ) : (
+                <>
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="#0A66C2"
+                    className="shrink-0"
+                  >
+                    <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z" />
+                  </svg>
+                  <span>Continue with LinkedIn</span>
+                </>
+              )}
             </button>
           </div>
         </form>

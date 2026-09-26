@@ -6,6 +6,7 @@ import CheckInbox from './CheckInbox';
 import ResetPassword from './ResetPassword';
 import PasswordUpdated from './PasswordUpdated';
 import AuthLayout from './AuthLayout';
+import LinkedInCallback from './LinkedInCallback';
 
 export default Registration;
 export {
@@ -17,4 +18,6 @@ export {
   ResetPassword,
   PasswordUpdated,
   AuthLayout,
+  LinkedInCallback,
 };
+

@@ -4,24 +4,28 @@ import { AUTH_ENDPOINTS } from './endpoints';
  * Retrieve saved tokens from localStorage or sessionStorage
  */
 export const getStoredTokens = () => {
-  const localStorageToken = localStorage.getItem('authToken') || localStorage.getItem('token') || localStorage.getItem('accessToken');
-  const localStorageRefresh = localStorage.getItem('refreshToken');
+  const localToken =
+    localStorage.getItem('authToken') ||
+    localStorage.getItem('token') ||
+    localStorage.getItem('accessToken') ||
+    '';
+  const sessionToken =
+    sessionStorage.getItem('authToken') ||
+    sessionStorage.getItem('token') ||
+    sessionStorage.getItem('accessToken') ||
+    '';
 
-  if (localStorageToken || localStorageRefresh) {
-    return {
-      accessToken: localStorageToken || '',
-      refreshToken: localStorageRefresh || '',
-      storageType: 'local',
-    };
-  }
+  const localRefresh = localStorage.getItem('refreshToken') || '';
+  const sessionRefresh = sessionStorage.getItem('refreshToken') || '';
 
-  const sessionStorageToken = sessionStorage.getItem('authToken') || sessionStorage.getItem('token') || sessionStorage.getItem('accessToken');
-  const sessionStorageRefresh = sessionStorage.getItem('refreshToken');
+  const accessToken = localToken || sessionToken || '';
+  const refreshToken = localRefresh || sessionRefresh || '';
+  const storageType = localToken || localRefresh ? 'local' : 'session';
 
   return {
-    accessToken: sessionStorageToken || '',
-    refreshToken: sessionStorageRefresh || '',
-    storageType: 'session',
+    accessToken,
+    refreshToken,
+    storageType,
   };
 };
 
@@ -54,10 +58,53 @@ export const saveAuthTokens = ({ accessToken, refreshToken }, rememberMe = null)
 };
 
 /**
+ * Retrieve saved user info from localStorage or sessionStorage
+ */
+export const getStoredUser = () => {
+  try {
+    const raw =
+      localStorage.getItem('authUser') ||
+      sessionStorage.getItem('authUser') ||
+      localStorage.getItem('user') ||
+      sessionStorage.getItem('user');
+
+    if (raw) {
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      if (parsed) {
+        const email =
+          parsed.email ||
+          parsed.userEmail ||
+          localStorage.getItem('userEmail') ||
+          sessionStorage.getItem('userEmail') ||
+          '';
+        const name =
+          parsed.name ||
+          parsed.fullName ||
+          (email ? email.split('@')[0] : '');
+        return { email, name, ...parsed };
+      }
+    }
+
+    const email =
+      localStorage.getItem('userEmail') ||
+      sessionStorage.getItem('userEmail') ||
+      sessionStorage.getItem('pendingVerificationEmail') ||
+      '';
+
+    return {
+      email,
+      name: email ? email.split('@')[0] : '',
+    };
+  } catch {
+    return { email: '', name: '' };
+  }
+};
+
+/**
  * Clear all auth data from storage
  */
 export const clearAuthTokens = () => {
-  const keys = ['authToken', 'token', 'accessToken', 'refreshToken', 'authUser', 'user', 'pendingVerificationEmail'];
+  const keys = ['authToken', 'token', 'accessToken', 'refreshToken', 'authUser', 'user', 'userEmail', 'pendingVerificationEmail'];
   keys.forEach((key) => {
     localStorage.removeItem(key);
     sessionStorage.removeItem(key);
@@ -152,6 +199,121 @@ export const loginUser = async ({ email, password, rememberMe = false }) => {
       data.data?.refreshToken ||
       '';
 
+    const user = data.user || data.data?.user || (data.email ? { email: data.email } : { email: email.trim() });
+
+    saveAuthTokens({ accessToken, refreshToken }, rememberMe);
+
+    const storage = rememberMe ? localStorage : sessionStorage;
+    storage.setItem('authUser', JSON.stringify(user));
+    storage.setItem('user', JSON.stringify(user));
+    storage.setItem('userEmail', user.email || email.trim());
+
+    return { ...data, accessToken, refreshToken, user };
+  } catch (error) {
+    console.error('Login error:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get LinkedIn OAuth configuration from environment
+ */
+export const getLinkedInConfig = () => {
+  const clientId = import.meta.env.VITE_LINKEDIN_CLIENT_ID || '';
+  const redirectUri =
+    import.meta.env.VITE_LINKEDIN_REDIRECT_URI ||
+    (typeof window !== 'undefined'
+      ? `${window.location.origin}/auth/linkedin/callback`
+      : 'http://localhost:5173/auth/linkedin/callback');
+  const scope = import.meta.env.VITE_LINKEDIN_SCOPE || 'openid profile email';
+
+  return {
+    clientId,
+    redirectUri,
+    scope,
+    isConfigured: Boolean(clientId),
+  };
+};
+
+/**
+ * Start the LinkedIn OAuth authorization redirect
+ * Generates and saves a cryptographically random state to prevent CSRF
+ * @param {Object} options - { returnTo?: string, rememberMe?: boolean }
+ */
+export const initiateLinkedInAuth = (options = {}) => {
+  const config = getLinkedInConfig();
+
+  if (!config.clientId) {
+    const error = new Error('LinkedIn OAuth is not configured. Please set VITE_LINKEDIN_CLIENT_ID in your environment.');
+    error.code = 'LINKEDIN_NOT_CONFIGURED';
+    throw error;
+  }
+
+  // Generate secure random state
+  const array = new Uint8Array(16);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(array);
+  } else {
+    for (let i = 0; i < 16; i++) {
+      array[i] = Math.floor(Math.random() * 256);
+    }
+  }
+  const state = Array.from(array, (byte) => byte.toString(16).padStart(2, '0')).join('');
+
+  if (typeof sessionStorage !== 'undefined') {
+    sessionStorage.setItem('linkedin_oauth_state', state);
+    if (options.returnTo) {
+      sessionStorage.setItem('linkedin_return_to', options.returnTo);
+    }
+    sessionStorage.setItem('linkedin_remember_me', String(options.rememberMe !== false));
+  }
+
+  const authUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${encodeURIComponent(
+    config.clientId
+  )}&redirect_uri=${encodeURIComponent(config.redirectUri)}&state=${encodeURIComponent(
+    state
+  )}&scope=${encodeURIComponent(config.scope)}`;
+
+  if (typeof window !== 'undefined') {
+    window.location.href = authUrl;
+  }
+};
+
+/**
+ * Exchange LinkedIn authorization code for Auto Jobs Apply JWT & refresh token
+ * POST /api/auth/linkedin
+ * @param {Object} payload - { code, redirectUri, rememberMe }
+ * @returns {Promise<{ accessToken: string, refreshToken: string, user?: Object }>}
+ */
+export const loginWithLinkedIn = async ({ code, redirectUri, rememberMe = true }) => {
+  try {
+    const response = await fetch(AUTH_ENDPOINTS.LINKEDIN, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/plain, */*',
+      },
+      body: JSON.stringify({
+        code,
+        redirectUri,
+      }),
+    });
+
+    const data = await handleResponse(response, 'LinkedIn sign-in failed');
+
+    const accessToken =
+      data.accessToken ||
+      data.token ||
+      data.jwt ||
+      data.data?.accessToken ||
+      data.data?.token ||
+      '';
+
+    const refreshToken =
+      data.refreshToken ||
+      data.data?.refreshToken ||
+      '';
+
     const user = data.user || data.data?.user || (data.email ? { email: data.email } : null);
 
     saveAuthTokens({ accessToken, refreshToken }, rememberMe);
@@ -164,7 +326,7 @@ export const loginUser = async ({ email, password, rememberMe = false }) => {
 
     return { ...data, accessToken, refreshToken, user };
   } catch (error) {
-    console.error('Login error:', error);
+    console.error('LinkedIn authentication error:', error);
     throw error;
   }
 };
@@ -355,8 +517,8 @@ export const fetchWithAuth = async (url, options = {}) => {
     headers,
   });
 
-  // If unauthorized (401), attempt token refresh and retry original request once
-  if (response.status === 401) {
+  // If unauthorized (401 or 403), attempt token refresh and retry original request once
+  if (response.status === 401 || response.status === 403) {
     try {
       const refreshed = await refreshAuthToken();
       if (refreshed?.accessToken) {
@@ -370,9 +532,7 @@ export const fetchWithAuth = async (url, options = {}) => {
         });
       }
     } catch (refreshErr) {
-      console.warn('Session expired. Unable to refresh token.', refreshErr);
-      clearAuthTokens();
-      throw refreshErr;
+      console.warn('Session expired or unable to refresh token on ' + response.status, refreshErr);
     }
   }
 
@@ -382,6 +542,9 @@ export const fetchWithAuth = async (url, options = {}) => {
 export default {
   signupUser,
   loginUser,
+  loginWithLinkedIn,
+  getLinkedInConfig,
+  initiateLinkedInAuth,
   verifyOtp,
   resendOtp,
   refreshToken,

@@ -18,6 +18,7 @@ import {
   CheckInbox,
   ResetPassword,
   PasswordUpdated,
+  LinkedInCallback,
 } from './pages/onboarding';
 import Dashboard from './pages/Dashboard';
 import BrowseJobs from './pages/BrowseJobs';
@@ -35,6 +36,7 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/register" element={<Registration />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/auth/linkedin/callback" element={<LinkedInCallback />} />
         <Route path="/verify" element={<VerifyEmail />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/check-inbox" element={<CheckInbox />} />
