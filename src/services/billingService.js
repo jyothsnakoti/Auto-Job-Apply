@@ -786,22 +786,34 @@ export const createCardUpdateIntent = async (token = null) => {
 /**
  * Confirm Card Update
  * POST /api/billing/confirm-card-update
- * Body: { "setupIntentId": "seti_..." }
+ * Body: { "setupIntentId": "seti_...", "makeDefault": false }
  * @param {string} setupIntentId
+ * @param {boolean} [makeDefault=false]
  * @param {string} [token] - Optional explicit access token
  */
-export const confirmCardUpdate = async (setupIntentId, token = null) => {
+export const confirmCardUpdate = async (setupIntentId, makeDefault = false, token = null) => {
   if (!setupIntentId) {
     throw new Error('SetupIntent ID is required for card update confirmation.');
   }
 
+  let isDefaultVal = false;
+  let explicitToken = null;
+
+  if (typeof makeDefault === 'boolean') {
+    isDefaultVal = makeDefault;
+    explicitToken = token;
+  } else if (typeof makeDefault === 'string') {
+    explicitToken = makeDefault;
+    isDefaultVal = false;
+  }
+
   const payload = {
     setupIntentId: setupIntentId?.trim(),
-    SetupIntentId: setupIntentId?.trim(),
+    makeDefault: Boolean(isDefaultVal),
   };
 
-  if (token) {
-    const cleanToken = sanitizeToken(token);
+  if (explicitToken) {
+    const cleanToken = sanitizeToken(explicitToken);
     const headers = {
       'Content-Type': 'application/json',
       Accept: 'application/json, text/plain, */*',
@@ -848,14 +860,103 @@ export const confirmCardUpdate = async (setupIntentId, token = null) => {
 
 /**
  * ============================================================
- * GET SAVED PAYMENT METHOD
+ * GET SAVED PAYMENT CARDS / METHOD
  * ============================================================
  */
 
 /**
+ * Safely extract payment method object from response
+ */
+const extractPaymentMethod = (data) => {
+  if (!data) return null;
+  if (Array.isArray(data)) {
+    if (data.length === 0) return null;
+    return data.find((item) => item?.isDefault) || data[0] || null;
+  }
+  if (typeof data === 'object') {
+    if (Array.isArray(data.cards)) {
+      if (data.cards.length === 0) return null;
+      return data.cards.find((c) => c?.isDefault) || data.cards[0] || null;
+    }
+    if (Array.isArray(data.data)) {
+      if (data.data.length === 0) return null;
+      return data.data.find((c) => c?.isDefault) || data.data[0] || null;
+    }
+    if (data.last4 || data.brand || data.id) {
+      return data;
+    }
+  }
+  return null;
+};
+
+/**
+ * Get Saved Payment Cards
+ * GET /api/billing/cards
+ * @param {string} [token] - Optional explicit access token
+ */
+export const getSavedCards = async (token = null) => {
+  if (token) {
+    const cleanToken = sanitizeToken(token);
+    const headers = {
+      Accept: 'application/json, text/plain, */*',
+      Authorization: `Bearer ${cleanToken}`,
+    };
+    try {
+      const response = await fetch(BILLING_ENDPOINTS.CARDS, {
+        method: 'GET',
+        headers,
+      });
+      if (!response.ok) {
+        if (response.status === 404 || response.status === 400) return [];
+        const text = await response.text().catch(() => '');
+        let errorData;
+        try {
+          errorData = JSON.parse(text);
+        } catch {
+          errorData = { message: text };
+        }
+        const error = new Error(errorData?.message || `Failed to fetch cards (Status ${response.status})`);
+        error.status = response.status;
+        throw error;
+      }
+      const data = await response.json();
+      return Array.isArray(data) ? data : (data?.cards || data?.data || (data ? [data] : []));
+    } catch (err) {
+      if (err?.status === 404 || err?.status === 400) return [];
+      throw err;
+    }
+  }
+
+  try {
+    const data = await authenticatedFetch(BILLING_ENDPOINTS.CARDS, {
+      method: 'GET',
+    });
+    return Array.isArray(data)
+      ? data
+      : data?.cards || data?.data || (data && typeof data === 'object' && Object.keys(data).length > 0 ? [data] : []);
+  } catch (err) {
+    if (err?.status === 404 || err?.status === 400) {
+      return [];
+    }
+    // Fallback to PAYMENT_METHOD endpoint
+    try {
+      const fallback = await authenticatedFetch(BILLING_ENDPOINTS.PAYMENT_METHOD, { method: 'GET' });
+      return Array.isArray(fallback)
+        ? fallback
+        : fallback?.cards || (fallback && typeof fallback === 'object' && Object.keys(fallback).length > 0 ? [fallback] : []);
+    } catch {
+      if (err?.status === 400) return [];
+      throw err;
+    }
+  }
+};
+
+export const getPaymentCards = getSavedCards;
+
+/**
  * Get Saved Payment Method
  * GET /api/billing/payment-method
- * Response: { "brand": "visa", "last4": "4242", "expMonth": 4, "expYear": 2029 } or similar
+ * Retrieves the default card or first saved card from array response
  * @param {string} [token] - Optional explicit access token
  */
 export const getPaymentMethod = async (token = null) => {
@@ -865,37 +966,166 @@ export const getPaymentMethod = async (token = null) => {
       Accept: 'application/json, text/plain, */*',
       Authorization: `Bearer ${cleanToken}`,
     };
-    const response = await fetch(BILLING_ENDPOINTS.PAYMENT_METHOD, {
-      method: 'GET',
-      headers,
-    });
-    if (!response.ok) {
-      if (response.status === 404) return null;
-      const text = await response.text().catch(() => '');
-      let errorData;
-      try {
-        errorData = JSON.parse(text);
-      } catch {
-        errorData = { message: text };
+    try {
+      const response = await fetch(BILLING_ENDPOINTS.PAYMENT_METHOD, {
+        method: 'GET',
+        headers,
+      });
+      if (!response.ok) {
+        if (response.status === 404 || response.status === 400) return null;
+        const text = await response.text().catch(() => '');
+        let errorData;
+        try {
+          errorData = JSON.parse(text);
+        } catch {
+          errorData = { message: text };
+        }
+        const error = new Error(errorData?.message || `Failed to fetch payment method (Status ${response.status})`);
+        error.status = response.status;
+        throw error;
       }
-      const error = new Error(errorData?.message || `Failed to fetch payment method (Status ${response.status})`);
-      error.status = response.status;
-      throw error;
+      const data = await response.json();
+      return extractPaymentMethod(data);
+    } catch (err) {
+      if (err?.status === 404 || err?.status === 400) return null;
+      throw err;
     }
-    return await response.json();
   }
 
   try {
     const data = await authenticatedFetch(BILLING_ENDPOINTS.PAYMENT_METHOD, {
       method: 'GET',
     });
-    return data;
+    return extractPaymentMethod(data);
   } catch (err) {
-    if (err?.status === 404) {
+    if (err?.status === 404 || err?.status === 400) {
       return null;
     }
-    throw err;
+    // Also try CARDS endpoint fallback
+    try {
+      const fallbackData = await authenticatedFetch(BILLING_ENDPOINTS.CARDS, { method: 'GET' });
+      return extractPaymentMethod(fallbackData);
+    } catch {
+      if (err?.status === 400) return null;
+      throw err;
+    }
   }
+};
+
+/**
+ * Set Default Payment Card
+ * POST /api/billing/cards/default
+ * Body: { "paymentMethodId": "pm_xxx" }
+ * @param {string} paymentMethodId
+ * @param {string} [token] - Optional explicit access token
+ */
+export const setDefaultCard = async (paymentMethodId, token = null) => {
+  if (!paymentMethodId) {
+    throw new Error('PaymentMethod ID is required to set default card.');
+  }
+
+  const payload = {
+    paymentMethodId: paymentMethodId?.trim(),
+    PaymentMethodId: paymentMethodId?.trim(),
+  };
+
+  if (token) {
+    const cleanToken = sanitizeToken(token);
+    const headers = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/plain, */*',
+      Authorization: `Bearer ${cleanToken}`,
+    };
+    const response = await fetch(BILLING_ENDPOINTS.DEFAULT_CARD, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    });
+    const text = await response.text().catch(() => '');
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { message: text };
+    }
+    if (!response.ok) {
+      const error = new Error(data?.message || data?.error || `Failed to set default card (Status ${response.status})`);
+      error.status = response.status;
+      throw error;
+    }
+    return {
+      success: true,
+      message: data?.message || 'Default payment method updated.',
+      data,
+    };
+  }
+
+  const data = await authenticatedFetch(BILLING_ENDPOINTS.DEFAULT_CARD, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  return {
+    success: true,
+    message: typeof data === 'object' ? data?.message || 'Default payment method updated.' : String(data),
+    data,
+  };
+};
+
+/**
+ * Delete Saved Payment Card
+ * DELETE /api/billing/cards/{paymentMethodId}
+ * @param {string} paymentMethodId
+ * @param {string} [token] - Optional explicit access token
+ */
+export const deleteSavedCard = async (paymentMethodId, token = null) => {
+  if (!paymentMethodId) {
+    throw new Error('PaymentMethod ID is required to delete card.');
+  }
+
+  const endpoint = `${BILLING_ENDPOINTS.CARDS}/${encodeURIComponent(paymentMethodId.trim())}`;
+
+  if (token) {
+    const cleanToken = sanitizeToken(token);
+    const headers = {
+      Accept: 'application/json, text/plain, */*',
+      Authorization: `Bearer ${cleanToken}`,
+    };
+    const response = await fetch(endpoint, {
+      method: 'DELETE',
+      headers,
+    });
+    const text = await response.text().catch(() => '');
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { message: text };
+    }
+    if (!response.ok) {
+      const error = new Error(data?.message || data?.error || `Failed to delete card (Status ${response.status})`);
+      error.status = response.status;
+      throw error;
+    }
+    return {
+      success: true,
+      message: data?.message || 'Card deleted successfully.',
+      data,
+    };
+  }
+
+  const data = await authenticatedFetch(endpoint, {
+    method: 'DELETE',
+  });
+
+  return {
+    success: true,
+    message: typeof data === 'object' ? data?.message || 'Card deleted successfully.' : String(data),
+    data,
+  };
 };
 
 /**
@@ -1058,5 +1288,9 @@ export default {
    */
   createCardUpdateIntent,
   confirmCardUpdate,
+  getSavedCards,
+  getPaymentCards,
   getPaymentMethod,
+  setDefaultCard,
+  deleteSavedCard,
 };

@@ -26,6 +26,8 @@ export const BILLING_ENDPOINTS = {
   CONFIRM_CARD_UPDATE: `${API_BASE_URL}/api/billing/confirm-card-update`,
   CONFIRM_PAYMENT: `${API_BASE_URL}/api/billing/confirm-payment`,
   PAYMENT_METHOD: `${API_BASE_URL}/api/billing/payment-method`,
+  CARDS: `${API_BASE_URL}/api/billing/cards`,
+  DEFAULT_CARD: `${API_BASE_URL}/api/billing/cards/default`,
   STATUS: `${API_BASE_URL}/api/billing/status`,
   HISTORY: `${API_BASE_URL}/api/billing/history`,
   RECOVER: `${API_BASE_URL}/api/billing/recover`,

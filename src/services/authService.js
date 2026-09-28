@@ -40,11 +40,25 @@ export const saveAuthTokens = ({ accessToken, refreshToken }, rememberMe = null)
   const targetStorage = isLocal ? localStorage : sessionStorage;
   const otherStorage = isLocal ? sessionStorage : localStorage;
 
-  // Clear stale tokens from the other storage
-  otherStorage.removeItem('authToken');
-  otherStorage.removeItem('token');
-  otherStorage.removeItem('accessToken');
-  otherStorage.removeItem('refreshToken');
+  // Clear stale tokens and user data from the other storage to prevent cross-storage contamination
+  const staleKeys = [
+    'authToken',
+    'token',
+    'accessToken',
+    'refreshToken',
+    'authUser',
+    'user',
+    'userEmail',
+    'userFullName',
+    'userName',
+    'pendingFullName',
+    'pendingVerificationEmail',
+    'billingStatus',
+    'hasPlan',
+    'onboardingData',
+    'profileData',
+  ];
+  staleKeys.forEach((key) => otherStorage.removeItem(key));
 
   if (accessToken) {
     targetStorage.setItem('authToken', accessToken);
@@ -113,14 +127,38 @@ export const getStoredUser = () => {
 };
 
 /**
- * Clear all auth data from storage
+ * Clear all auth and user-specific session data from storage
  */
 export const clearAuthTokens = () => {
-  const keys = ['authToken', 'token', 'accessToken', 'refreshToken', 'authUser', 'user', 'userEmail', 'pendingVerificationEmail'];
+  const keys = [
+    'authToken',
+    'token',
+    'accessToken',
+    'refreshToken',
+    'authUser',
+    'user',
+    'userEmail',
+    'userFullName',
+    'userName',
+    'pendingFullName',
+    'pendingVerificationEmail',
+    'billingStatus',
+    'hasPlan',
+    'onboardingData',
+    'profileData',
+  ];
   keys.forEach((key) => {
     localStorage.removeItem(key);
     sessionStorage.removeItem(key);
   });
+
+  if (typeof window !== 'undefined') {
+    try {
+      window.dispatchEvent(new CustomEvent('billingStatusUpdated', { detail: null }));
+    } catch {
+      // ignore
+    }
+  }
 };
 
 /**
@@ -212,6 +250,9 @@ export const loginUser = async ({ email, password, rememberMe = false }) => {
       '';
 
     const user = data.user || data.data?.user || (data.email ? { email: data.email } : { email: email.trim() });
+
+    // Clean up any stale session data before saving new authenticated user
+    clearAuthTokens();
 
     saveAuthTokens({ accessToken, refreshToken }, rememberMe);
 
@@ -343,6 +384,9 @@ export const loginWithLinkedIn = async ({ code, redirectUri, rememberMe = true }
         console.debug('Could not decode JWT payload for user info', e);
       }
     }
+
+    // Clean up any stale session data before saving new authenticated user
+    clearAuthTokens();
 
     saveAuthTokens({ accessToken, refreshToken }, rememberMe);
 
