@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
+import { getStoredUser, getOnboardingProfile } from "../services/api";
 
 import dashboard1Icon from "../assets/dashboard1.svg";
 import dashboard2Icon from "../assets/dashboard2.svg";
@@ -342,6 +343,7 @@ const recentApplications = [
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const [userName, setUserName] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [selectedAppTab, setSelectedAppTab] = useState("All");
@@ -363,6 +365,64 @@ const Dashboard = () => {
   const [selectedEmploymentTypes, setSelectedEmploymentTypes] = useState([]);
 
   const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const loadUserData = async () => {
+      try {
+        const user = getStoredUser();
+        const storedFullName =
+          localStorage.getItem("userFullName") ||
+          sessionStorage.getItem("userFullName") ||
+          localStorage.getItem("userName") ||
+          sessionStorage.getItem("userName") ||
+          sessionStorage.getItem("pendingFullName") ||
+          "";
+
+        let currentEmail =
+          user?.email ||
+          localStorage.getItem("userEmail") ||
+          sessionStorage.getItem("userEmail") ||
+          sessionStorage.getItem("pendingVerificationEmail") ||
+          "";
+
+        let currentName =
+          user?.fullName ||
+          user?.name ||
+          storedFullName ||
+          "";
+
+        if (currentName && currentName !== currentEmail) {
+          setUserName(currentName);
+        } else if (currentEmail) {
+          const emailPrefix = currentEmail.split("@")[0];
+          setUserName(emailPrefix);
+        }
+
+        try {
+          const profileData = await getOnboardingProfile();
+          if (profileData) {
+            const resolvedName =
+              profileData.fullName ||
+              profileData.name ||
+              profileData.profile?.fullName ||
+              profileData.profile?.name;
+
+            if (resolvedName) {
+              setUserName(resolvedName);
+              localStorage.setItem("userFullName", resolvedName);
+              sessionStorage.setItem("userFullName", resolvedName);
+            }
+          }
+        } catch {
+          // Fallback gracefully to stored credentials
+        }
+      } catch (err) {
+        console.warn("Could not load user data in Dashboard:", err);
+      }
+    };
+
+    loadUserData();
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -430,7 +490,7 @@ const Dashboard = () => {
           {/* Welcome Header */}
           <div className="flex flex-col gap-1">
             <h1 className="text-[20px] md:text-[22px] font-bold text-black tracking-tight">
-              Welcome back, Jyothsna!
+              Welcome back, {userName || "User"}!
             </h1>
             <p className="text-[13px] text-[#64748B]">
               Your job search is running. We're finding, matching and applying to the best opportunities for you.

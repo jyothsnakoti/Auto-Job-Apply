@@ -13,6 +13,7 @@ export {
   setStoredTokens,
   clearStoredTokens,
   authenticatedFetch,
+  getBillingPlans,
   getStripePublishableKey,
   createPaymentIntent,
   confirmBackendPayment,
@@ -22,7 +23,10 @@ export {
   getBillingStatus,
   getBillingHistory,
   recoverBilling,
+  selectTrialPlan,
+  toggleAutopay,
 } from './billingService';
+
 export { default as authService } from './authService';
 export { default as billingService } from './billingService';
 export { default as onboardingService } from './onboardingService';
@@ -33,4 +37,3 @@ export { default as locationProfileService } from './locationProfileService';
 export { default as settingsProfileService } from './settingsProfileService';
 export { default as workPreferencesProfileService } from './workPreferencesProfileService';
 export { default as endpoints, ENDPOINTS, AUTH_ENDPOINTS, BILLING_ENDPOINTS, ONBOARDING_ENDPOINTS, PROFILE_ENDPOINTS, API_BASE_URL } from './endpoints';
-
