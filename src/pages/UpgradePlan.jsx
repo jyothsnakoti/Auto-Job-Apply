@@ -1,8 +1,24 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { loadStripe } from "@stripe/stripe-js";
+import {
+  Elements,
+  PaymentElement,
+  useStripe,
+  useElements,
+} from "@stripe/react-stripe-js";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
-import { getBillingStatus, getBillingPlans, getBillingHistory } from "../services/billingService";
+import {
+  getBillingStatus,
+  getBillingPlans,
+  getBillingHistory,
+  getStripePublishableKey,
+  createCardUpdateIntent,
+  confirmCardUpdate,
+  getPaymentMethod,
+} from "../services/billingService";
+import { getStoredUser } from "../services/authService";
 
 const CheckIcon = () => (
   <svg
@@ -16,11 +32,179 @@ const CheckIcon = () => (
   </svg>
 );
 
+/**
+ * Inner Card Update Form within Stripe Elements context
+ */
+const CardUpdateForm = ({ clientSecret, onSuccess, onCancel }) => {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const handleSubmit = async (e) => {
+    if (e) e.preventDefault();
+    if (isSubmitting) return;
+
+    if (!stripe || !elements || !clientSecret) {
+      setErrorMessage("Payment gateway is initializing. Please wait a moment.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage("");
+
+    try {
+      // Step 1: Client-side validation via Elements
+      const { error: submitError } = await elements.submit();
+      if (submitError) {
+        setErrorMessage(submitError.message || "Please check your card details.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Retrieve authenticated user's details for required billing name and email
+      const user = getStoredUser();
+      const billingName =
+        user?.fullName ||
+        user?.name ||
+        (user?.email ? user.email.split("@")[0] : "") ||
+        "Cardholder";
+      const billingEmail = user?.email || "";
+
+      // Step 2: Confirm SetupIntent with Stripe
+      const { error: setupError, setupIntent } = await stripe.confirmSetup({
+        elements,
+        clientSecret,
+        confirmParams: {
+          payment_method_data: {
+            billing_details: {
+              name: billingName,
+              email: billingEmail,
+            },
+          },
+          return_url: window.location.href,
+        },
+        redirect: "if_required",
+      });
+
+      if (setupError) {
+        setErrorMessage(setupError.message || "Card setup failed with Stripe.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (!setupIntent || setupIntent.status !== "succeeded") {
+        setIsSubmitting(false);
+        if (setupIntent?.status === "requires_action") {
+          setErrorMessage("Additional card verification is required. Please follow any on-screen prompts or try another card.");
+          return;
+        }
+        if (setupIntent?.status === "requires_payment_method") {
+          setErrorMessage("The payment method was not accepted. Please check the card details and try again.");
+          return;
+        }
+        setErrorMessage(`Card setup incomplete (Status: ${setupIntent?.status || "unknown"}). Please try again.`);
+        return;
+      }
+
+      // Step 3: Confirm card update with backend
+      try {
+        await confirmCardUpdate(setupIntent.id);
+      } catch (backendErr) {
+        console.error("Backend confirm-card-update failed:", backendErr);
+        setErrorMessage("Unable to update payment method. Please try again.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Step 4: Successful update!
+      onSuccess();
+    } catch (err) {
+      console.error("Card update execution error:", err);
+      setErrorMessage(err?.message || "An unexpected error occurred while updating card details.");
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      {errorMessage && (
+        <div className="p-3 rounded-[10px] bg-[#FEF2F2] border border-[#FECACA] text-[#DC2626] text-[12.5px] font-medium flex items-start gap-2">
+          <svg className="w-4 h-4 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <span className="flex-1 leading-snug">{errorMessage}</span>
+        </div>
+      )}
+
+      <div className="rounded-[12px] border border-slate-200 bg-white p-3.5">
+        <PaymentElement
+          options={{
+            layout: "tabs",
+            paymentMethodOrder: ["card"],
+            wallets: {
+              applePay: "never",
+              googlePay: "never",
+            },
+            fields: {
+              billingDetails: {
+                name: "never",
+                email: "never",
+              },
+            },
+            terms: {
+              card: "never",
+            },
+          }}
+        />
+      </div>
+
+      <div className="flex items-center justify-end gap-3 pt-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={isSubmitting}
+          className="px-4 py-2.5 rounded-[10px] border border-slate-200 hover:bg-slate-100 text-slate-700 font-medium text-[13px] transition-colors cursor-pointer disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="px-6 py-2.5 rounded-[10px] bg-[#004B97] hover:bg-[#003B77] text-white font-medium text-[13.5px] shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
+        >
+          {isSubmitting ? (
+            <>
+              <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              <span>Saving card...</span>
+            </>
+          ) : (
+            <span>Save Payment Method</span>
+          )}
+        </button>
+      </div>
+    </form>
+  );
+};
+
 const UpgradePlan = () => {
   const navigate = useNavigate();
   const [autoPay, setAutoPay] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [backendPlans, setBackendPlans] = useState([]);
+
+  // Saved Payment Method state
+  const [savedPaymentMethod, setSavedPaymentMethod] = useState(null);
+  const [isPaymentMethodLoading, setIsPaymentMethodLoading] = useState(true);
+
+  // SetupIntent state for card update modal
+  const [setupClientSecret, setSetupClientSecret] = useState(null);
+  const [setupStripePromise, setSetupStripePromise] = useState(null);
+  const [isInitializingSetup, setIsInitializingSetup] = useState(false);
+  const [setupInitError, setSetupInitError] = useState("");
 
   // Billing history state
   const [history, setHistory] = useState([]);
@@ -40,7 +224,25 @@ const UpgradePlan = () => {
     return null;
   });
 
-  // Fetch current billing status, available plans, and billing history
+  // Fetch current payment method
+  const fetchPaymentMethod = async () => {
+    try {
+      setIsPaymentMethodLoading(true);
+      const data = await getPaymentMethod();
+      if (data) {
+        setSavedPaymentMethod(data);
+      } else {
+        setSavedPaymentMethod(null);
+      }
+    } catch (err) {
+      console.warn("[UpgradePlan] Failed to fetch payment method:", err);
+      setSavedPaymentMethod(null);
+    } finally {
+      setIsPaymentMethodLoading(false);
+    }
+  };
+
+  // Fetch billing history
   const fetchBillingHistory = async () => {
     try {
       setIsHistoryLoading(true);
@@ -80,11 +282,13 @@ const UpgradePlan = () => {
 
     fetchStatusAndPlans();
     fetchBillingHistory();
+    fetchPaymentMethod();
 
     const handleBillingUpdate = (e) => {
       if (e?.detail) setBilling(e.detail);
       else fetchStatusAndPlans();
       fetchBillingHistory();
+      fetchPaymentMethod();
     };
 
     window.addEventListener("billingStatusUpdated", handleBillingUpdate);
@@ -296,14 +500,73 @@ const UpgradePlan = () => {
     visiblePlans = mergedPlans;
   }
 
-  // Form states for Add A New Card modal
-  const [cardName, setCardName] = useState("");
-  const [cardNumber, setCardNumber] = useState("");
-  const [expiryDate, setExpiryDate] = useState("");
+  // Card formatting helpers
+  const formatCardBrand = (pm) => {
+    if (!pm) return "CARD";
+    const brand = pm.brand || pm.card?.brand || pm.cardBrand || pm.type || "CARD";
+    return String(brand).toUpperCase();
+  };
 
-  const handleModalSubmit = (e) => {
-    e.preventDefault();
+  const formatCardLast4 = (pm) => {
+    if (!pm) return "••••";
+    const last4 = pm.last4 || pm.card?.last4 || pm.lastFour || pm.last_4 || "••••";
+    return `•••• •••• •••• ${last4}`;
+  };
+
+  const formatCardExpiry = (pm) => {
+    if (!pm) return "";
+    const expMonth = pm.expMonth || pm.card?.expMonth || pm.exp_month || pm.card?.exp_month || pm.expiryMonth;
+    const expYear = pm.expYear || pm.card?.expYear || pm.exp_year || pm.card?.exp_year || pm.expiryYear;
+    if (expMonth && expYear) {
+      const monthStr = String(expMonth).padStart(2, "0");
+      const yearStr = String(expYear).slice(-2);
+      return `Exp ${monthStr}/${yearStr}`;
+    }
+    if (pm.expiry) return `Exp ${pm.expiry}`;
+    return "";
+  };
+
+  // Open Stripe card update flow
+  const handleOpenPaymentModal = async () => {
+    setIsPaymentModalOpen(true);
+    setSetupInitError("");
+    setSetupClientSecret(null);
+    setIsInitializingSetup(true);
+
+    try {
+      // 1. Fetch publishable key
+      const publishableKey = await getStripePublishableKey();
+      if (!publishableKey) {
+        throw new Error("Stripe publishable key is not available.");
+      }
+
+      // 2. Load Stripe.js instance
+      const stripeObj = await loadStripe(publishableKey);
+      setSetupStripePromise(stripeObj);
+
+      // 3. Create fresh Card Update SetupIntent
+      const secret = await createCardUpdateIntent();
+      if (!secret) {
+        throw new Error("Unable to prepare payment method update.");
+      }
+
+      setSetupClientSecret(secret);
+    } catch (err) {
+      console.error("[UpgradePlan] SetupIntent initialization failed:", err);
+      setSetupInitError(err?.message || "Unable to prepare payment method update.");
+    } finally {
+      setIsInitializingSetup(false);
+    }
+  };
+
+  const handlePaymentUpdateSuccess = async () => {
     setIsPaymentModalOpen(false);
+    setSetupClientSecret(null);
+    try {
+      await fetchPaymentMethod();
+    } catch (err) {
+      console.warn("[UpgradePlan] Error refreshing payment method:", err);
+    }
   };
 
   const handleSelectPaidPlan = (plan) => {
@@ -665,44 +928,75 @@ const UpgradePlan = () => {
 
                     <button
                       type="button"
-                      onClick={() => setIsPaymentModalOpen(true)}
+                      onClick={handleOpenPaymentModal}
                       className="text-[12.5px] font-medium text-[#2563EB] hover:text-[#1D4ED8] transition-colors cursor-pointer"
                     >
-                      Update payment details
+                      {savedPaymentMethod ? "Update payment details" : "Add payment details"}
                     </button>
                   </div>
 
-                  {/* Visa Card Box */}
-                  <div className="p-3 rounded-[12px] border border-slate-100 bg-[#F8FAFC] flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="px-2.5 py-1 rounded-[6px] bg-[#1E293B] text-white text-[11px] font-bold tracking-wider">
-                        VISA
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-[13px] font-medium text-[#0F172A]">
-                          •••• •••• •••• 4242
-                        </span>
-                        <span className="text-[11px] text-[#94A3B8]">
-                          Exp 04/29
-                        </span>
+                  {/* Card Details Box */}
+                  {isPaymentMethodLoading ? (
+                    <div className="p-3 rounded-[12px] border border-slate-100 bg-[#F8FAFC] flex items-center gap-3 animate-pulse">
+                      <div className="w-10 h-6 bg-slate-200 rounded-[6px]" />
+                      <div className="flex flex-col gap-1.5 flex-1">
+                        <div className="w-28 h-3.5 bg-slate-200 rounded" />
+                        <div className="w-16 h-2.5 bg-slate-200 rounded" />
                       </div>
                     </div>
+                  ) : savedPaymentMethod ? (
+                    <div className="p-3 rounded-[12px] border border-slate-100 bg-[#F8FAFC] flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="px-2.5 py-1 rounded-[6px] bg-[#1E293B] text-white text-[11px] font-bold tracking-wider">
+                          {formatCardBrand(savedPaymentMethod)}
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[13px] font-medium text-[#0F172A]">
+                            {formatCardLast4(savedPaymentMethod)}
+                          </span>
+                          {formatCardExpiry(savedPaymentMethod) && (
+                            <span className="text-[11px] text-[#94A3B8]">
+                              {formatCardExpiry(savedPaymentMethod)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
 
-                    <button
-                      type="button"
-                      className="text-slate-400 hover:text-slate-600 p-1"
-                    >
-                      <svg
-                        className="w-4 h-4"
-                        fill="currentColor"
-                        viewBox="0 0 24 24"
+                      <button
+                        type="button"
+                        onClick={handleOpenPaymentModal}
+                        title="Update payment details"
+                        className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer transition-colors"
                       >
-                        <circle cx="12" cy="5" r="1.5" />
-                        <circle cx="12" cy="12" r="1.5" />
-                        <circle cx="12" cy="19" r="1.5" />
-                      </svg>
-                    </button>
-                  </div>
+                        <svg
+                          className="w-4 h-4"
+                          fill="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle cx="12" cy="5" r="1.5" />
+                          <circle cx="12" cy="12" r="1.5" />
+                          <circle cx="12" cy="19" r="1.5" />
+                        </svg>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-3 rounded-[12px] border border-dashed border-slate-200 bg-[#F8FAFC] flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 text-slate-500 text-[12.5px]">
+                        <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <rect x="2" y="5" width="20" height="14" rx="2" strokeWidth="1.5" />
+                          <line x1="2" y1="10" x2="22" y2="10" strokeWidth="1.5" />
+                        </svg>
+                        <span>No saved payment method</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleOpenPaymentModal}
+                        className="text-[12px] font-semibold text-[#4F46E5] hover:text-[#4338CA] cursor-pointer"
+                      >
+                        Add Card
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* 2. Auto-pay Card */}
@@ -869,19 +1163,27 @@ const UpgradePlan = () => {
         </main>
       </div>
 
-      {/* Add A New Card Modal Popup */}
+      {/* Update Payment Details Stripe Modal Popup */}
       {isPaymentModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-[2px] p-4">
-          <div className="w-full max-w-[430px] rounded-[20px] bg-white p-6 shadow-2xl relative animate-in fade-in zoom-in-95 duration-150">
+          <div className="w-full max-w-[480px] rounded-[20px] bg-white p-6 shadow-2xl relative animate-in fade-in zoom-in-95 duration-150">
             {/* Modal Header */}
-            <div className="flex items-center justify-between pb-4">
-              <h3 className="text-[17px] font-bold text-[#0F172A]">
-                Add A New Card
-              </h3>
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex flex-col">
+                <h3 className="text-[17px] font-bold text-[#0F172A]">
+                  Update Payment Details
+                </h3>
+                <p className="text-[12px] text-[#64748B] mt-0.5">
+                  Add or update your payment card securely via Stripe
+                </p>
+              </div>
               <button
                 type="button"
-                onClick={() => setIsPaymentModalOpen(false)}
-                className="text-slate-900 hover:text-slate-600 transition-colors p-1 cursor-pointer"
+                onClick={() => {
+                  setIsPaymentModalOpen(false);
+                  setSetupClientSecret(null);
+                }}
+                className="text-slate-400 hover:text-slate-700 transition-colors p-1 cursor-pointer"
               >
                 <svg
                   className="w-5 h-5 stroke-[2.5]"
@@ -898,104 +1200,98 @@ const UpgradePlan = () => {
               </button>
             </div>
 
-            {/* Modal Form */}
-            <form onSubmit={handleModalSubmit} className="flex flex-col gap-4">
-              {/* Field 1: Name on Card */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[13px] font-medium text-slate-800">
-                  Name on Card <span className="text-red-500">*</span>
-                </label>
-                <div className="flex items-center gap-2.5 rounded-[12px] bg-[#F8FAFC] border border-[#E2E8F0] px-3.5 py-2.5 focus-within:border-[#004B97] focus-within:bg-white focus-within:ring-1 focus-within:ring-[#004B97] transition-all">
+            {/* Modal Content */}
+            <div className="pt-4">
+              {isInitializingSetup ? (
+                <div className="py-12 flex flex-col items-center justify-center gap-3 text-center">
                   <svg
-                    className="w-4 h-4 text-[#64748B] shrink-0"
+                    className="animate-spin h-7 w-7 text-[#4F46E5]"
                     fill="none"
                     viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth="2"
                   >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
                     <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                     />
                   </svg>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Enter Your name"
-                    value={cardName}
-                    onChange={(e) => setCardName(e.target.value)}
-                    className="w-full bg-transparent text-[13px] text-slate-800 placeholder:text-[#94A3B8] outline-none"
-                  />
+                  <span className="text-[13.5px] font-medium text-slate-700">
+                    Updating payment method...
+                  </span>
+                  <span className="text-[11.5px] text-slate-400">
+                    Preparing secure card connection...
+                  </span>
                 </div>
-              </div>
-
-              {/* Field 2: Debit/Credit card number */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[13px] font-medium text-slate-800">
-                  Debit/Credit card number <span className="text-red-500">*</span>
-                </label>
-                <div className="flex items-center gap-2.5 rounded-[12px] bg-[#F8FAFC] border border-[#E2E8F0] px-3.5 py-2.5 focus-within:border-[#004B97] focus-within:bg-white focus-within:ring-1 focus-within:ring-[#004B97] transition-all">
-                  <svg
-                    className="w-4 h-4 text-[#64748B] shrink-0"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <rect x="2" y="5" width="20" height="14" rx="2" />
-                    <line x1="2" y1="10" x2="22" y2="10" />
-                  </svg>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Enter your card details"
-                    value={cardNumber}
-                    onChange={(e) => setCardNumber(e.target.value)}
-                    className="w-full bg-transparent text-[13px] text-slate-800 placeholder:text-[#94A3B8] outline-none"
-                  />
+              ) : setupInitError ? (
+                <div className="py-6 flex flex-col items-center gap-4 text-center">
+                  <div className="w-11 h-11 rounded-full bg-red-50 text-red-600 flex items-center justify-center">
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[14px] font-semibold text-slate-900">
+                      Unable to prepare payment method update.
+                    </span>
+                    <p className="text-[12px] text-slate-500 max-w-[320px]">
+                      {setupInitError}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setIsPaymentModalOpen(false)}
+                      className="px-4 py-2 rounded-[10px] border border-slate-200 text-slate-700 text-[13px] font-medium hover:bg-slate-50 cursor-pointer"
+                    >
+                      Close
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleOpenPaymentModal}
+                      className="px-5 py-2 rounded-[10px] bg-[#004B97] text-white text-[13px] font-medium hover:bg-[#003B77] cursor-pointer"
+                    >
+                      Retry
+                    </button>
+                  </div>
                 </div>
-              </div>
-
-              {/* Field 3: Expiry Date */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[13px] font-medium text-slate-800">
-                  Expiry Date <span className="text-red-500">*</span>
-                </label>
-                <div className="flex items-center gap-2.5 rounded-[12px] bg-[#F8FAFC] border border-[#E2E8F0] px-3.5 py-2.5 focus-within:border-[#004B97] focus-within:bg-white focus-within:ring-1 focus-within:ring-[#004B97] transition-all">
-                  <svg
-                    className="w-4 h-4 text-[#64748B] shrink-0"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                    <line x1="16" y1="2" x2="16" y2="6" />
-                    <line x1="8" y1="2" x2="8" y2="6" />
-                    <line x1="3" y1="10" x2="21" y2="10" />
-                  </svg>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Enter Expiry Date"
-                    value={expiryDate}
-                    onChange={(e) => setExpiryDate(e.target.value)}
-                    className="w-full bg-transparent text-[13px] text-slate-800 placeholder:text-[#94A3B8] outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Submit Button */}
-              <div className="flex justify-end pt-2">
-                <button
-                  type="submit"
-                  className="px-7 py-2.5 rounded-[10px] bg-[#004B97] hover:bg-[#003B77] text-white font-medium text-[13.5px] shadow-sm transition-all cursor-pointer"
+              ) : setupClientSecret && setupStripePromise ? (
+                <Elements
+                  stripe={setupStripePromise}
+                  options={{
+                    clientSecret: setupClientSecret,
+                    appearance: {
+                      theme: "stripe",
+                      variables: {
+                        colorPrimary: "#004B97",
+                        colorBackground: "#FFFFFF",
+                        colorText: "#0F172A",
+                        colorDanger: "#EF4444",
+                        fontFamily: '"Plus Jakarta Sans", system-ui, sans-serif',
+                        borderRadius: "12px",
+                        fontSizeBase: "14px",
+                      },
+                    },
+                  }}
                 >
-                  Submit
-                </button>
-              </div>
-            </form>
+                  <CardUpdateForm
+                    clientSecret={setupClientSecret}
+                    onSuccess={handlePaymentUpdateSuccess}
+                    onCancel={() => {
+                      setIsPaymentModalOpen(false);
+                      setSetupClientSecret(null);
+                    }}
+                  />
+                </Elements>
+              ) : null}
+            </div>
           </div>
         </div>
       )}

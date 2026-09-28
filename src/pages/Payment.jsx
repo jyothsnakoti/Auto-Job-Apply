@@ -17,6 +17,7 @@ import {
     getBillingStatus,
     recoverBilling,
 } from '../services/billingService';
+import { getStoredUser } from '../services/authService';
 
 /**
  * Helper to determine plan code from selected plan object
@@ -125,6 +126,16 @@ const PaymentFormContent = ({
                 return;
             }
 
+            // Retrieve user details from stored user state for billing details
+            const user = getStoredUser();
+            const billingName =
+                formData.nameOnCard.trim() ||
+                user?.fullName ||
+                user?.name ||
+                (user?.email ? user.email.split('@')[0] : '') ||
+                'Cardholder';
+            const billingEmail = user?.email || '';
+
             // 4. Confirm payment with Stripe
             const { error: confirmError, paymentIntent } = await stripe.confirmPayment({
                 elements,
@@ -133,7 +144,8 @@ const PaymentFormContent = ({
                     return_url: `${window.location.origin}/dashboard`,
                     payment_method_data: {
                         billing_details: {
-                            name: formData.nameOnCard,
+                            name: billingName,
+                            email: billingEmail,
                             address: {
                                 line1: formData.streetAddress,
                                 city: formData.city,
@@ -279,11 +291,21 @@ const PaymentFormContent = ({
                             <PaymentElement
                                 id="payment-element"
                                 options={{
-                                    layout: 'auto',
+                                    layout: 'tabs',
                                     paymentMethodOrder: ['card'],
                                     wallets: {
                                         applePay: 'never',
                                         googlePay: 'never',
+                                    },
+                                    fields: {
+                                        billingDetails: {
+                                            name: 'never',
+                                            email: 'never',
+                                            address: 'never',
+                                        },
+                                    },
+                                    terms: {
+                                        card: 'never',
                                     },
                                 }}
                             />

@@ -147,22 +147,16 @@ export const authenticatedFetch = async (endpoint, options = {}) => {
     }
   }
 
-  const contentType = response.headers.get('content-type') || '';
-  const isJson = contentType.includes('application/json');
+  const text = await response.text().catch(() => '');
 
   if (!response.ok) {
     let errorMessage = `Request failed (Status ${response.status})`;
     let errorData = null;
     try {
-      if (isJson) {
-        errorData = await response.json();
-        errorMessage = errorData?.message || errorData?.error || errorMessage;
-      } else {
-        const errorText = await response.text();
-        if (errorText) errorMessage = errorText;
-      }
+      errorData = JSON.parse(text);
+      errorMessage = errorData?.message || errorData?.error || errorMessage;
     } catch {
-      // fallback to default message
+      if (text) errorMessage = text;
     }
 
     if (response.status === 403) {
@@ -180,10 +174,17 @@ export const authenticatedFetch = async (endpoint, options = {}) => {
     throw err;
   }
 
-  if (isJson) {
-    return await response.json();
-  } else {
-    return await response.text();
+  // Handle successful response (HTTP 200 - 299)
+  // If text is valid JSON, return parsed JSON object; otherwise return plain text response
+  if (!text) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    // Plain text response (e.g., "Payment confirmed. Plan activated.")
+    return text;
   }
 };
 
@@ -386,6 +387,96 @@ export const getBillingHistory = async (token = null) => {
 };
 
 /**
+ * Create Card Update SetupIntent
+ * POST /api/billing/create-card-update-intent
+ * Request body: none
+ * Response: { "clientSecret": "seti_..._secret_..." }
+ */
+export const createCardUpdateIntent = async () => {
+  const res = await authenticatedFetch(BILLING_ENDPOINTS.CREATE_CARD_UPDATE_INTENT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (typeof res === 'object' && res?.clientSecret) {
+    return res.clientSecret;
+  }
+  if (typeof res === 'string' && res.includes('_secret_')) {
+    return res.trim();
+  }
+  throw new Error('Backend did not return a valid clientSecret for card update.');
+};
+
+/**
+ * Confirm Card Update
+ * POST /api/billing/confirm-card-update
+ * Request body: { "setupIntentId": "seti_..." }
+ */
+export const confirmCardUpdate = async (setupIntentId) => {
+  if (!setupIntentId) {
+    throw new Error('SetupIntent ID is missing for card update confirmation.');
+  }
+
+  return await authenticatedFetch(BILLING_ENDPOINTS.CONFIRM_CARD_UPDATE, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      setupIntentId,
+      SetupIntentId: setupIntentId,
+    }),
+  });
+};
+
+/**
+ * Get Saved Payment Method
+ * GET /api/billing/payment-method
+ * Response: { "brand": "visa", "last4": "4242", "expMonth": 4, "expYear": 2029 } or similar
+ */
+export const getPaymentMethod = async (token = null) => {
+  if (token) {
+    const cleanToken = sanitizeToken(token);
+    const headers = {
+      Accept: 'application/json, text/plain, */*',
+      Authorization: `Bearer ${cleanToken}`,
+    };
+    const response = await fetch(BILLING_ENDPOINTS.PAYMENT_METHOD, {
+      method: 'GET',
+      headers,
+    });
+    if (!response.ok) {
+      if (response.status === 404) return null;
+      const text = await response.text().catch(() => '');
+      let errorData;
+      try {
+        errorData = JSON.parse(text);
+      } catch {
+        errorData = { message: text };
+      }
+      const error = new Error(errorData?.message || `Failed to fetch payment method (Status ${response.status})`);
+      error.status = response.status;
+      throw error;
+    }
+    return await response.json();
+  }
+
+  try {
+    const data = await authenticatedFetch(BILLING_ENDPOINTS.PAYMENT_METHOD, {
+      method: 'GET',
+    });
+    return data;
+  } catch (err) {
+    if (err?.status === 404) {
+      return null;
+    }
+    throw err;
+  }
+};
+
+/**
  * Recovery Flow
  * POST /api/billing/recover
  * Response: { "recovered": 1 }
@@ -423,6 +514,9 @@ export default {
   getStripePublishableKey,
   createPaymentIntent,
   confirmBackendPayment,
+  createCardUpdateIntent,
+  confirmCardUpdate,
+  getPaymentMethod,
   getBillingStatus,
   getBillingHistory,
   recoverBilling,
