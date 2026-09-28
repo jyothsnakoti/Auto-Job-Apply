@@ -10,11 +10,13 @@
  * - Payment Intent creation
  * - Backend payment confirmation
  * - Billing status
+ * - Billing history
  * - Billing recovery
  * - Trial plan selection
  * - Auto-pay toggle
  * - Card update SetupIntent
  * - Card update confirmation
+ * - Saved payment method retrieval
  *
  * Protected endpoints require:
  * Authorization: Bearer <accessToken>
@@ -251,14 +253,16 @@ export const authenticatedFetch = async (
     }
   }
 
-  /**
-   * Response parsing.
-   */
-  const contentType =
-    response.headers.get('content-type') || '';
+  const text = await response.text().catch(() => '');
+  let data = null;
 
-  const isJson =
-    contentType.includes('application/json');
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = text;
+    }
+  }
 
   /**
    * Handle HTTP errors.
@@ -267,25 +271,10 @@ export const authenticatedFetch = async (
     let errorMessage =
       `Request failed (Status ${response.status})`;
 
-    let errorData = null;
-
-    try {
-      if (isJson) {
-        errorData = await response.json();
-
-        errorMessage =
-          errorData?.message ||
-          errorData?.error ||
-          errorMessage;
-      } else {
-        const errorText = await response.text();
-
-        if (errorText) {
-          errorMessage = errorText;
-        }
-      }
-    } catch {
-      // Keep default error message.
+    if (typeof data === 'object' && data !== null) {
+      errorMessage = data?.message || data?.error || errorMessage;
+    } else if (typeof data === 'string' && data) {
+      errorMessage = data;
     }
 
     if (response.status === 403) {
@@ -304,19 +293,14 @@ export const authenticatedFetch = async (
     const error = new Error(errorMessage);
 
     error.status = response.status;
-    error.data = errorData;
+    error.data = data;
 
     throw error;
   }
 
-  /**
-   * Return parsed response.
-   */
-  if (isJson) {
-    return await response.json();
-  }
-
-  return await response.text();
+  // Handle successful response (HTTP 200 - 299)
+  // If text is valid JSON, return parsed JSON object; otherwise return plain text response
+  return data ?? {};
 };
 
 /**
@@ -681,6 +665,12 @@ export const getBillingStatus = async (
 };
 
 /**
+ * ============================================================
+ * BILLING HISTORY
+ * ============================================================
+ */
+
+/**
  * Fetch user's billing renewal and payment history
  * GET /api/billing/history
  * Requires Authorization: Bearer <accessToken>
@@ -726,6 +716,195 @@ export const getBillingHistory = async (token = null) => {
 };
 
 /**
+ * ============================================================
+ * CARD UPDATE SETUPINTENT
+ * ============================================================
+ */
+
+/**
+ * Create Card Update SetupIntent
+ * POST /api/billing/create-card-update-intent
+ * Response: { "clientSecret": "seti_..._secret_..." }
+ * @param {string} [token] - Optional explicit access token
+ * @returns {Promise<string>} clientSecret string
+ */
+export const createCardUpdateIntent = async (token = null) => {
+  if (token) {
+    const cleanToken = sanitizeToken(token);
+    const headers = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/plain, */*',
+      Authorization: `Bearer ${cleanToken}`,
+    };
+    const response = await fetch(BILLING_ENDPOINTS.CREATE_CARD_UPDATE_INTENT, {
+      method: 'POST',
+      headers,
+    });
+    const text = await response.text().catch(() => '');
+    let res;
+    try {
+      res = JSON.parse(text);
+    } catch {
+      res = { message: text };
+    }
+    if (!response.ok) {
+      const error = new Error(res?.message || res?.error || `Failed to create card update intent (Status ${response.status})`);
+      error.status = response.status;
+      throw error;
+    }
+    if (typeof res === 'object' && res?.clientSecret) return res.clientSecret;
+    if (typeof res === 'string' && res.includes('_secret_')) return res.trim();
+    if (typeof res === 'object' && res?.data?.clientSecret) return res.data.clientSecret;
+    throw new Error('Backend did not return a valid clientSecret for card update.');
+  }
+
+  const res = await authenticatedFetch(BILLING_ENDPOINTS.CREATE_CARD_UPDATE_INTENT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (typeof res === 'object' && res?.clientSecret) {
+    return res.clientSecret;
+  }
+  if (typeof res === 'string' && res.includes('_secret_')) {
+    return res.trim();
+  }
+  if (typeof res === 'object' && res?.data?.clientSecret) {
+    return res.data.clientSecret;
+  }
+  throw new Error('Backend did not return a valid clientSecret for card update.');
+};
+
+/**
+ * ============================================================
+ * CONFIRM CARD UPDATE
+ * ============================================================
+ */
+
+/**
+ * Confirm Card Update
+ * POST /api/billing/confirm-card-update
+ * Body: { "setupIntentId": "seti_..." }
+ * @param {string} setupIntentId
+ * @param {string} [token] - Optional explicit access token
+ */
+export const confirmCardUpdate = async (setupIntentId, token = null) => {
+  if (!setupIntentId) {
+    throw new Error('SetupIntent ID is required for card update confirmation.');
+  }
+
+  const payload = {
+    setupIntentId: setupIntentId?.trim(),
+    SetupIntentId: setupIntentId?.trim(),
+  };
+
+  if (token) {
+    const cleanToken = sanitizeToken(token);
+    const headers = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/plain, */*',
+      Authorization: `Bearer ${cleanToken}`,
+    };
+    const response = await fetch(BILLING_ENDPOINTS.CONFIRM_CARD_UPDATE, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    });
+    const text = await response.text().catch(() => '');
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { message: text };
+    }
+    if (!response.ok) {
+      const error = new Error(data?.message || data?.error || `Failed to confirm card update (Status ${response.status})`);
+      error.status = response.status;
+      throw error;
+    }
+    return {
+      success: true,
+      message: data?.message || 'Card updated successfully.',
+      data,
+    };
+  }
+
+  const data = await authenticatedFetch(BILLING_ENDPOINTS.CONFIRM_CARD_UPDATE, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  return {
+    success: true,
+    message: typeof data === 'object' ? data?.message || 'Card updated successfully.' : String(data),
+    data,
+  };
+};
+
+/**
+ * ============================================================
+ * GET SAVED PAYMENT METHOD
+ * ============================================================
+ */
+
+/**
+ * Get Saved Payment Method
+ * GET /api/billing/payment-method
+ * Response: { "brand": "visa", "last4": "4242", "expMonth": 4, "expYear": 2029 } or similar
+ * @param {string} [token] - Optional explicit access token
+ */
+export const getPaymentMethod = async (token = null) => {
+  if (token) {
+    const cleanToken = sanitizeToken(token);
+    const headers = {
+      Accept: 'application/json, text/plain, */*',
+      Authorization: `Bearer ${cleanToken}`,
+    };
+    const response = await fetch(BILLING_ENDPOINTS.PAYMENT_METHOD, {
+      method: 'GET',
+      headers,
+    });
+    if (!response.ok) {
+      if (response.status === 404) return null;
+      const text = await response.text().catch(() => '');
+      let errorData;
+      try {
+        errorData = JSON.parse(text);
+      } catch {
+        errorData = { message: text };
+      }
+      const error = new Error(errorData?.message || `Failed to fetch payment method (Status ${response.status})`);
+      error.status = response.status;
+      throw error;
+    }
+    return await response.json();
+  }
+
+  try {
+    const data = await authenticatedFetch(BILLING_ENDPOINTS.PAYMENT_METHOD, {
+      method: 'GET',
+    });
+    return data;
+  } catch (err) {
+    if (err?.status === 404) {
+      return null;
+    }
+    throw err;
+  }
+};
+
+/**
+ * ============================================================
+ * RECOVERY FLOW
+ * ============================================================
+ */
+
+/**
  * Recovery Flow
  * POST /api/billing/recover
  */
@@ -734,7 +913,6 @@ export const recoverBilling = async () => {
     BILLING_ENDPOINTS.RECOVER,
     {
       method: 'POST',
-
       headers: {
         'Content-Type': 'application/json',
       },
@@ -756,7 +934,6 @@ export const selectTrialPlan = async () => {
     BILLING_ENDPOINTS.SELECT_TRIAL,
     {
       method: 'POST',
-
       headers: {
         'Content-Type': 'application/json',
       },
@@ -782,427 +959,64 @@ export const toggleAutopay = async (
   enabled,
   token = null
 ) => {
-  try {
-    const accessToken =
-      sanitizeToken(token) ||
-      getStoredAuthToken();
+  const isEnabled = Boolean(enabled);
+  const body = JSON.stringify({
+    enabled: isEnabled,
+  });
 
-    /**
-     * Always send a real boolean.
-     */
-    const isEnabled = Boolean(enabled);
-
-    console.log(
-      `[Billing API] Toggling Auto-pay to: ${isEnabled} at:`,
-      BILLING_ENDPOINTS.TOGGLE_AUTOPAY
-    );
-
-    console.log(
-      '[Billing API] Access Token attached:',
-      Boolean(accessToken)
-    );
-
+  if (token) {
+    const cleanToken = sanitizeToken(token);
     const headers = {
       'Content-Type': 'application/json',
       Accept: 'application/json, text/plain, */*',
-
-      ...(accessToken
-        ? {
-            Authorization: `Bearer ${accessToken}`,
-          }
-        : {}),
+      ...(cleanToken ? { Authorization: `Bearer ${cleanToken}` } : {}),
     };
 
-    const body = JSON.stringify({
-      enabled: isEnabled,
+    const response = await fetch(BILLING_ENDPOINTS.TOGGLE_AUTOPAY, {
+      method: 'POST',
+      headers,
+      body,
     });
 
-    console.log(
-      '[Billing API] Toggle Auto-pay Request Body:',
-      body
-    );
-
-    let response;
-
-    /**
-     * Explicit token:
-     * direct fetch.
-     */
-    if (token) {
-      response = await fetch(
-        BILLING_ENDPOINTS.TOGGLE_AUTOPAY,
-        {
-          method: 'POST',
-          headers,
-          body,
-        }
-      );
-    } else {
-      /**
-       * Stored token:
-       * authenticatedFetch handles refresh.
-       */
-      response = await fetchWithAuth(
-        BILLING_ENDPOINTS.TOGGLE_AUTOPAY,
-        {
-          method: 'POST',
-          headers,
-          body,
-        }
-      );
-    }
-
-    console.log(
-      `[Billing API] Toggle Auto-pay Status: ${response.status} ${response.statusText}`
-    );
-
-    const text = await response
-      .text()
-      .catch(() => '');
-
+    const text = await response.text().catch(() => '');
     let data;
-
     try {
       data = JSON.parse(text);
     } catch {
-      data = {
-        message: text,
-      };
+      data = { message: text };
     }
-
-    const message =
-      typeof data === 'string'
-        ? data
-        : data?.message ||
-          data?.error ||
-          text ||
-          '';
-
-    console.log(
-      '[Billing API] Toggle Auto-pay Payload:',
-      message || data
-    );
 
     if (!response.ok) {
-      const errorMessage =
-        message ||
-        `Failed to update auto-pay setting (Status ${response.status})`;
-
       const error = new Error(
-        errorMessage
+        data?.message || data?.error || `Failed to update auto-pay setting (Status ${response.status})`
       );
-
       error.status = response.status;
       error.data = data;
-
-      console.error(
-        '[Billing API] Toggle Auto-pay Error:',
-        error
-      );
-
       throw error;
     }
-
-    console.log(
-      '[Billing API] Auto-pay updated successfully:',
-      message
-    );
 
     return {
       success: true,
       enabled: isEnabled,
-      message:
-        message || 'Auto-pay updated.',
+      message: data?.message || 'Auto-pay updated.',
       data,
     };
-  } catch (error) {
-    console.error(
-      '[Billing API] Toggle Auto-pay Exception:',
-      error
-    );
-
-    throw error;
   }
-};
 
-/**
- * ============================================================
- * CREATE CARD UPDATE INTENT
- * ============================================================
- */
-
-/**
- * POST /api/billing/create-card-update-intent
- *
- * Creates Stripe SetupIntent.
- *
- * No payment is charged.
- */
-export const createCardUpdateIntent = async (
-  token = null
-) => {
-  try {
-    const accessToken =
-      sanitizeToken(token) ||
-      getStoredAuthToken();
-
-    console.log(
-      '[Billing API] POST to create card update intent:',
-      BILLING_ENDPOINTS.CREATE_CARD_UPDATE_INTENT
-    );
-
-    console.log(
-      '[Billing API] Access Token attached:',
-      Boolean(accessToken)
-    );
-
-    const headers = {
+  const data = await authenticatedFetch(BILLING_ENDPOINTS.TOGGLE_AUTOPAY, {
+    method: 'POST',
+    headers: {
       'Content-Type': 'application/json',
-      Accept: 'application/json, text/plain, */*',
+    },
+    body,
+  });
 
-      ...(accessToken
-        ? {
-            Authorization: `Bearer ${accessToken}`,
-          }
-        : {}),
-    };
-
-    let response;
-
-    if (token) {
-      response = await fetch(
-        BILLING_ENDPOINTS.CREATE_CARD_UPDATE_INTENT,
-        {
-          method: 'POST',
-          headers,
-        }
-      );
-    } else {
-      response = await fetchWithAuth(
-        BILLING_ENDPOINTS.CREATE_CARD_UPDATE_INTENT,
-        {
-          method: 'POST',
-          headers,
-        }
-      );
-    }
-
-    console.log(
-      `[Billing API] Create Card Update Intent Status: ${response.status} ${response.statusText}`
-    );
-
-    const text = await response
-      .text()
-      .catch(() => '');
-
-    let data;
-
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = {
-        message: text,
-      };
-    }
-
-    console.log(
-      '[Billing API] Create Card Update Intent Payload:',
-      data
-    );
-
-    if (!response.ok) {
-      const errorMessage =
-        data?.message ||
-        data?.error ||
-        text ||
-        `Failed to create card update intent (Status ${response.status})`;
-
-      const error = new Error(
-        errorMessage
-      );
-
-      error.status = response.status;
-      error.data = data;
-
-      console.error(
-        '[Billing API] Create Card Update Intent Error:',
-        error
-      );
-
-      throw error;
-    }
-
-    console.log(
-      '[Billing API] Card update intent created successfully:',
-      data
-    );
-
-    return data;
-  } catch (error) {
-    console.error(
-      '[Billing API] Create Card Update Intent Exception:',
-      error
-    );
-
-    throw error;
-  }
-};
-
-/**
- * ============================================================
- * CONFIRM CARD UPDATE
- * ============================================================
- */
-
-/**
- * POST /api/billing/confirm-card-update
- *
- * Body:
- * {
- *   "setupIntentId": "seti_..."
- * }
- */
-export const confirmCardUpdate = async (
-  setupIntentId,
-  token = null
-) => {
-  try {
-    if (!setupIntentId) {
-      throw new Error(
-        'SetupIntent ID is required for card update.'
-      );
-    }
-
-    const accessToken =
-      sanitizeToken(token) ||
-      getStoredAuthToken();
-
-    console.log(
-      '[Billing API] POST to confirm card update:',
-      BILLING_ENDPOINTS.CONFIRM_CARD_UPDATE
-    );
-
-    console.log(
-      '[Billing API] Access Token attached:',
-      Boolean(accessToken)
-    );
-
-    const headers = {
-      'Content-Type': 'application/json',
-      Accept: 'application/json, text/plain, */*',
-
-      ...(accessToken
-        ? {
-            Authorization: `Bearer ${accessToken}`,
-          }
-        : {}),
-    };
-
-    const body = JSON.stringify({
-      setupIntentId:
-        setupIntentId?.trim(),
-    });
-
-    console.log(
-      '[Billing API] Confirm Card Update Request Body:',
-      body
-    );
-
-    let response;
-
-    if (token) {
-      response = await fetch(
-        BILLING_ENDPOINTS.CONFIRM_CARD_UPDATE,
-        {
-          method: 'POST',
-          headers,
-          body,
-        }
-      );
-    } else {
-      response = await fetchWithAuth(
-        BILLING_ENDPOINTS.CONFIRM_CARD_UPDATE,
-        {
-          method: 'POST',
-          headers,
-          body,
-        }
-      );
-    }
-
-    console.log(
-      `[Billing API] Confirm Card Update Status: ${response.status} ${response.statusText}`
-    );
-
-    const text = await response
-      .text()
-      .catch(() => '');
-
-    let data;
-
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = {
-        message: text,
-      };
-    }
-
-    const message =
-      typeof data === 'string'
-        ? data
-        : data?.message ||
-          data?.error ||
-          text ||
-          '';
-
-    console.log(
-      '[Billing API] Confirm Card Update Payload:',
-      message || data
-    );
-
-    if (!response.ok) {
-      const errorMessage =
-        message ||
-        `Failed to confirm card update (Status ${response.status})`;
-
-      const error = new Error(
-        errorMessage
-      );
-
-      error.status = response.status;
-      error.data = data;
-
-      console.error(
-        '[Billing API] Confirm Card Update Error:',
-        error
-      );
-
-      throw error;
-    }
-
-    console.log(
-      '[Billing API] Card updated successfully:',
-      message
-    );
-
-    return {
-      success: true,
-
-      message:
-        message ||
-        'Card updated successfully.',
-
-      data,
-    };
-  } catch (error) {
-    console.error(
-      '[Billing API] Confirm Card Update Exception:',
-      error
-    );
-
-    throw error;
-  }
+  return {
+    success: true,
+    enabled: isEnabled,
+    message: typeof data === 'object' ? data?.message || 'Auto-pay updated.' : String(data),
+    data,
+  };
 };
 
 /**
@@ -1244,7 +1058,5 @@ export default {
    */
   createCardUpdateIntent,
   confirmCardUpdate,
+  getPaymentMethod,
 };
-  
-
-

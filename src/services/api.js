@@ -1,4 +1,3 @@
-
 export * from './endpoints';
 export * from './authService';
 export * from './billingPlans';
@@ -18,13 +17,14 @@ export {
   getStripePublishableKey,
   createPaymentIntent,
   confirmBackendPayment,
+  createCardUpdateIntent,
+  confirmCardUpdate,
+  getPaymentMethod,
   getBillingStatus,
   getBillingHistory,
   recoverBilling,
   selectTrialPlan,
   toggleAutopay,
-  createCardUpdateIntent,
-  confirmCardUpdate,
 } from './billingService';
 
 export { default as authService } from './authService';
@@ -37,4 +37,3 @@ export { default as locationProfileService } from './locationProfileService';
 export { default as settingsProfileService } from './settingsProfileService';
 export { default as workPreferencesProfileService } from './workPreferencesProfileService';
 export { default as endpoints, ENDPOINTS, AUTH_ENDPOINTS, BILLING_ENDPOINTS, ONBOARDING_ENDPOINTS, PROFILE_ENDPOINTS, API_BASE_URL } from './endpoints';
-
