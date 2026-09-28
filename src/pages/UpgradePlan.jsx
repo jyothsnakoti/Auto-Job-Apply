@@ -1906,4 +1906,4 @@ const UpgradePlan = () => {
   );
 };
 
-export default UpgradePlan;
+export default UpgradePlan;
