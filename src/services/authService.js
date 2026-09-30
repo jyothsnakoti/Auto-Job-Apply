@@ -1,4 +1,109 @@
+import axios from 'axios';
 import { AUTH_ENDPOINTS } from './endpoints';
+
+// Proactive refresh timer reference
+let refreshTimer = null;
+let activeRefreshPromise = null;
+
+/**
+ * Safely parse the expiration timestamp (exp) from a JWT access token
+ * @param {string} token - JWT string
+ * @returns {number|null} Expiration time in seconds Unix epoch, or null
+ */
+export const parseJwtExp = (token) => {
+  if (!token || typeof token !== 'string') return null;
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const base64Url = parts[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    const decoded = JSON.parse(jsonPayload);
+    return typeof decoded.exp === 'number' ? decoded.exp : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Calculate proactive refresh delay in milliseconds.
+ * Refreshes approximately 1 minute (60,000 ms) before the access token expires.
+ * For a fresh 15-minute token: ~14 minutes (840,000 ms).
+ *
+ * @param {string} token - Current access token
+ * @returns {number} Delay in milliseconds
+ */
+export const calculateRefreshDelay = (token) => {
+  const DEFAULT_DELAY_MS = 14 * 60 * 1000; // 14 minutes fallback
+  const exp = parseJwtExp(token);
+  if (!exp) return DEFAULT_DELAY_MS;
+
+  const expiryTimeMs = exp * 1000;
+  const remainingTimeMs = expiryTimeMs - Date.now();
+  // Schedule refresh ~60 seconds before actual expiration
+  const targetDelayMs = remainingTimeMs - 60 * 1000;
+
+  // If token is already expired or very close to expiring, trigger almost immediately
+  if (targetDelayMs <= 0) {
+    return 1000; // 1 second
+  }
+
+  return targetDelayMs;
+};
+
+/**
+ * Stop any active proactive token refresh timer
+ */
+export const stopTokenRefreshTimer = () => {
+  if (refreshTimer) {
+    clearTimeout(refreshTimer);
+    refreshTimer = null;
+  }
+};
+
+/**
+ * Start or restart the proactive access token refresh timer.
+ * Refreshes before token expiration (at approx 14 minutes for a 15-minute token).
+ *
+ * @param {string|null} [explicitToken] - Optional explicit access token to inspect
+ */
+export const startTokenRefreshTimer = (explicitToken = null) => {
+  stopTokenRefreshTimer();
+
+  const { accessToken, refreshToken: storedRefresh } = getStoredTokens();
+  const tokenToUse = explicitToken || accessToken;
+
+  // Only start timer if both access and refresh tokens exist
+  if (!tokenToUse || !storedRefresh) {
+    return;
+  }
+
+  const delayMs = calculateRefreshDelay(tokenToUse);
+
+  refreshTimer = setTimeout(async () => {
+    try {
+      const refreshed = await refreshAccessToken();
+      if (refreshed?.accessToken) {
+        // Restart timer with newly returned access token
+        startTokenRefreshTimer(refreshed.accessToken);
+      }
+    } catch (err) {
+      console.warn('[auth] Proactive token refresh failed:', err?.message);
+      if (err?.isAuthError || err?.status === 401) {
+        stopTokenRefreshTimer();
+        clearAuthTokens();
+        if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
+      }
+    }
+  }, delayMs);
+};
 
 /**
  * Retrieve saved tokens from localStorage or sessionStorage
@@ -30,7 +135,7 @@ export const getStoredTokens = () => {
 };
 
 /**
- * Save access & refresh tokens to storage
+ * Save access & refresh tokens to storage and start proactive refresh timer
  * @param {Object} tokens - { accessToken, refreshToken }
  * @param {boolean} rememberMe - Whether to use localStorage (true) or sessionStorage (false)
  */
@@ -68,6 +173,11 @@ export const saveAuthTokens = ({ accessToken, refreshToken }, rememberMe = null)
 
   if (refreshToken) {
     targetStorage.setItem('refreshToken', refreshToken);
+  }
+
+  // Start proactive refresh timer with the newly saved token
+  if (accessToken && (refreshToken || current.refreshToken)) {
+    startTokenRefreshTimer(accessToken);
   }
 };
 
@@ -460,71 +570,114 @@ export const resendOtp = async ({ email }) => {
 /**
  * Refresh Authentication Token
  * POST /api/auth/refresh
- * @param {string|Object} [tokenOrPayload] - Optional explicit refreshToken string or { refreshToken } object
+ * Request: { refreshToken: string }
+ * Response: { accessToken: string, refreshToken: string, ... }
+ *
+ * Implements single-use concurrency deduplication:
+ * - When multiple requests trigger refresh concurrently, only one HTTP call is made.
+ * - All other requests await the active promise and receive the rotated tokens.
+ *
+ * @param {string|Object} [tokenOrPayload] - Optional explicit refreshToken string or object
  * @returns {Promise<{ accessToken: string, refreshToken: string, ... }>}
  */
-export const refreshAuthToken = async (tokenOrPayload) => {
-  try {
-    let token = '';
-    if (typeof tokenOrPayload === 'string') {
-      token = tokenOrPayload;
-    } else if (tokenOrPayload && typeof tokenOrPayload === 'object') {
-      token = tokenOrPayload.refreshToken || tokenOrPayload.token || '';
-    }
+export const refreshAuthToken = async (tokenOrPayload = null) => {
+  if (activeRefreshPromise) {
+    return activeRefreshPromise;
+  }
 
-    if (!token) {
-      const stored = getStoredTokens();
-      token = stored.refreshToken || stored.accessToken;
-    }
+  activeRefreshPromise = (async () => {
+    try {
+      let token = '';
+      if (typeof tokenOrPayload === 'string') {
+        token = tokenOrPayload.trim();
+      } else if (tokenOrPayload && typeof tokenOrPayload === 'object') {
+        token = tokenOrPayload.refreshToken || tokenOrPayload.token || '';
+      }
 
-    const payload = token ? { refreshToken: token } : {};
+      if (!token) {
+        const stored = getStoredTokens();
+        token = stored.refreshToken;
+      }
 
-    const response = await fetch(AUTH_ENDPOINTS.REFRESH, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json, text/plain, */*',
-      },
-      body: JSON.stringify(payload),
-    });
+      if (!token) {
+        const err = new Error('No refresh token available. Please sign in again.');
+        err.status = 401;
+        err.isAuthError = true;
+        stopTokenRefreshTimer();
+        clearAuthTokens();
+        throw err;
+      }
 
-    const data = await handleResponse(response, 'Token refresh failed');
+      const response = await fetch(AUTH_ENDPOINTS.REFRESH, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/plain, */*',
+        },
+        body: JSON.stringify({ refreshToken: token }),
+      });
 
-    const newAccessToken =
-      data.accessToken ||
-      data.token ||
-      data.jwt ||
-      data.data?.accessToken ||
-      data.data?.token ||
-      '';
+      const text = await response.text().catch(() => '');
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { message: text };
+      }
 
-    const newRefreshToken =
-      data.refreshToken ||
-      data.data?.refreshToken ||
-      token;
+      if (!response.ok) {
+        stopTokenRefreshTimer();
+        clearAuthTokens();
+        const errorMsg =
+          data?.message ||
+          data?.error ||
+          (typeof data === 'string' && data ? data : '') ||
+          'Your session has expired. Please sign in again.';
+        const error = new Error(errorMsg);
+        error.status = response.status;
+        error.isAuthError = true;
+        error.data = data;
+        throw error;
+      }
 
-    if (newAccessToken || newRefreshToken) {
-      saveAuthTokens({
+      const newAccessToken =
+        data.accessToken ||
+        data.token ||
+        data.jwt ||
+        data.data?.accessToken ||
+        data.data?.token ||
+        '';
+
+      const newRefreshToken =
+        data.refreshToken ||
+        data.data?.refreshToken ||
+        token;
+
+      if (newAccessToken) {
+        saveAuthTokens({
+          accessToken: newAccessToken,
+          refreshToken: newRefreshToken,
+        });
+      }
+
+      return {
         accessToken: newAccessToken,
         refreshToken: newRefreshToken,
-      });
+        ...data,
+      };
+    } finally {
+      activeRefreshPromise = null;
     }
+  })();
 
-    return {
-      accessToken: newAccessToken,
-      refreshToken: newRefreshToken,
-      ...data,
-    };
-  } catch (error) {
-    console.error('Refresh token error:', error);
-    throw error;
-  }
+  return activeRefreshPromise;
 };
 
 /**
- * Alias for refreshAuthToken
+ * Aliases for refreshAuthToken
  */
 export const refreshToken = refreshAuthToken;
+export const refreshAccessToken = refreshAuthToken;
 
 /**
  * Logout / Sign out user
@@ -532,10 +685,13 @@ export const refreshToken = refreshAuthToken;
  * @param {string|Object} [tokenOrPayload] - Optional explicit refreshToken string or { refreshToken } object
  */
 export const logoutUser = async (tokenOrPayload) => {
+  // Clear proactive timer immediately
+  stopTokenRefreshTimer();
+
   try {
     let token = '';
     if (typeof tokenOrPayload === 'string') {
-      token = tokenOrPayload;
+      token = tokenOrPayload.trim();
     } else if (tokenOrPayload && typeof tokenOrPayload === 'object') {
       token = tokenOrPayload.refreshToken || tokenOrPayload.token || '';
     }
@@ -574,26 +730,128 @@ export const logoutUser = async (tokenOrPayload) => {
 export const signOutUser = logoutUser;
 
 /**
- * Fetch wrapper that attaches Bearer token and automatically refreshes token on 401
+ * ============================================================
+ * CENTRALIZED AXIOS INSTANCE WITH PROACTIVE & RETRY INTERCEPTORS
+ * ============================================================
+ */
+
+export const apiClient = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE_URL || '',
+  headers: {
+    'Accept': 'application/json, text/plain, */*',
+  },
+});
+
+// Request Interceptor: inject latest active access token
+apiClient.interceptors.request.use(
+  (config) => {
+    const { accessToken } = getStoredTokens();
+    if (accessToken && !config.headers.Authorization) {
+      config.headers.Authorization = `Bearer ${accessToken}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Response Interceptor: fallback 401 token refresh with single-retry guard
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+    if (!originalRequest) {
+      return Promise.reject(error);
+    }
+
+    // Only retry on 401 Unauthorized (expired JWT), strictly avoiding 403 (permissions/ownership)
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+
+      try {
+        const refreshed = await refreshAccessToken();
+        if (refreshed?.accessToken) {
+          originalRequest.headers.Authorization = `Bearer ${refreshed.accessToken}`;
+          return apiClient(originalRequest);
+        }
+      } catch (refreshErr) {
+        stopTokenRefreshTimer();
+        clearAuthTokens();
+        return Promise.reject(refreshErr);
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+export const axiosInstance = apiClient;
+
+/**
+ * Centralized Authenticated Fetch Wrapper
+ * Features:
+ * - Injects Authorization: Bearer <accessToken>
+ * - Detects 401 (expired access token) and calls centralized refreshAuthToken()
+ * - Deduplicates concurrent refresh requests behind a single in-flight promise
+ * - Retries the original request exactly once with new token (max 1 retry)
+ * - Preserves multipart/form-data requests without overriding browser boundary
+ * - Handles token rotation seamlessly
+ *
  * @param {string} url - Request URL
  * @param {Object} options - Fetch options
+ * @param {boolean} [isRetry=false] - Internal flag preventing infinite retry loops
+ * @returns {Promise<Response>}
  */
-export const fetchWithAuth = async (url, options = {}) => {
-  const { accessToken } = getStoredTokens();
+export const fetchWithAuth = async (url, options = {}, isRetry = false) => {
+  let { accessToken, refreshToken: storedRefresh } = getStoredTokens();
+  if (options.token) {
+    accessToken = options.token;
+  }
+
+  // If access token is missing but refresh token exists, attempt refresh first
+  if (!accessToken && storedRefresh && !isRetry) {
+    try {
+      const refreshed = await refreshAuthToken();
+      if (refreshed?.accessToken) {
+        accessToken = refreshed.accessToken;
+      }
+    } catch {
+      // Continue to request; 401 handler will catch if unauthorized
+    }
+  }
+
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
 
   const headers = {
-    'Content-Type': 'application/json',
+    Accept: 'application/json, text/plain, */*',
+    ...(!isFormData && options.body && typeof options.body === 'string' && !options.headers?.['Content-Type']
+      ? { 'Content-Type': 'application/json' }
+      : {}),
     ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
     ...(options.headers || {}),
   };
 
-  let response = await fetch(url, {
-    ...options,
-    headers,
-  });
+  const { token: _optToken, ...fetchOptions } = options;
 
-  // If unauthorized (401 or 403), attempt token refresh and retry original request once
-  if (response.status === 401 || response.status === 403) {
+  let response;
+  try {
+    response = await fetch(url, {
+      ...fetchOptions,
+      headers,
+    });
+  } catch (netErr) {
+    console.error(`[auth] Network error requesting ${url}:`, netErr?.message);
+    throw netErr;
+  }
+
+  // If unauthorized (401), perform centralized refresh and retry original request once
+  if (response.status === 401) {
+    if (isRetry) {
+      // Already retried after refreshing tokens and still received 401 -> session invalid
+      stopTokenRefreshTimer();
+      clearAuthTokens();
+      return response;
+    }
+
     try {
       const refreshed = await refreshAuthToken();
       if (refreshed?.accessToken) {
@@ -601,18 +859,75 @@ export const fetchWithAuth = async (url, options = {}) => {
           ...headers,
           Authorization: `Bearer ${refreshed.accessToken}`,
         };
-        response = await fetch(url, {
-          ...options,
-          headers: retryHeaders,
-        });
+
+        return await fetchWithAuth(
+          url,
+          {
+            ...options,
+            headers: retryHeaders,
+            token: refreshed.accessToken,
+          },
+          true // isRetry = true
+        );
       }
     } catch (refreshErr) {
-      console.warn('Session expired or unable to refresh token on ' + response.status, refreshErr);
+      console.warn(`[auth] Session refresh failed on 401 for ${url}:`, refreshErr?.message);
+      stopTokenRefreshTimer();
+      clearAuthTokens();
     }
   }
 
   return response;
 };
+
+/**
+ * Authenticated Fetch that parses JSON/text response and throws structured error on failure
+ * @param {string} endpoint - Target URL
+ * @param {Object} options - Fetch options
+ * @returns {Promise<any>}
+ */
+export const authenticatedFetch = async (endpoint, options = {}) => {
+  const response = await fetchWithAuth(endpoint, options);
+  const text = await response.text().catch(() => '');
+  let data = null;
+
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = text;
+    }
+  }
+
+  if (!response.ok) {
+    const errorMessage =
+      (typeof data === 'object' && data ? (data.message || data.error) : '') ||
+      (typeof data === 'string' && data ? data : '') ||
+      `Request failed (Status ${response.status})`;
+
+    const error = new Error(errorMessage);
+    error.status = response.status;
+    error.data = data;
+    if (response.status === 401) {
+      error.isAuthError = true;
+    }
+    throw error;
+  }
+
+  return data;
+};
+
+// Automatically restore proactive refresh timer on initial module execution if stored session exists
+if (typeof window !== 'undefined') {
+  try {
+    const { accessToken, refreshToken: storedRefresh } = getStoredTokens();
+    if (accessToken && storedRefresh) {
+      startTokenRefreshTimer(accessToken);
+    }
+  } catch {
+    // ignore
+  }
+}
 
 export default {
   signupUser,
@@ -623,6 +938,7 @@ export default {
   verifyOtp,
   resendOtp,
   refreshToken,
+  refreshAccessToken,
   refreshAuthToken,
   logoutUser,
   signOutUser,
@@ -630,4 +946,11 @@ export default {
   saveAuthTokens,
   clearAuthTokens,
   fetchWithAuth,
+  authenticatedFetch,
+  apiClient,
+  axiosInstance,
+  startTokenRefreshTimer,
+  stopTokenRefreshTimer,
+  parseJwtExp,
+  calculateRefreshDelay,
 };

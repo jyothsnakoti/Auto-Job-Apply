@@ -485,7 +485,7 @@ const Dashboard = () => {
         <Header />
 
         {/* Dashboard Main Content */}
-        <main className="flex-1 px-8 py-7 flex flex-col gap-6 w-full bg-[#F8FAFC]">
+        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-7 flex flex-col gap-6 w-full bg-[#F8FAFC]">
           
           {/* Welcome Header */}
           <div className="flex flex-col gap-1">

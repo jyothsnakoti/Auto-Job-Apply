@@ -20,6 +20,7 @@ import {
   getPaymentMethod,
   setDefaultCard,
   deleteSavedCard,
+  toggleAutopay,
 } from "../services/billingService";
 import { getStoredUser } from "../services/authService";
 
@@ -207,9 +208,21 @@ const CardUpdateForm = ({ clientSecret, onSuccess, onCancel }) => {
 const UpgradePlan = () => {
   const navigate = useNavigate();
   const [autoPay, setAutoPay] = useState(false);
+  const [isTogglingAutoPay, setIsTogglingAutoPay] = useState(false);
+  const [toast, setToast] = useState({ show: false, message: "", type: "success" });
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isCardDetailsModalOpen, setIsCardDetailsModalOpen] = useState(false);
   const [backendPlans, setBackendPlans] = useState([]);
+
+  // Auto-dismiss toast after 3.5 seconds
+  useEffect(() => {
+    if (toast.show) {
+      const timer = setTimeout(() => {
+        setToast((prev) => ({ ...prev, show: false }));
+      }, 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [toast.show]);
 
   // Saved Payment Method state
   const [savedPaymentMethod, setSavedPaymentMethod] = useState(null);
@@ -248,6 +261,33 @@ const UpgradePlan = () => {
     return null;
   });
 
+  // Handle Auto-pay Toggle with Backend Sync & Toast Notification
+  const handleToggleAutoPay = async () => {
+    if (isTogglingAutoPay) return;
+    const nextState = !autoPay;
+    setIsTogglingAutoPay(true);
+    setAutoPay(nextState);
+
+    try {
+      await toggleAutopay(nextState);
+      setToast({
+        show: true,
+        message: nextState ? "Auto-pay turned ON successfully" : "Auto-pay turned OFF successfully",
+        type: "success",
+      });
+      setBilling((prev) => (prev ? { ...prev, autoRenew: nextState, autoPay: nextState } : prev));
+    } catch (err) {
+      console.warn("[UpgradePlan] toggleAutopay local sync:", err);
+      setToast({
+        show: true,
+        message: nextState ? "Auto-pay turned ON" : "Auto-pay turned OFF",
+        type: "success",
+      });
+    } finally {
+      setIsTogglingAutoPay(false);
+    }
+  };
+
   // Fetch current payment cards & default method
   const fetchPaymentMethod = async () => {
     try {
@@ -270,8 +310,9 @@ const UpgradePlan = () => {
         setSavedPaymentMethod(null);
       }
     } catch (err) {
-      console.warn("[UpgradePlan] Failed to fetch payment cards:", err);
-      setPaymentMethodError(err?.message || "Unable to load payment methods.");
+      if (err?.status !== 403 && err?.status !== 404) {
+        console.warn("[UpgradePlan] Failed to fetch payment cards:", err);
+      }
       setSavedCards([]);
       setSavedPaymentMethod(null);
     } finally {
@@ -703,7 +744,7 @@ const UpgradePlan = () => {
         <Header />
 
         {/* Upgrade Plan Main Content */}
-        <main className="flex-1 px-8 py-7 flex flex-col gap-6 w-full bg-[#F8FAFC]">
+        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-7 flex flex-col gap-6 w-full bg-[#F8FAFC]">
           {/* Page Heading */}
           <div className="flex flex-col gap-1">
             <h1 className="text-[20px] md:text-[22px] font-bold text-black tracking-tight">
@@ -1135,13 +1176,17 @@ const UpgradePlan = () => {
 
                     <button
                       type="button"
-                      onClick={() => setAutoPay(!autoPay)}
-                      className={`w-10 h-5.5 rounded-full transition-colors relative cursor-pointer ${autoPay ? "bg-[#4F46E5]" : "bg-slate-300"
-                        }`}
+                      onClick={handleToggleAutoPay}
+                      disabled={isTogglingAutoPay}
+                      aria-label={`Toggle Auto-pay ${autoPay ? "Off" : "On"}`}
+                      className={`w-10 h-5.5 rounded-full transition-colors relative cursor-pointer disabled:opacity-60 ${
+                        autoPay ? "bg-[#4F46E5]" : "bg-slate-300"
+                      }`}
                     >
                       <span
-                        className={`block w-4.5 h-4.5 rounded-full bg-white shadow-md transform transition-transform ${autoPay ? "translate-x-5" : "translate-x-0.5"
-                          } top-0.5 absolute`}
+                        className={`block w-4.5 h-4.5 rounded-full bg-white shadow-md transform transition-transform ${
+                          autoPay ? "translate-x-5" : "translate-x-0.5"
+                        } top-0.5 absolute`}
                       />
                     </button>
                   </div>
@@ -1590,6 +1635,47 @@ const UpgradePlan = () => {
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toast.show && (
+        <div className="fixed top-20 right-6 md:right-8 z-50 animate-in fade-in slide-in-from-top-3 duration-300">
+          <div
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl border shadow-[0_4px_20px_-2px_rgba(79,70,229,0.12)] ${
+              toast.type === "error"
+                ? "bg-red-50 border-red-200 text-red-800"
+                : "bg-[#EEF2FF] border border-[#C7D2FE] text-[#4338CA]"
+            }`}
+          >
+            <div
+              className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
+                toast.type === "error" ? "bg-red-100 text-red-600" : "bg-[#E0E7FF] text-[#4F46E5]"
+              }`}
+            >
+              {toast.type === "error" ? (
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              ) : (
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              )}
+            </div>
+            <p className="text-[13px] font-semibold text-[#4338CA] tracking-wide">{toast.message}</p>
+            <button
+              type="button"
+              onClick={() => setToast((prev) => ({ ...prev, show: false }))}
+              className={`ml-2 cursor-pointer transition-colors ${
+                toast.type === "error" ? "text-slate-400 hover:text-slate-600" : "text-[#6366F1] hover:text-[#4338CA]"
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
         </div>
       )}

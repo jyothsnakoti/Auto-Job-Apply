@@ -28,8 +28,9 @@ import {
   getStoredTokens,
   saveAuthTokens,
   clearAuthTokens,
-  refreshAuthToken as authRefresh,
+  refreshAuthToken,
   fetchWithAuth,
+  authenticatedFetch,
 } from './authService';
 
 /**
@@ -108,200 +109,7 @@ export const clearStoredTokens = () => {
   clearAuthTokens();
 };
 
-/**
- * ============================================================
- * TOKEN REFRESH
- * ============================================================
- */
-
-/**
- * Refresh expired access token.
- */
-export const refreshAuthToken = async () => {
-  const refreshToken = getStoredRefreshToken();
-
-  if (!refreshToken) {
-    return null;
-  }
-
-  console.debug('[billing] token refresh was attempted');
-
-  try {
-    const response = await authRefresh(refreshToken);
-
-    if (response?.accessToken) {
-      return sanitizeToken(response.accessToken);
-    }
-  } catch (error) {
-    console.error('[billing] Token refresh failed:', error);
-  }
-
-  return null;
-};
-
-/**
- * ============================================================
- * AUTHENTICATED FETCH
- * ============================================================
- */
-
-/**
- * Execute authenticated API requests.
- *
- * Features:
- * - Reads stored access token
- * - Refreshes token if missing
- * - Attaches Authorization header
- * - Retries once after 401
- * - Parses JSON/text response
- * - Provides useful errors
- */
-export const authenticatedFetch = async (
-  endpoint,
-  options = {}
-) => {
-  let token = getStoredAuthToken();
-
-  /**
-   * If access token doesn't exist,
-   * try refreshing it.
-   */
-  if (!token) {
-    const refreshToken = getStoredRefreshToken();
-
-    if (refreshToken) {
-      token = await refreshAuthToken();
-    }
-  }
-
-  console.debug(
-    '[billing] access token present:',
-    Boolean(token)
-  );
-
-  const headers = {
-    Accept: 'application/json, text/plain, */*',
-    ...(options.headers || {}),
-  };
-
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
-  const isAuthAttached = Boolean(
-    headers.Authorization
-  );
-
-  console.debug(
-    '[billing] authorization header attached:',
-    isAuthAttached
-  );
-
-  /**
-   * No token available.
-   */
-  if (!isAuthAttached) {
-    const authError = new Error(
-      'Authentication required. Please sign in to proceed with checkout.'
-    );
-
-    authError.status = 401;
-    authError.isAuthError = true;
-
-    throw authError;
-  }
-
-  /**
-   * First request.
-   */
-  let response = await fetch(endpoint, {
-    ...options,
-    headers,
-  });
-
-  /**
-   * If access token expired,
-   * refresh and retry once.
-   */
-  if (response.status === 401) {
-    console.debug(
-      '[billing] token refresh was attempted due to 401 Unauthorized'
-    );
-
-    const newToken = await refreshAuthToken();
-
-    if (newToken) {
-      headers.Authorization = `Bearer ${newToken}`;
-
-      console.debug(
-        '[billing] retry occurred with refreshed access token'
-      );
-
-      response = await fetch(endpoint, {
-        ...options,
-        headers,
-      });
-    } else {
-      const error = new Error(
-        'Your session has expired. Please sign in again.'
-      );
-
-      error.status = 401;
-      error.isAuthError = true;
-
-      throw error;
-    }
-  }
-
-  const text = await response.text().catch(() => '');
-  let data = null;
-
-  if (text) {
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = text;
-    }
-  }
-
-  /**
-   * Handle HTTP errors.
-   */
-  if (!response.ok) {
-    let errorMessage =
-      `Request failed (Status ${response.status})`;
-
-    if (typeof data === 'object' && data !== null) {
-      errorMessage = data?.message || data?.error || errorMessage;
-    } else if (typeof data === 'string' && data) {
-      errorMessage = data;
-    }
-
-    if (response.status === 403) {
-      console.warn(
-        '[billing] 403 Forbidden received for endpoint:',
-        endpoint,
-        {
-          hasToken: Boolean(token),
-          headersSent: Object.keys(headers),
-          status: response.status,
-          message: errorMessage,
-        }
-      );
-    }
-
-    const error = new Error(errorMessage);
-
-    error.status = response.status;
-    error.data = data;
-
-    throw error;
-  }
-
-  // Handle successful response (HTTP 200 - 299)
-  // If text is valid JSON, return parsed JSON object; otherwise return plain text response
-  return data ?? {};
-};
+export { refreshAuthToken, authenticatedFetch, fetchWithAuth };
 
 /**
  * ============================================================
@@ -907,7 +715,7 @@ export const getSavedCards = async (token = null) => {
         headers,
       });
       if (!response.ok) {
-        if (response.status === 404 || response.status === 400) return [];
+        if (response.status === 404 || response.status === 400 || response.status === 403) return [];
         const text = await response.text().catch(() => '');
         let errorData;
         try {
@@ -922,7 +730,7 @@ export const getSavedCards = async (token = null) => {
       const data = await response.json();
       return Array.isArray(data) ? data : (data?.cards || data?.data || (data ? [data] : []));
     } catch (err) {
-      if (err?.status === 404 || err?.status === 400) return [];
+      if (err?.status === 404 || err?.status === 400 || err?.status === 403) return [];
       throw err;
     }
   }
@@ -935,7 +743,7 @@ export const getSavedCards = async (token = null) => {
       ? data
       : data?.cards || data?.data || (data && typeof data === 'object' && Object.keys(data).length > 0 ? [data] : []);
   } catch (err) {
-    if (err?.status === 404 || err?.status === 400) {
+    if (err?.status === 404 || err?.status === 400 || err?.status === 403) {
       return [];
     }
     // Fallback to PAYMENT_METHOD endpoint
@@ -945,8 +753,7 @@ export const getSavedCards = async (token = null) => {
         ? fallback
         : fallback?.cards || (fallback && typeof fallback === 'object' && Object.keys(fallback).length > 0 ? [fallback] : []);
     } catch {
-      if (err?.status === 400) return [];
-      throw err;
+      return [];
     }
   }
 };
@@ -972,7 +779,7 @@ export const getPaymentMethod = async (token = null) => {
         headers,
       });
       if (!response.ok) {
-        if (response.status === 404 || response.status === 400) return null;
+        if (response.status === 404 || response.status === 400 || response.status === 403) return null;
         const text = await response.text().catch(() => '');
         let errorData;
         try {
@@ -987,7 +794,7 @@ export const getPaymentMethod = async (token = null) => {
       const data = await response.json();
       return extractPaymentMethod(data);
     } catch (err) {
-      if (err?.status === 404 || err?.status === 400) return null;
+      if (err?.status === 404 || err?.status === 400 || err?.status === 403) return null;
       throw err;
     }
   }
@@ -998,7 +805,7 @@ export const getPaymentMethod = async (token = null) => {
     });
     return extractPaymentMethod(data);
   } catch (err) {
-    if (err?.status === 404 || err?.status === 400) {
+    if (err?.status === 404 || err?.status === 400 || err?.status === 403) {
       return null;
     }
     // Also try CARDS endpoint fallback
@@ -1006,8 +813,7 @@ export const getPaymentMethod = async (token = null) => {
       const fallbackData = await authenticatedFetch(BILLING_ENDPOINTS.CARDS, { method: 'GET' });
       return extractPaymentMethod(fallbackData);
     } catch {
-      if (err?.status === 400) return null;
-      throw err;
+      return null;
     }
   }
 };

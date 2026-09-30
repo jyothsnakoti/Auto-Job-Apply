@@ -47,12 +47,21 @@ export const PROFILE_ENDPOINTS = {
   UPDATE_WORK_PREFERENCES: `${API_BASE_URL}/api/profile/work-preferences`,
 };
 
+export const RESUME_ENDPOINTS = {
+  UPLOAD: `${API_BASE_URL}/api/resumes`,
+  GET: `${API_BASE_URL}/api/resumes`,
+  DOWNLOAD: (id) => `${API_BASE_URL}/api/resumes/${id}/download`,
+  DELETE: (id) => `${API_BASE_URL}/api/resumes/${id}`,
+  SET_PRIMARY: (id) => `${API_BASE_URL}/api/resumes/${id}/set-primary`,
+};
+
 export const ENDPOINTS = {
   BASE_URL: API_BASE_URL,
   AUTH: AUTH_ENDPOINTS,
   BILLING: BILLING_ENDPOINTS,
   ONBOARDING: ONBOARDING_ENDPOINTS,
   PROFILE: PROFILE_ENDPOINTS,
+  RESUME: RESUME_ENDPOINTS,
 };
 
 export default ENDPOINTS;

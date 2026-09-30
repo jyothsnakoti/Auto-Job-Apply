@@ -19,6 +19,7 @@ import {
     recoverBilling,
 } from '../services/billingService';
 import { getStoredUser } from '../services/authService';
+import { checkUserHasResume } from '../services/resumeService';
 
 /**
  * Card Brand Formatter
@@ -944,14 +945,30 @@ const Payment = () => {
     const [errorMessage, setErrorMessage] = useState('');
     const [lastPaymentIntentId, setLastPaymentIntentId] = useState(null);
     const [billingStatusData, setBillingStatusData] = useState(null);
-
-    // In-memory payment session ID generated per checkout session (never persisted in localStorage)
-    const [paymentSessionId, setPaymentSessionId] = useState(() =>
-        `sess_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 9)}`
-    );
+    const [hasUserResume, setHasUserResume] = useState(false);
+    const [paymentSessionId, setPaymentSessionId] = useState('');
 
     // Track active effect run to handle StrictMode cleanly without blocking
     const effectIdRef = useRef(0);
+
+    // When payment succeeds, check if the user already has a resume
+    useEffect(() => {
+        if (paymentState === 'success') {
+            checkUserHasResume().then((hasResume) => {
+                setHasUserResume(Boolean(hasResume));
+            }).catch(() => {
+                setHasUserResume(false);
+            });
+        }
+    }, [paymentState]);
+
+    const handlePaymentSuccessContinue = () => {
+        if (!hasUserResume) {
+            navigate('/resume-setup', { state: { plan } });
+        } else {
+            navigate('/dashboard');
+        }
+    };
 
     // Fallback: If no plan in state, redirect to /plan
     if (!plan || !plan.name || typeof plan.price !== 'number') {
@@ -1179,10 +1196,10 @@ const Payment = () => {
 
                     <button
                         type="button"
-                        onClick={() => navigate('/dashboard')}
+                        onClick={handlePaymentSuccessContinue}
                         className="w-full sm:w-auto px-8 h-12 rounded-xl bg-gradient-to-r from-[#2563EB] via-[#4F46E5] to-[#1D4ED8] hover:from-[#1D4ED8] hover:via-[#4338CA] hover:to-[#1E40AF] text-white font-bold text-sm sm:text-base shadow-md transition-all cursor-pointer"
                     >
-                        Go to Dashboard
+                        {!hasUserResume ? 'Continue to Resume Setup' : 'Go to Dashboard'}
                     </button>
                 </div>
             ) : paymentState === 'loadingInit' ? (
