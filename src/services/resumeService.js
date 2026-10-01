@@ -1,5 +1,5 @@
 import { RESUME_ENDPOINTS } from './endpoints';
-import { getStoredTokens, fetchWithAuth } from './authService';
+import { getStoredTokens, getStoredUser, fetchWithAuth } from './authService';
 import { getOnboardingProfile } from './profileService';
 
 const ALLOWED_MIME_TYPES = [
@@ -43,15 +43,271 @@ export const validateResumeFile = (file) => {
 };
 
 /**
- * Upload resume file and optional metadata to backend
- * POST /api/resumes
+ * Retrieve the current authenticated user's plan/subscription from the frontend source of truth
+ * Inspects:
+ * 1. Stored billing status (billingStatus in localStorage/sessionStorage)
+ * 2. Authenticated user object (authUser/user in localStorage/sessionStorage)
+ * 3. hasPlan storage flag
+ *
+ * @returns {string} Normalized plan name or key ('free', 'basic', 'pro')
+ */
+export const getUserPlan = () => {
+  // 1. Inspect stored billing status from backend API / storage
+  try {
+    const rawBilling =
+      localStorage.getItem('billingStatus') ||
+      sessionStorage.getItem('billingStatus');
+    if (rawBilling) {
+      const billing = JSON.parse(rawBilling);
+      const planVal =
+        billing?.planCode ||
+        billing?.plancode ||
+        billing?.planName ||
+        billing?.plan ||
+        billing?.subscriptionPlan ||
+        billing?.subscription ||
+        billing?.tier;
+      if (planVal) return String(planVal).trim();
+      if (billing?.hasPlan === false) return 'free';
+    }
+  } catch {
+    // ignore parse error
+  }
+
+  // 2. Inspect authenticated user profile in storage
+  try {
+    const user = getStoredUser();
+    const userPlan =
+      user?.plan ||
+      user?.subscriptionPlan ||
+      user?.subscription ||
+      user?.planName ||
+      user?.plancode ||
+      user?.planCode ||
+      user?.tier ||
+      user?.membership;
+    if (userPlan) return String(userPlan).trim();
+  } catch {
+    // ignore
+  }
+
+  // 3. Inspect hasPlan storage indicator
+  try {
+    const hasPlan =
+      localStorage.getItem('hasPlan') === 'true' ||
+      sessionStorage.getItem('hasPlan') === 'true';
+    if (!hasPlan) return 'free';
+  } catch {
+    // ignore
+  }
+
+  return 'free';
+};
+
+/**
+ * Dynamically map subscription plan to N parameter:
+ * - FREE  → 1
+ * - BASIC → 10
+ * - PRO   → 1000
+ *
+ * @param {string|null} plan - Plan name or code
+ * @returns {number} Dynamic N value
+ */
+export const getNByPlan = (plan) => {
+  if (!plan) return 1;
+  const p = String(plan).toLowerCase().trim();
+  if (p.includes('pro')) {
+    return 1000;
+  }
+  if (p.includes('basic')) {
+    return 10;
+  }
+  // Free, Trial, Trial Pack, Free Trial, None, or default
+  return 1;
+};
+
+/**
+ * Retrieve the current authenticated user ID from the frontend auth source of truth
+ * Inspects:
+ * 1. getStoredUser() object (id, userId, user_id, _id, sub)
+ * 2. JWT Access Token decoded payload (user_id, userId, id, _id, sub)
+ * 3. Stored storage keys (userId, user_id)
+ * 4. Fallback to user email
+ *
+ * @returns {string} User ID
+ */
+export const getUserId = () => {
+  // 1. Inspect getStoredUser()
+  try {
+    const user = getStoredUser();
+    if (user) {
+      const id = user.id || user.userId || user.user_id || user._id || user.sub;
+      if (id) return String(id).trim();
+    }
+  } catch {
+    // ignore
+  }
+
+  // 2. Decode JWT access token payload if available
+  try {
+    const { accessToken } = getStoredTokens();
+    if (accessToken && typeof accessToken === 'string') {
+      const parts = accessToken.split('.');
+      if (parts.length === 3) {
+        const base64Url = parts[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(
+          atob(base64)
+            .split('')
+            .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+            .join('')
+        );
+        const decoded = JSON.parse(jsonPayload);
+        const jwtId =
+          decoded?.user_id ||
+          decoded?.userId ||
+          decoded?.id ||
+          decoded?._id ||
+          decoded?.sub;
+        if (jwtId) return String(jwtId).trim();
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // 3. Inspect direct storage keys
+  try {
+    const directId =
+      localStorage.getItem('userId') ||
+      sessionStorage.getItem('userId') ||
+      localStorage.getItem('user_id') ||
+      sessionStorage.getItem('user_id');
+    if (directId) return String(directId).trim();
+  } catch {
+    // ignore
+  }
+
+  // 4. Fallback to user email
+  try {
+    const user = getStoredUser();
+    if (user?.email) return String(user.email).trim();
+    const storedEmail =
+      localStorage.getItem('userEmail') ||
+      sessionStorage.getItem('userEmail') ||
+      '';
+    if (storedEmail) return storedEmail.trim();
+  } catch {
+    // ignore
+  }
+
+  return 'user';
+};
+
+/* =========================================================================
+ * OLD RESUME UPLOAD IMPLEMENTATION (Preserved & Commented Out)
+ * =========================================================================
+ * export const uploadResumeOld = async (file, metadata = null, token = null) => {
+ *   const validation = validateResumeFile(file);
+ *   if (!validation.valid) {
+ *     const err = new Error(validation.error);
+ *     err.status = 400;
+ *     throw err;
+ *   }
+ *
+ *   // Prepare multipart/form-data
+ *   const formData = new FormData();
+ *   formData.append('file', file);
+ *
+ *   if (metadata) {
+ *     if (typeof metadata === 'string') {
+ *       formData.append('metadata', metadata);
+ *     } else {
+ *       formData.append('metadata', JSON.stringify(metadata));
+ *     }
+ *   }
+ *
+ *   let response;
+ *   try {
+ *     response = await fetchWithAuth(RESUME_ENDPOINTS.UPLOAD, {
+ *       method: 'POST',
+ *       body: formData,
+ *       token,
+ *     });
+ *   } catch (netErr) {
+ *     console.error('Resume upload network error:', netErr);
+ *     const error = new Error('Unable to upload your resume. Please check your connection and try again.');
+ *     error.status = 0;
+ *     throw error;
+ *   }
+ *
+ *   const text = await response.text().catch(() => '');
+ *   let data;
+ *   try {
+ *     data = JSON.parse(text);
+ *   } catch {
+ *     data = text ? { message: text } : {};
+ *   }
+ *
+ *   if (!response.ok) {
+ *     let message = 'Unable to upload your resume. Please try again.';
+ *
+ *     if (response.status === 401) {
+ *       message = 'Your session has expired. Please log in again.';
+ *     } else if (response.status === 413) {
+ *       message = 'Resume file is too large. Maximum allowed size is 10MB.';
+ *     } else if (response.status === 415) {
+ *       message = 'Please upload a supported resume format (PDF, DOC, or DOCX).';
+ *     } else if (response.status === 400) {
+ *       message =
+ *         data?.message ||
+ *         data?.error ||
+ *         (typeof data === 'string' && data ? data : '') ||
+ *         'Validation failed for uploaded resume. Please verify the file and try again.';
+ *     } else if (response.status >= 500) {
+ *       message = 'Server error processing your resume. Please try again later.';
+ *     } else if (data?.message || data?.error) {
+ *       message = data.message || data.error;
+ *     }
+ *
+ *     const error = new Error(message);
+ *     error.status = response.status;
+ *     error.data = data;
+ *     throw error;
+ *   }
+ *
+ *   return data;
+ * };
+ * ========================================================================= */
+
+/**
+ * Upload resume file and retrieve top matching job descriptions.
+ *
+ * Backend Endpoint:
+ * POST https://fog-slacked-prankster.ngrok-free.dev/api/v1/Get_N_JDs_for_Res?N=<dynamicN>&top_k=100&user_id=<actualUserId>
+ *
+ * Dynamic N mapping:
+ * - FREE  → 1
+ * - BASIC → 10
+ * - PRO   → 1000
+ *
+ * Fixed top_k:
+ * - top_k = 100 (ALWAYS 100 for all plans)
+ *
+ * User ID:
+ * - user_id = Authenticated user ID
+ *
+ * Request format:
+ * - multipart/form-data with field name 'resume_file'
  *
  * @param {File} file - Resume file object
- * @param {Object|string|null} [metadata] - Optional resume metadata
+ * @param {Object|string|null} [metadata] - Optional metadata
  * @param {string|null} [token] - Optional explicit access token
- * @returns {Promise<Object>} Backend response data
+ * @param {Object} [options] - Optional overrides { plan, userId }
+ * @returns {Promise<Object>} Backend response with resume_id, matches, and extracted skills
  */
-export const uploadResume = async (file, metadata = null, token = null) => {
+export const uploadResume = async (file, metadata = null, token = null, options = {}) => {
+  // 1. Validate file format and size
   const validation = validateResumeFile(file);
   if (!validation.valid) {
     const err = new Error(validation.error);
@@ -59,9 +315,30 @@ export const uploadResume = async (file, metadata = null, token = null) => {
     throw err;
   }
 
-  // Prepare multipart/form-data
+  // 2. Determine dynamic N based on actual user plan
+  const plan = options.plan || getUserPlan();
+  const N = getNByPlan(plan);
+
+  // 3. Fixed top_k = 100 for all plans
+  const top_k = 100;
+
+  // 4. Determine actual authenticated user ID
+  const userId = options.userId || getUserId();
+
+  // 5. Construct URL with dynamic query parameters
+  const baseUrl = RESUME_ENDPOINTS.UPLOAD;
+  const url = new URL(baseUrl);
+  url.searchParams.set('N', String(N));
+  url.searchParams.set('top_k', String(top_k));
+  url.searchParams.set('user_id', String(userId));
+  const fullEndpoint = url.toString();
+
+  console.log(`[resumeService] Uploading resume to: ${fullEndpoint}`);
+  console.log(`[resumeService] Plan: "${plan}" -> N: ${N}, top_k: ${top_k}, user_id: "${userId}"`);
+
+  // 6. Build multipart/form-data with field name 'resume_file'
   const formData = new FormData();
-  formData.append('file', file);
+  formData.append('resume_file', file);
 
   if (metadata) {
     if (typeof metadata === 'string') {
@@ -71,20 +348,25 @@ export const uploadResume = async (file, metadata = null, token = null) => {
     }
   }
 
+  // 7. Send POST request (letting browser generate multipart boundary automatically)
   let response;
   try {
-    response = await fetchWithAuth(RESUME_ENDPOINTS.UPLOAD, {
+    response = await fetchWithAuth(fullEndpoint, {
       method: 'POST',
       body: formData,
       token,
+      headers: {
+        'ngrok-skip-browser-warning': 'true',
+      },
     });
   } catch (netErr) {
-    console.error('Resume upload network error:', netErr);
+    console.error('[resumeService] Resume upload network error:', netErr);
     const error = new Error('Unable to upload your resume. Please check your connection and try again.');
     error.status = 0;
     throw error;
   }
 
+  // 8. Parse backend response
   const text = await response.text().catch(() => '');
   let data;
   try {
@@ -93,34 +375,64 @@ export const uploadResume = async (file, metadata = null, token = null) => {
     data = text ? { message: text } : {};
   }
 
-  if (!response.ok) {
+  console.log(`[resumeService] Resume upload response status: ${response.status}`, response.statusText);
+  console.log('[resumeService] Resume upload response data:', data);
+
+  // 9. Error handling: 400, 401, 403, 404, 422, 500, or { status: "error" }
+  if (!response.ok || data?.status === 'error') {
+    console.error('[resumeService] Resume upload failed with response data:', data);
     let message = 'Unable to upload your resume. Please try again.';
 
     if (response.status === 401) {
       message = 'Your session has expired. Please log in again.';
+    } else if (response.status === 403) {
+      message = data?.message || data?.detail || 'Access denied. Please check your account subscription.';
+    } else if (response.status === 404) {
+      message = data?.message || data?.detail || 'The resume matching endpoint was not found.';
     } else if (response.status === 413) {
       message = 'Resume file is too large. Maximum allowed size is 10MB.';
     } else if (response.status === 415) {
       message = 'Please upload a supported resume format (PDF, DOC, or DOCX).';
+    } else if (response.status === 422) {
+      message =
+        data?.message ||
+        data?.detail ||
+        (Array.isArray(data?.detail) ? data.detail.map((d) => d.msg || d.message).join(', ') : '') ||
+        'Invalid resume file or request parameters.';
     } else if (response.status === 400) {
       message =
         data?.message ||
         data?.error ||
+        data?.detail ||
         (typeof data === 'string' && data ? data : '') ||
         'Validation failed for uploaded resume. Please verify the file and try again.';
     } else if (response.status >= 500) {
-      message = 'Server error processing your resume. Please try again later.';
-    } else if (data?.message || data?.error) {
-      message = data.message || data.error;
+      message = data?.message || data?.detail || 'Server error processing your resume. Please try again later.';
+    } else if (data?.message || data?.error || data?.detail) {
+      message = data.message || data.error || data.detail;
     }
 
     const error = new Error(message);
-    error.status = response.status;
+    error.status = response.status || 400;
     error.data = data;
     throw error;
   }
 
-  return data;
+  // 10. Map response and normalize properties for UI and state compatibility
+  const normalizedData = {
+    status: data?.status || 'success',
+    resume_id: data?.resume_id || data?.id || data?.resumeId || '',
+    id: data?.resume_id || data?.id || data?.resumeId || '',
+    resumeId: data?.resume_id || data?.id || data?.resumeId || '',
+    parsed_text_preview: data?.parsed_text_preview || data?.preview || '',
+    extracted_skills: Array.isArray(data?.extracted_skills) ? data.extracted_skills : [],
+    matches: Array.isArray(data?.matches) ? data.matches : [],
+    ...(typeof data === 'object' && data ? data : {}),
+  };
+
+  console.log('[resumeService] Normalized resume payload:', normalizedData);
+
+  return normalizedData;
 };
 
 /**
@@ -454,6 +766,9 @@ export const checkUserHasResume = async (token = null) => {
 
 export default {
   validateResumeFile,
+  getUserPlan,
+  getNByPlan,
+  getUserId,
   uploadResume,
   getResumes,
   downloadResume,

@@ -248,8 +248,11 @@ const Profile = () => {
     try {
       setIsUploadingResume(true);
       setResumeUploadError(null);
-      await uploadResume(file);
-      await fetchUserResumes();
+      const response = await uploadResume(file);
+      console.log('[Profile] Upload response data:', response);
+      await fetchUserResumes().catch((fetchErr) => {
+        console.warn("[Profile] Could not refresh resume list after upload:", fetchErr);
+      });
       setToast({
         show: true,
         message: "Resume uploaded successfully!",
