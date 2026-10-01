@@ -1580,16 +1580,26 @@ const Dashboard = () => {
                   </div>
                 </div>
 
-                {/* Close Button */}
-                <button
-                  type="button"
-                  onClick={() => setSelectedJobModal(null)}
-                  className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
-                >
-                  <svg className="w-5 h-5 stroke-[2]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+                {/* Right Actions (Close & Enhance Resume) */}
+                <div className="flex flex-col items-end justify-between self-stretch shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedJobModal(null)}
+                    className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
+                  >
+                    <svg className="w-5 h-5 stroke-[2]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => navigate("/resume-setup")}
+                    className="mt-2 bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-[13px] font-medium px-4 py-2 rounded-lg transition-colors cursor-pointer shadow-sm shrink-0 whitespace-nowrap"
+                  >
+                    Enhance Resume
+                  </button>
+                </div>
               </div>
 
               {/* Drawer Scrollable Body */}
