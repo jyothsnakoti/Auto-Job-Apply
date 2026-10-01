@@ -42,5 +42,5 @@ export { default as locationProfileService } from './locationProfileService';
 export { default as settingsProfileService } from './settingsProfileService';
 export { default as workPreferencesProfileService } from './workPreferencesProfileService';
 export { default as resumeService } from './resumeService';
-export { default as endpoints, ENDPOINTS, AUTH_ENDPOINTS, BILLING_ENDPOINTS, ONBOARDING_ENDPOINTS, PROFILE_ENDPOINTS, RESUME_ENDPOINTS, API_BASE_URL } from './endpoints';
+export { default as endpoints, ENDPOINTS, AUTH_ENDPOINTS, BILLING_ENDPOINTS, ONBOARDING_ENDPOINTS, PROFILE_ENDPOINTS, RESUME_ENDPOINTS, API_BASE_URL, RESUME_API_BASE_URL } from './endpoints';
 

@@ -108,28 +108,37 @@ const ResumeSetup = () => {
     const handleContinue = async () => {
         if (!selectedFile || isUploading) return;
 
-        // If selectedFile is a newly picked File, upload to backend POST /api/resumes
+        // Old endpoint (preserved in comments): POST /api/resumes
+        // New endpoint: POST https://fog-slacked-prankster.ngrok-free.dev/api/v1/Get_N_JDs_for_Res?N=<dynamicN>&top_k=100&user_id=<userId>
         if (selectedFile instanceof File) {
             setIsUploading(true);
             setFileError('');
 
             try {
                 const response = await uploadResume(selectedFile);
+                console.log('[ResumeSetup] Upload response data:', response);
                 setUploadSuccess(true);
 
-                // Save resume metadata/identifier to onboarding state
+                const resumeId = response?.resume_id || response?.id || response?.resumeId || response?.data?.id || null;
+
+                // Save resume metadata and matched jobs / extracted skills to onboarding state
                 setOnboardingState({
                     resumeName: selectedFile.name,
                     resumeSize: selectedFile.size,
-                    resumeId: response?.id || response?.resumeId || response?.data?.id || null,
+                    resumeId: resumeId,
                     resumeUploaded: true,
+                    matches: response?.matches || [],
+                    extractedSkills: response?.extracted_skills || [],
+                    parsedTextPreview: response?.parsed_text_preview || '',
                 });
 
                 // Navigate to next onboarding step
                 navigate('/location-setup', {
                     state: {
                         resumeName: selectedFile.name,
-                        resumeId: response?.id || response?.resumeId,
+                        resumeId: resumeId,
+                        matches: response?.matches || [],
+                        extractedSkills: response?.extracted_skills || [],
                     },
                 });
             } catch (err) {
@@ -137,10 +146,14 @@ const ResumeSetup = () => {
                 setIsUploading(false);
                 if (err.status === 401) {
                     setFileError('Your session has expired. Please log in again.');
+                } else if (err.status === 403) {
+                    setFileError(err.message || 'Access denied. Please check your account subscription.');
                 } else if (err.status === 413) {
                     setFileError('Resume file is too large. Maximum allowed size is 10MB.');
                 } else if (err.status === 415) {
                     setFileError('Please upload a supported resume format (PDF, DOC, or DOCX).');
+                } else if (err.status === 422) {
+                    setFileError(err.message || 'Invalid resume file or request parameters.');
                 } else {
                     setFileError(err.message || 'Unable to upload your resume. Please try again.');
                 }

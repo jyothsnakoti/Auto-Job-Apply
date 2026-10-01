@@ -47,8 +47,13 @@ export const PROFILE_ENDPOINTS = {
   UPDATE_WORK_PREFERENCES: `${API_BASE_URL}/api/profile/work-preferences`,
 };
 
+export const RESUME_API_BASE_URL = 'https://fog-slacked-prankster.ngrok-free.dev';
+
 export const RESUME_ENDPOINTS = {
-  UPLOAD: `${API_BASE_URL}/api/resumes`,
+  // --- OLD RESUME UPLOAD ENDPOINT (Commented out, not deleted) ---
+  // UPLOAD: `${API_BASE_URL}/api/resumes`,
+  // --- NEW NGROK RESUME UPLOAD & JD MATCHING ENDPOINT ---
+  UPLOAD: `${RESUME_API_BASE_URL}/api/v1/Get_N_JDs_for_Res`,
   GET: `${API_BASE_URL}/api/resumes`,
   DOWNLOAD: (id) => `${API_BASE_URL}/api/resumes/${id}/download`,
   DELETE: (id) => `${API_BASE_URL}/api/resumes/${id}`,
