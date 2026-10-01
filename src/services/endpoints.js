@@ -60,6 +60,10 @@ export const RESUME_ENDPOINTS = {
   SET_PRIMARY: (id) => `${API_BASE_URL}/api/resumes/${id}/set-primary`,
 };
 
+export const JOB_ENDPOINTS = {
+  GET_MORE_JOBS: `${RESUME_API_BASE_URL}/api/v1/Get_N_moreJDs_for_Res`,
+};
+
 export const ENDPOINTS = {
   BASE_URL: API_BASE_URL,
   AUTH: AUTH_ENDPOINTS,
@@ -67,6 +71,8 @@ export const ENDPOINTS = {
   ONBOARDING: ONBOARDING_ENDPOINTS,
   PROFILE: PROFILE_ENDPOINTS,
   RESUME: RESUME_ENDPOINTS,
+  JOB: JOB_ENDPOINTS,
 };
 
 export default ENDPOINTS;
+

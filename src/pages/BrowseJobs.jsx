@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
+import { getMoreJobsForResume, getPrimaryResumeId, getOnboardingState } from "../services/api";
 
 import googleLogo from "../assets/google.svg";
 import microsoftLogo from "../assets/microsoft.svg";
@@ -86,407 +87,67 @@ const experienceOptions = [
   "Lead / Principal (8+ yrs)",
 ];
 
-const initialJobs = [
-  {
-    id: 1,
-    title: "Software Engineer II",
-    company: "Google",
-    location: "Bengaluru, IN",
-    fullLocation: "Bengaluru, Karnataka, IN",
-    type: "Full-time",
-    workMode: "On-site",
-    department: "Software Engineering",
-    posted: "Posted 2 days ago",
-    match: "96% match",
-    matchPercent: 96,
-    matchColor: "bg-[#ECFDF5] text-[#059669]",
-    logo: googleLogo,
-    description:
-      "As a Software Engineer, you will design, develop, test, deploy and maintain software solutions that solve complex problems at scale. You will work with cross-functional teams to build products and services used by millions of users worldwide.",
-    responsibilities: [
-      "Design and develop scalable, reliable and efficient software systems",
-      "Collaborate with product, design and engineering teams",
-      "Write clean, maintainable and well-tested code",
-      "Participate in code reviews and technical discussions",
-      "Contribute to system design and architecture decisions",
-      "Improve existing systems for performance, scalability and reliability",
-    ],
-    requiredSkills: [
-      "Java",
-      "Python",
-      "C++",
-      "Data Structures",
-      "Algorithms",
-      "Software Development",
-    ],
-    preferredSkills: ["Distributed Systems", "Cloud", "SQL"],
-    experience: "2 – 6 years",
-  },
-  {
-    id: 2,
-    title: "Frontend Engineer",
-    company: "Microsoft",
-    location: "Hyderabad, IN",
-    fullLocation: "Hyderabad, Telangana, IN",
-    type: "Full-time",
-    workMode: "Hybrid",
-    department: "Frontend Engineering",
-    posted: "Posted 2 days ago",
-    match: "92% match",
-    matchPercent: 92,
-    matchColor: "bg-[#ECFDF5] text-[#059669]",
-    logo: microsoftLogo,
-    description:
-      "As a Frontend Engineer at Microsoft, you will architect and build highly intuitive, accessible, and responsive user interfaces that delight millions of enterprise and consumer users daily.",
-    responsibilities: [
-      "Develop responsive and accessible web applications using React, TypeScript, and modern web APIs",
-      "Partner with UX designers and product managers to iterate on product specs and wireframes",
-      "Ensure high performance, accessibility (a11y), and cross-browser compatibility across devices",
-      "Write comprehensive automated unit and integration tests",
-      "Champion code quality, review pull requests, and mentor junior engineers",
-    ],
-    requiredSkills: [
-      "React",
-      "TypeScript",
-      "JavaScript",
-      "HTML5/CSS3",
-      "Redux",
-      "Web Performance",
-    ],
-    preferredSkills: ["GraphQL", "Next.js", "Jest/Cypress"],
-    experience: "3 – 5 years",
-  },
-  {
-    id: 3,
-    title: "Software Development Engineer",
-    company: "Amazon",
-    location: "Bengaluru, IN",
-    fullLocation: "Bengaluru, Karnataka, IN",
-    type: "Full-time",
-    workMode: "On-site",
-    department: "Backend Engineering",
-    posted: "Posted 2 days ago",
-    match: "89% match",
-    matchPercent: 89,
-    matchColor: "bg-[#FFFBEB] text-[#D97706]",
-    logo: amazonLogo,
-    description:
-      "Join Amazon as an SDE to build and scale distributed web services that handle millions of transactions per second with ultra-low latency and high reliability.",
-    responsibilities: [
-      "Design and implement high-scale backend services using Java and AWS technologies",
-      "Own end-to-end service architecture, deployment pipelines, and operational readiness",
-      "Participate in design reviews, threat modeling, and reliability engineering",
-      "Collaborate with principal engineers to solve complex architectural challenges",
-    ],
-    requiredSkills: [
-      "Java",
-      "AWS",
-      "Distributed Systems",
-      "Microservices",
-      "Data Structures",
-    ],
-    preferredSkills: ["DynamoDB", "Kafka", "Docker/K8s"],
-    experience: "2 – 5 years",
-  },
-  {
-    id: 4,
-    title: "UI/UX Designer",
-    company: "Atlassian",
-    location: "Remote",
-    fullLocation: "Remote, Global",
-    type: "Full-time",
-    workMode: "Remote",
-    department: "Product Design",
-    posted: "Posted 2 days ago",
-    match: "87% match",
-    matchPercent: 87,
-    matchColor: "bg-[#FFFBEB] text-[#D97706]",
-    logo: aiLogo,
-    description:
-      "As a UI/UX Designer at Atlassian, you will craft seamless and intuitive collaboration workflows for Jira and Confluence, empowering agile teams across the globe.",
-    responsibilities: [
-      "Create high-fidelity wireframes, user journeys, prototypes, and UI specifications in Figma",
-      "Conduct qualitative and quantitative user research, usability tests, and design sprints",
-      "Collaborate with design system teams to maintain consistency with Atlassian Design Guidelines",
-      "Work closely with engineers during implementation to ensure design accuracy and polish",
-    ],
-    requiredSkills: [
-      "Figma",
-      "UI Design",
-      "User Research",
-      "Prototyping",
-      "Design Systems",
-    ],
-    preferredSkills: ["Design Tokens", "Accessibility", "Micro-interactions"],
-    experience: "2 – 4 years",
-  },
-  {
-    id: 5,
-    title: "Software Engineer II",
-    company: "Google",
-    location: "Bengaluru, IN",
-    fullLocation: "Bengaluru, Karnataka, IN",
-    type: "Full-time",
-    workMode: "On-site",
-    department: "Software Engineering",
-    posted: "Posted 2 days ago",
-    match: "96% match",
-    matchPercent: 96,
-    matchColor: "bg-[#ECFDF5] text-[#059669]",
-    logo: googleLogo,
-    description:
-      "As a Software Engineer, you will design, develop, test, deploy and maintain software solutions that solve complex problems at scale. You will work with cross-functional teams to build products and services used by millions of users worldwide.",
-    responsibilities: [
-      "Design and develop scalable, reliable and efficient software systems",
-      "Collaborate with product, design and engineering teams",
-      "Write clean, maintainable and well-tested code",
-      "Participate in code reviews and technical discussions",
-      "Contribute to system design and architecture decisions",
-      "Improve existing systems for performance, scalability and reliability",
-    ],
-    requiredSkills: [
-      "Java",
-      "Python",
-      "C++",
-      "Data Structures",
-      "Algorithms",
-      "Software Development",
-    ],
-    preferredSkills: ["Distributed Systems", "Cloud", "SQL"],
-    experience: "2 – 6 years",
-  },
-  {
-    id: 6,
-    title: "Frontend Engineer",
-    company: "Microsoft",
-    location: "Hyderabad, IN",
-    fullLocation: "Hyderabad, Telangana, IN",
-    type: "Full-time",
-    workMode: "Hybrid",
-    department: "Frontend Engineering",
-    posted: "Posted 2 days ago",
-    match: "92% match",
-    matchPercent: 92,
-    matchColor: "bg-[#ECFDF5] text-[#059669]",
-    logo: microsoftLogo,
-    description:
-      "As a Frontend Engineer at Microsoft, you will architect and build highly intuitive, accessible, and responsive user interfaces that delight millions of enterprise and consumer users daily.",
-    responsibilities: [
-      "Develop responsive and accessible web applications using React, TypeScript, and modern web APIs",
-      "Partner with UX designers and product managers to iterate on product specs and wireframes",
-      "Ensure high performance, accessibility (a11y), and cross-browser compatibility across devices",
-      "Write comprehensive automated unit and integration tests",
-      "Champion code quality, review pull requests, and mentor junior engineers",
-    ],
-    requiredSkills: [
-      "React",
-      "TypeScript",
-      "JavaScript",
-      "HTML5/CSS3",
-      "Redux",
-      "Web Performance",
-    ],
-    preferredSkills: ["GraphQL", "Next.js", "Jest/Cypress"],
-    experience: "3 – 5 years",
-  },
-  {
-    id: 7,
-    title: "Software Development Engineer",
-    company: "Amazon",
-    location: "Bengaluru, IN",
-    fullLocation: "Bengaluru, Karnataka, IN",
-    type: "Full-time",
-    workMode: "On-site",
-    department: "Backend Engineering",
-    posted: "Posted 2 days ago",
-    match: "89% match",
-    matchPercent: 89,
-    matchColor: "bg-[#FFFBEB] text-[#D97706]",
-    logo: amazonLogo,
-    description:
-      "Join Amazon as an SDE to build and scale distributed web services that handle millions of transactions per second with ultra-low latency and high reliability.",
-    responsibilities: [
-      "Design and implement high-scale backend services using Java and AWS technologies",
-      "Own end-to-end service architecture, deployment pipelines, and operational readiness",
-      "Participate in design reviews, threat modeling, and reliability engineering",
-      "Collaborate with principal engineers to solve complex architectural challenges",
-    ],
-    requiredSkills: [
-      "Java",
-      "AWS",
-      "Distributed Systems",
-      "Microservices",
-      "Data Structures",
-    ],
-    preferredSkills: ["DynamoDB", "Kafka", "Docker/K8s"],
-    experience: "2 – 5 years",
-  },
-  {
-    id: 8,
-    title: "UI/UX Designer",
-    company: "Atlassian",
-    location: "Remote",
-    fullLocation: "Remote, Global",
-    type: "Full-time",
-    workMode: "Remote",
-    department: "Product Design",
-    posted: "Posted 2 days ago",
-    match: "87% match",
-    matchPercent: 87,
-    matchColor: "bg-[#FFFBEB] text-[#D97706]",
-    logo: aiLogo,
-    description:
-      "As a UI/UX Designer at Atlassian, you will craft seamless and intuitive collaboration workflows for Jira and Confluence, empowering agile teams across the globe.",
-    responsibilities: [
-      "Create high-fidelity wireframes, user journeys, prototypes, and UI specifications in Figma",
-      "Conduct qualitative and quantitative user research, usability tests, and design sprints",
-      "Collaborate with design system teams to maintain consistency with Atlassian Design Guidelines",
-      "Work closely with engineers during implementation to ensure design accuracy and polish",
-    ],
-    requiredSkills: [
-      "Figma",
-      "UI Design",
-      "User Research",
-      "Prototyping",
-      "Design Systems",
-    ],
-    preferredSkills: ["Design Tokens", "Accessibility", "Micro-interactions"],
-    experience: "2 – 4 years",
-  },
-  {
-    id: 9,
-    title: "Software Engineer II",
-    company: "Google",
-    location: "Bengaluru, IN",
-    fullLocation: "Bengaluru, Karnataka, IN",
-    type: "Full-time",
-    workMode: "On-site",
-    department: "Software Engineering",
-    posted: "Posted 2 days ago",
-    match: "96% match",
-    matchPercent: 96,
-    matchColor: "bg-[#ECFDF5] text-[#059669]",
-    logo: googleLogo,
-    description:
-      "As a Software Engineer, you will design, develop, test, deploy and maintain software solutions that solve complex problems at scale. You will work with cross-functional teams to build products and services used by millions of users worldwide.",
-    responsibilities: [
-      "Design and develop scalable, reliable and efficient software systems",
-      "Collaborate with product, design and engineering teams",
-      "Write clean, maintainable and well-tested code",
-      "Participate in code reviews and technical discussions",
-      "Contribute to system design and architecture decisions",
-      "Improve existing systems for performance, scalability and reliability",
-    ],
-    requiredSkills: [
-      "Java",
-      "Python",
-      "C++",
-      "Data Structures",
-      "Algorithms",
-      "Software Development",
-    ],
-    preferredSkills: ["Distributed Systems", "Cloud", "SQL"],
-    experience: "2 – 6 years",
-  },
-  {
-    id: 10,
-    title: "Frontend Engineer",
-    company: "Microsoft",
-    location: "Hyderabad, IN",
-    fullLocation: "Hyderabad, Telangana, IN",
-    type: "Full-time",
-    workMode: "Hybrid",
-    department: "Frontend Engineering",
-    posted: "Posted 2 days ago",
-    match: "92% match",
-    matchPercent: 92,
-    matchColor: "bg-[#ECFDF5] text-[#059669]",
-    logo: microsoftLogo,
-    description:
-      "As a Frontend Engineer at Microsoft, you will architect and build highly intuitive, accessible, and responsive user interfaces that delight millions of enterprise and consumer users daily.",
-    responsibilities: [
-      "Develop responsive and accessible web applications using React, TypeScript, and modern web APIs",
-      "Partner with UX designers and product managers to iterate on product specs and wireframes",
-      "Ensure high performance, accessibility (a11y), and cross-browser compatibility across devices",
-      "Write comprehensive automated unit and integration tests",
-      "Champion code quality, review pull requests, and mentor junior engineers",
-    ],
-    requiredSkills: [
-      "React",
-      "TypeScript",
-      "JavaScript",
-      "HTML5/CSS3",
-      "Redux",
-      "Web Performance",
-    ],
-    preferredSkills: ["GraphQL", "Next.js", "Jest/Cypress"],
-    experience: "3 – 5 years",
-  },
-  {
-    id: 11,
-    title: "Software Development Engineer",
-    company: "Amazon",
-    location: "Bengaluru, IN",
-    fullLocation: "Bengaluru, Karnataka, IN",
-    type: "Full-time",
-    workMode: "On-site",
-    department: "Backend Engineering",
-    posted: "Posted 2 days ago",
-    match: "89% match",
-    matchPercent: 89,
-    matchColor: "bg-[#FFFBEB] text-[#D97706]",
-    logo: amazonLogo,
-    description:
-      "Join Amazon as an SDE to build and scale distributed web services that handle millions of transactions per second with ultra-low latency and high reliability.",
-    responsibilities: [
-      "Design and implement high-scale backend services using Java and AWS technologies",
-      "Own end-to-end service architecture, deployment pipelines, and operational readiness",
-      "Participate in design reviews, threat modeling, and reliability engineering",
-      "Collaborate with principal engineers to solve complex architectural challenges",
-    ],
-    requiredSkills: [
-      "Java",
-      "AWS",
-      "Distributed Systems",
-      "Microservices",
-      "Data Structures",
-    ],
-    preferredSkills: ["DynamoDB", "Kafka", "Docker/K8s"],
-    experience: "2 – 5 years",
-  },
-  {
-    id: 12,
-    title: "UI/UX Designer",
-    company: "Atlassian",
-    location: "Remote",
-    fullLocation: "Remote, Global",
-    type: "Full-time",
-    workMode: "Remote",
-    department: "Product Design",
-    posted: "Posted 2 days ago",
-    match: "87% match",
-    matchPercent: 87,
-    matchColor: "bg-[#FFFBEB] text-[#D97706]",
-    logo: aiLogo,
-    description:
-      "As a UI/UX Designer at Atlassian, you will craft seamless and intuitive collaboration workflows for Jira and Confluence, empowering agile teams across the globe.",
-    responsibilities: [
-      "Create high-fidelity wireframes, user journeys, prototypes, and UI specifications in Figma",
-      "Conduct qualitative and quantitative user research, usability tests, and design sprints",
-      "Collaborate with design system teams to maintain consistency with Atlassian Design Guidelines",
-      "Work closely with engineers during implementation to ensure design accuracy and polish",
-    ],
-    requiredSkills: [
-      "Figma",
-      "UI Design",
-      "User Research",
-      "Prototyping",
-      "Design Systems",
-    ],
-    preferredSkills: ["Design Tokens", "Accessibility", "Micro-interactions"],
-    experience: "2 – 4 years",
-  },
-];
+const getMatchPercent = (job) => {
+  if (job?.overall_score !== undefined && job?.overall_score !== null) {
+    const num = Number(job.overall_score);
+    return isNaN(num) ? 0 : num;
+  }
+  if (job?.matchPercent !== undefined && job?.matchPercent !== null) {
+    return Number(job.matchPercent);
+  }
+  return 0;
+};
+
+const getMatchLabel = (job) => {
+  if (job?.overall_score !== undefined && job?.overall_score !== null) {
+    const num = Number(job.overall_score);
+    return `${Number.isInteger(num) ? num : num.toFixed(1)}% match`;
+  }
+  return job?.match || `${getMatchPercent(job)}% match`;
+};
+
+const getMatchBadgeColor = (percent) => {
+  if (percent >= 90) return "bg-[#ECFDF5] text-[#059669]";
+  if (percent >= 70) return "bg-[#EFF6FF] text-[#2563EB]";
+  if (percent >= 50) return "bg-[#FFFBEB] text-[#D97706]";
+  return "bg-[#FEF2F2] text-[#DC2626]";
+};
+
+const getMatchedSkills = (job) => {
+  if (job?.score_data?.match_details && Array.isArray(job.score_data.match_details)) {
+    return job.score_data.match_details
+      .map((m) => {
+        if (typeof m === "string") return m;
+        return m?.skill || m?.name || m?.keyword || m?.matched_skill || "";
+      })
+      .filter(Boolean);
+  }
+  if (job?.score_data?.matched_skills && Array.isArray(job.score_data.matched_skills)) {
+    return job.score_data.matched_skills;
+  }
+  return job?.requiredSkills || [];
+};
+
+const getMissingRequiredSkills = (job) => {
+  if (job?.score_data?.missing_required_skills && Array.isArray(job.score_data.missing_required_skills)) {
+    return job.score_data.missing_required_skills;
+  }
+  return [];
+};
+
+const getMissingPreferredSkills = (job) => {
+  if (job?.score_data?.missing_preferred_skills && Array.isArray(job.score_data.missing_preferred_skills)) {
+    return job.score_data.missing_preferred_skills;
+  }
+  return job?.preferredSkills || [];
+};
+
+const getMissingKeywords = (job) => {
+  if (job?.score_data?.missing_keywords && Array.isArray(job.score_data.missing_keywords)) {
+    return job.score_data.missing_keywords;
+  }
+  return [];
+};
 
 const VerifiedTick = () => (
   <img
@@ -501,6 +162,16 @@ const BrowseJobs = () => {
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [selectedJobModal, setSelectedJobModal] = useState(null);
   const [isJobSaved, setIsJobSaved] = useState(false);
+
+  // Dynamic Jobs & Browse Jobs Pagination State
+  const [jobs, setJobs] = useState([]);
+  const [lastJobId, setLastJobId] = useState(null);
+  const [resumeId, setResumeId] = useState(null);
+  const [isLoadingJobs, setIsLoadingJobs] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [jobError, setJobError] = useState(null);
+  const [jobFeedbackMessage, setJobFeedbackMessage] = useState(null);
+  const [hasMoreJobs, setHasMoreJobs] = useState(true);
 
   // Filter States
   const [selectedDate, setSelectedDate] = useState("Last 7 days");
@@ -517,6 +188,134 @@ const BrowseJobs = () => {
   const [selectedEmploymentTypes, setSelectedEmploymentTypes] = useState([]);
 
   const dropdownRef = useRef(null);
+
+  // Auto-fetch initial jobs on mount
+  useEffect(() => {
+    const loadInitialJobs = async () => {
+      try {
+        setIsLoadingJobs(true);
+        setJobError(null);
+        setJobFeedbackMessage(null);
+
+        let activeResumeId = await getPrimaryResumeId();
+        if (activeResumeId) {
+          setResumeId(activeResumeId);
+        }
+
+        const onboarding = getOnboardingState();
+        if (!activeResumeId && onboarding?.resumeId) {
+          activeResumeId = String(onboarding.resumeId);
+          setResumeId(activeResumeId);
+        }
+
+        if (!activeResumeId) {
+          setJobError("No resume found. Please upload a resume in Profile to view matching jobs.");
+          setIsLoadingJobs(false);
+          return;
+        }
+
+        // Check if onboarding state already contains recent matches
+        if (Array.isArray(onboarding?.matches) && onboarding.matches.length > 0) {
+          setJobs(onboarding.matches);
+          const last = onboarding.matches[onboarding.matches.length - 1];
+          const cursor = last?.job_id || last?.id;
+          if (cursor) {
+            setLastJobId(cursor);
+          }
+          setIsLoadingJobs(false);
+          return;
+        }
+
+        // Fetch initial 10 jobs
+        const result = await getMoreJobsForResume({
+          N: 10,
+          LastJDid: "",
+          top_k: 1000,
+          ResumeID: activeResumeId,
+        });
+
+        const matches = Array.isArray(result?.matches) ? result.matches : [];
+        if (matches.length === 0) {
+          setJobFeedbackMessage("No matching jobs found for your resume.");
+          setHasMoreJobs(false);
+        } else {
+          setJobs(matches);
+          const last = matches[matches.length - 1];
+          const cursor = last?.job_id || last?.id;
+          if (cursor) {
+            setLastJobId(cursor);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load initial jobs in BrowseJobs:", err);
+        setJobError("Unable to load jobs. Please try again.");
+      } finally {
+        setIsLoadingJobs(false);
+      }
+    };
+
+    loadInitialJobs();
+  }, []);
+
+  const handleLoadMore = async () => {
+    if (isLoadingMore || !hasMoreJobs) return;
+    setIsLoadingMore(true);
+    setJobError(null);
+
+    try {
+      let activeResumeId = resumeId || (await getPrimaryResumeId());
+      if (activeResumeId && !resumeId) {
+        setResumeId(activeResumeId);
+      }
+
+      if (!activeResumeId) {
+        setJobError("No resume found. Please upload a resume to browse jobs.");
+        setIsLoadingMore(false);
+        return;
+      }
+
+      const cursor =
+        lastJobId ||
+        (jobs.length > 0
+          ? jobs[jobs.length - 1]?.job_id || jobs[jobs.length - 1]?.id
+          : "");
+
+      const result = await getMoreJobsForResume({
+        N: 10,
+        LastJDid: cursor || "",
+        top_k: 1000,
+        ResumeID: activeResumeId,
+      });
+
+      const newMatches = Array.isArray(result?.matches) ? result.matches : [];
+
+      if (newMatches.length === 0) {
+        setHasMoreJobs(false);
+        setJobFeedbackMessage("No more matching jobs found.");
+      } else {
+        setJobs((prevJobs) => {
+          const existingIds = new Set(prevJobs.map((j) => j.job_id || j.id));
+          const toAdd = newMatches.filter((m) => {
+            const id = m.job_id || m.id;
+            return id && !existingIds.has(id);
+          });
+          return [...prevJobs, ...toAdd];
+        });
+
+        const lastItem = newMatches[newMatches.length - 1];
+        const newCursor = lastItem?.job_id || lastItem?.id;
+        if (newCursor) {
+          setLastJobId(newCursor);
+        }
+      }
+    } catch (err) {
+      console.error("Load more jobs error:", err);
+      setJobError("Unable to load more jobs. Please try again.");
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -1301,298 +1100,560 @@ const BrowseJobs = () => {
             </div>
           </div>
 
-          {/* 8 Job Cards Grid (2 Rows of 4 Cards) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4.5 w-full">
-            {initialJobs.map((job) => (
-              <div
-                key={job.id}
-                onClick={() => setSelectedJobModal(job)}
-                className="bg-white rounded-[20px] border border-[#E2E8F0] p-5 flex flex-col justify-between shadow-[0_1px_3px_rgba(15,23,42,0.02)] hover:shadow-md hover:border-slate-300 transition-all duration-200 min-h-[230px] cursor-pointer group"
+          {/* Error Message */}
+          {jobError && (
+            <div className="p-3.5 rounded-[12px] bg-red-50 border border-red-200 text-red-700 text-[13px] font-medium flex items-center justify-between gap-2 animate-in fade-in">
+              <span>{jobError}</span>
+              <button
+                type="button"
+                onClick={() => setJobError(null)}
+                className="text-red-500 hover:text-red-700 font-bold ml-2 cursor-pointer"
               >
-                <div>
-                  {/* Top Header: Logo + Match Badge */}
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="w-[40px] h-[40px] rounded-[10px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2">
-                      <img
-                        src={job.logo}
-                        alt={job.company}
-                        className="w-full h-full object-contain"
-                      />
-                    </div>
-                    <span
-                      className={`text-[12px] font-medium px-2.5 py-0.5 rounded-full ${job.matchColor}`}
-                    >
-                      {job.match}
-                    </span>
-                  </div>
+                ×
+              </button>
+            </div>
+          )}
 
-                  {/* Job Title & Company */}
-                  <div className="mt-3.5">
-                    <h3 className="text-[15px] font-bold text-[#0F172A] tracking-tight leading-snug group-hover:text-[#4F46E5] transition-colors">
-                      {job.title}
-                    </h3>
-                    <div className="flex items-center gap-1 text-[13px] text-[#64748B] font-normal mt-1">
-                      <span>{job.company}</span>
-                      <VerifiedTick />
-                    </div>
-                  </div>
+          {/* Feedback Message */}
+          {jobFeedbackMessage && (
+            <div className="p-3.5 rounded-[12px] bg-blue-50 border border-blue-200 text-blue-700 text-[13px] font-medium flex items-center justify-between gap-2 animate-in fade-in">
+              <span>{jobFeedbackMessage}</span>
+              <button
+                type="button"
+                onClick={() => setJobFeedbackMessage(null)}
+                className="text-blue-500 hover:text-blue-700 font-bold ml-2 cursor-pointer"
+              >
+                ×
+              </button>
+            </div>
+          )}
 
-                  {/* Location & Posted Date */}
-                  <div className="mt-3 flex flex-col gap-1">
-                    <div className="flex items-center gap-1.5 text-[12.5px] text-[#64748B]">
-                      <img
-                        src={mapIcon}
-                        alt=""
-                        className="w-[10px] h-[12px] object-contain shrink-0"
-                      />
-                      <span>{job.location}</span>
-                    </div>
-                    <div className="text-[12px] text-[#94A3B8]">
-                      {job.posted}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex items-center gap-2.5 pt-4 mt-auto">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedJobModal(job);
-                    }}
-                    className="flex-1 h-[36px] rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] font-medium text-[#334155] hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-center"
-                  >
-                    ViewDetails
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedJobModal(job);
-                    }}
-                    className="flex-1 h-[36px] rounded-[10px] bg-[#4F46E5] hover:bg-[#4338CA] text-[13px] font-medium text-white shadow-xs transition-colors cursor-pointer flex items-center justify-center active:scale-[0.99]"
-                  >
-                    Apply Now
-                  </button>
-                </div>
+          {/* Dynamic Job Cards Grid */}
+          {isLoadingJobs ? (
+            <div className="p-12 rounded-[20px] bg-white border border-[#E2E8F0] flex flex-col items-center justify-center gap-3 text-center shadow-sm">
+              <svg className="w-8 h-8 text-[#4F46E5] animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              <span className="text-[14px] font-semibold text-[#0F172A]">Loading matched jobs for your resume...</span>
+              <span className="text-[12.5px] text-[#64748B]">Fetching top AI matching opportunities</span>
+            </div>
+          ) : jobs.length === 0 ? (
+            <div className="p-12 rounded-[20px] bg-white border border-dashed border-[#CBD5E1] flex flex-col items-center justify-center gap-2 text-center shadow-sm">
+              <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-1">
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
               </div>
-            ))}
-          </div>
+              <span className="text-[15px] font-semibold text-[#0F172A]">No matching jobs found</span>
+              <span className="text-[13px] text-[#64748B]">Please upload a resume in Profile or refresh the page.</span>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-6 w-full">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4.5 w-full">
+                {jobs.map((job, idx) => {
+                  const scoreVal = getMatchPercent(job);
+                  const matchLabel = getMatchLabel(job);
+                  const matchColorClass = getMatchBadgeColor(scoreVal);
+                  const matchedSkills = getMatchedSkills(job);
+                  const missingRequired = getMissingRequiredSkills(job);
+                  const displayTitle = job.title || `Job Match #${idx + 1}`;
+                  const displayCompany =
+                    job.company ||
+                    (job.job_id
+                      ? `ID: ${job.job_id.length > 14 ? `${job.job_id.slice(0, 8)}...${job.job_id.slice(-4)}` : job.job_id}`
+                      : "Verified Match");
+
+                  return (
+                    <div
+                      key={job.job_id || job.id || `browse-job-${idx}`}
+                      onClick={() => setSelectedJobModal(job)}
+                      className="bg-white rounded-[20px] border border-[#E2E8F0] p-5 flex flex-col justify-between shadow-[0_1px_3px_rgba(15,23,42,0.02)] hover:shadow-md hover:border-slate-300 transition-all duration-200 min-h-[230px] cursor-pointer group"
+                    >
+                      <div>
+                        {/* Top Header: Logo/Icon + Match Badge */}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="w-[40px] h-[40px] rounded-[10px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2">
+                            {job.logo ? (
+                              <img
+                                src={job.logo}
+                                alt={job.company || "Job Logo"}
+                                className="w-full h-full object-contain"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-[#4F46E5]">
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                </svg>
+                              </div>
+                            )}
+                          </div>
+                          <span
+                            className={`text-[12px] font-semibold px-2.5 py-0.5 rounded-full ${matchColorClass}`}
+                          >
+                            {matchLabel}
+                          </span>
+                        </div>
+
+                        {/* Job Title & Company */}
+                        <div className="mt-3.5">
+                          <h3 className="text-[15px] font-bold text-[#0F172A] tracking-tight leading-snug group-hover:text-[#4F46E5] transition-colors line-clamp-1">
+                            {displayTitle}
+                          </h3>
+                          <div
+                            className="flex items-center gap-1 text-[13px] text-[#64748B] font-normal mt-1 truncate"
+                            title={job.job_id || job.company}
+                          >
+                            <span className="truncate">{displayCompany}</span>
+                            {job.company && <VerifiedTick />}
+                          </div>
+                        </div>
+
+                        {/* Skills / Match Highlights or Location */}
+                        {matchedSkills.length > 0 ? (
+                          <div className="mt-3 flex flex-col gap-1.5">
+                            <div className="flex items-center gap-1 flex-wrap">
+                              {matchedSkills.slice(0, 3).map((skill, sIdx) => (
+                                <span
+                                  key={`${skill}-${sIdx}`}
+                                  className="text-[11px] font-medium bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md truncate max-w-[110px]"
+                                >
+                                  {skill}
+                                </span>
+                              ))}
+                              {matchedSkills.length > 3 && (
+                                <span className="text-[11px] font-medium text-[#64748B] bg-slate-50 px-1.5 py-0.5 rounded-md">
+                                  +{matchedSkills.length - 3}
+                                </span>
+                              )}
+                            </div>
+                            {missingRequired.length > 0 && (
+                              <div className="text-[11.5px] text-[#DC2626] font-medium truncate">
+                                Missing: {missingRequired.slice(0, 2).join(", ")}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          /* Location & Posted Date */
+                          <div className="mt-3 flex flex-col gap-1">
+                            <div className="flex items-center gap-1.5 text-[12.5px] text-[#64748B]">
+                              <img
+                                src={mapIcon}
+                                alt=""
+                                className="w-[10px] h-[12px] object-contain shrink-0"
+                              />
+                              <span>{job.location || "Remote / Various"}</span>
+                            </div>
+                            <div className="text-[12px] text-[#94A3B8]">
+                              {job.posted || "AI Matched"}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-2.5 pt-4 mt-auto">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedJobModal(job);
+                          }}
+                          className="flex-1 h-[36px] rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] font-medium text-[#334155] hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-center"
+                        >
+                          View Details
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedJobModal(job);
+                          }}
+                          className="flex-1 h-[36px] rounded-[10px] bg-[#4F46E5] hover:bg-[#4338CA] text-[13px] font-medium text-white shadow-xs transition-colors cursor-pointer flex items-center justify-center active:scale-[0.99]"
+                        >
+                          Apply Now
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Load More Button */}
+              {hasMoreJobs ? (
+                <div className="flex items-center justify-center pt-2 pb-6">
+                  <button
+                    type="button"
+                    disabled={isLoadingMore}
+                    onClick={handleLoadMore}
+                    className="h-[42px] px-6 rounded-[12px] bg-white border border-[#CBD5E1] hover:bg-slate-50 hover:border-slate-400 text-[#0F172A] text-[13.5px] font-semibold flex items-center gap-2 shadow-xs transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {isLoadingMore ? (
+                      <>
+                        <svg className="w-4 h-4 animate-spin text-[#4F46E5]" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                        <span>Loading more jobs...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Load More Jobs</span>
+                        <svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </>
+                    )}
+                  </button>
+                </div>
+              ) : (
+                <div className="text-center py-4 text-[13px] text-[#94A3B8]">
+                  You have reached the end of job matches.
+                </div>
+              )}
+            </div>
+          )}
         </main>
       </div>
 
       {/* Job Details Modal Popup */}
-      {selectedJobModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-[2px] p-4 sm:p-6"
-          onClick={() => setSelectedJobModal(null)}
-        >
+      {selectedJobModal && (() => {
+        const modalScore = getMatchPercent(selectedJobModal);
+        const modalMatchedSkills = getMatchedSkills(selectedJobModal);
+        const modalMissingRequired = getMissingRequiredSkills(selectedJobModal);
+        const modalMissingPreferred = getMissingPreferredSkills(selectedJobModal);
+        const modalMissingKeywords = getMissingKeywords(selectedJobModal);
+        const subScores = selectedJobModal.score_data?.sub_scores;
+        const displayTitle = selectedJobModal.title || `Job Match (${selectedJobModal.job_id || selectedJobModal.id})`;
+        const displayCompany =
+          selectedJobModal.company ||
+          (selectedJobModal.job_id ? `Job ID: ${selectedJobModal.job_id}` : "Matched Opportunity");
+
+        return (
           <div
-            className="bg-white rounded-[20px] max-w-[540px] w-full shadow-2xl overflow-hidden max-h-[92vh] flex flex-col animate-in fade-in zoom-in-95 duration-150"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-[2px] p-4 sm:p-6"
+            onClick={() => setSelectedJobModal(null)}
           >
-            {/* Modal Header */}
-            <div className="p-6 pb-4 border-b border-slate-100 flex items-start justify-between gap-4">
-              <div className="flex items-start gap-3.5">
-                <div className="w-[46px] h-[46px] rounded-[12px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2.5 mt-0.5">
-                  <img
-                    src={selectedJobModal.logo}
-                    alt={selectedJobModal.company}
-                    className="w-full h-full object-contain"
-                  />
-                </div>
-
-                <div className="flex flex-col">
-                  <h2 className="text-[19px] font-bold text-[#0F172A] tracking-tight leading-tight">
-                    {selectedJobModal.title}
-                  </h2>
-
-                  <div className="flex items-center gap-1.5 text-[14px] text-[#475569] font-medium mt-1">
-                    <span>{selectedJobModal.company}</span>
-                    <VerifiedTick />
+            <div
+              className="bg-white rounded-[20px] max-w-[540px] w-full shadow-2xl overflow-hidden max-h-[92vh] flex flex-col animate-in fade-in zoom-in-95 duration-150"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="p-6 pb-4 border-b border-slate-100 flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3.5">
+                  <div className="w-[46px] h-[46px] rounded-[12px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2.5 mt-0.5">
+                    {selectedJobModal.logo ? (
+                      <img
+                        src={selectedJobModal.logo}
+                        alt={selectedJobModal.company || "Job Logo"}
+                        className="w-full h-full object-contain"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-[#4F46E5]">
+                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                    )}
                   </div>
 
-                  <div className="flex items-center gap-2.5 text-[12.5px] text-[#64748B] mt-2 flex-wrap">
-                    <span>{selectedJobModal.fullLocation || selectedJobModal.location}</span>
-                    <span className="text-slate-300">•</span>
-                    <span>{selectedJobModal.type || "Full-time"}</span>
-                    <span className="text-slate-300">•</span>
-                    <span>{selectedJobModal.workMode || "On-site"}</span>
-                    <span className="text-slate-300">•</span>
-                    <span>{selectedJobModal.department || "Software Engineering"}</span>
+                  <div className="flex flex-col">
+                    <h2 className="text-[19px] font-bold text-[#0F172A] tracking-tight leading-tight">
+                      {displayTitle}
+                    </h2>
+
+                    <div className="flex items-center gap-1.5 text-[14px] text-[#475569] font-medium mt-1">
+                      <span className="break-all">{displayCompany}</span>
+                      {selectedJobModal.company && <VerifiedTick />}
+                    </div>
+
+                    {(selectedJobModal.fullLocation || selectedJobModal.location || selectedJobModal.type || selectedJobModal.workMode) && (
+                      <div className="flex items-center gap-2.5 text-[12.5px] text-[#64748B] mt-2 flex-wrap">
+                        {selectedJobModal.fullLocation || selectedJobModal.location ? (
+                          <span>{selectedJobModal.fullLocation || selectedJobModal.location}</span>
+                        ) : null}
+                        {selectedJobModal.type && (
+                          <>
+                            <span className="text-slate-300">•</span>
+                            <span>{selectedJobModal.type}</span>
+                          </>
+                        )}
+                        {selectedJobModal.workMode && (
+                          <>
+                            <span className="text-slate-300">•</span>
+                            <span>{selectedJobModal.workMode}</span>
+                          </>
+                        )}
+                        {selectedJobModal.department && (
+                          <>
+                            <span className="text-slate-300">•</span>
+                            <span>{selectedJobModal.department}</span>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
 
-              {/* Close Button */}
-              <button
-                type="button"
-                onClick={() => setSelectedJobModal(null)}
-                className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Modal Scrollable Body */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {/* ATS Match Box */}
-              <div className="rounded-[16px] border border-slate-200/80 bg-[#F8FAFC]/70 p-4.5 flex items-center gap-4">
-                <div className="relative w-[70px] h-[70px] shrink-0 flex items-center justify-center">
-                  <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                    <path
-                      className="text-slate-200"
-                      strokeWidth="3.2"
-                      stroke="currentColor"
-                      fill="none"
-                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                    />
-                    <path
-                      className="text-[#0D9488]"
-                      strokeDasharray={`${selectedJobModal.matchPercent || 96}, 100`}
-                      strokeWidth="3.2"
-                      strokeLinecap="round"
-                      stroke="currentColor"
-                      fill="none"
-                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                    />
+                {/* Close Button */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedJobModal(null)}
+                  className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                   </svg>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className="text-[14px] font-bold text-[#0F172A] leading-none">
-                      {selectedJobModal.matchPercent || 96}%
-                    </span>
-                    <span className="text-[9px] text-[#64748B] font-medium leading-none mt-0.5">
-                      Match
-                    </span>
+                </button>
+              </div>
+
+              {/* Modal Scrollable Body */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                {/* ATS Match Box */}
+                <div className="rounded-[16px] border border-slate-200/80 bg-[#F8FAFC]/70 p-4.5 flex items-center gap-4">
+                  <div className="relative w-[70px] h-[70px] shrink-0 flex items-center justify-center">
+                    <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                      <path
+                        className="text-slate-200"
+                        strokeWidth="3.2"
+                        stroke="currentColor"
+                        fill="none"
+                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      />
+                      <path
+                        className="text-[#0D9488]"
+                        strokeDasharray={`${modalScore}, 100`}
+                        strokeWidth="3.2"
+                        strokeLinecap="round"
+                        stroke="currentColor"
+                        fill="none"
+                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="text-[14px] font-bold text-[#0F172A] leading-none">
+                        {Number.isInteger(modalScore) ? modalScore : modalScore.toFixed(1)}%
+                      </span>
+                      <span className="text-[9px] text-[#64748B] font-medium leading-none mt-0.5">
+                        Match
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col">
+                    <h3 className="text-[15px] font-bold text-[#0F172A]">ATS Match Score</h3>
+                    <p className="text-[12.5px] text-[#64748B] mt-0.5 leading-snug">
+                      Calculated by AI based on your profile, skills, experience and preferences.
+                    </p>
                   </div>
                 </div>
 
-                <div className="flex flex-col">
-                  <h3 className="text-[15px] font-bold text-[#0F172A]">ATS Match</h3>
-                  <p className="text-[12.5px] text-[#64748B] mt-0.5 leading-snug">
-                    Strong match based on your profile, skills, experience and preferences.
-                  </p>
-                </div>
+                {/* Sub Scores Breakdown (if provided in score_data) */}
+                {subScores && typeof subScores === "object" && Object.keys(subScores).length > 0 && (
+                  <div>
+                    <h3 className="text-[14px] font-bold text-[#0F172A] mb-2.5">Sub Scores Breakdown</h3>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      {Object.entries(subScores).map(([key, val]) => (
+                        <div key={key} className="p-3 rounded-[12px] bg-slate-50 border border-slate-100 flex flex-col">
+                          <span className="text-[11px] font-medium text-[#64748B] capitalize">
+                            {key.replace(/_/g, " ")}
+                          </span>
+                          <span className="text-[14px] font-bold text-[#0F172A] mt-0.5">
+                            {typeof val === "number" ? `${val}%` : String(val)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Job Description (if available) */}
+                {selectedJobModal.description && (
+                  <div>
+                    <h3 className="text-[14.5px] font-bold text-[#0F172A]">Job description</h3>
+                    <p className="text-[13px] text-[#475569] leading-relaxed mt-1.5">
+                      {selectedJobModal.description}
+                    </p>
+                  </div>
+                )}
+
+                {/* Key Responsibilities (if available) */}
+                {Array.isArray(selectedJobModal.responsibilities) && selectedJobModal.responsibilities.length > 0 && (
+                  <div>
+                    <h3 className="text-[14px] font-bold text-[#0F172A]">Key responsibilities:</h3>
+                    <ul className="space-y-2 mt-2">
+                      {selectedJobModal.responsibilities.map((resp, idx) => (
+                        <li key={idx} className="text-[13px] text-[#475569] flex items-start gap-2 leading-snug">
+                          <span className="text-[#94A3B8] shrink-0">•</span>
+                          <span>{resp}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Matched Skills */}
+                {modalMatchedSkills.length > 0 && (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-[14px] font-bold text-[#0F172A]">Matched Skills</h3>
+                      <span className="text-[11px] font-semibold text-[#059669] bg-[#ECFDF5] px-2.5 py-0.5 rounded-full">
+                        {modalMatchedSkills.length} matched
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-2 mt-1.5">
+                      {modalMatchedSkills.map((skill, idx) => (
+                        <span
+                          key={`${skill}-${idx}`}
+                          className="bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0] rounded-[8px] px-3 py-1.5 text-[12px] font-medium flex items-center gap-1.5"
+                        >
+                          <svg className="w-3.5 h-3.5 text-[#059669]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                          <span>{skill}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Missing Required Skills */}
+                {modalMissingRequired.length > 0 && (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-[14px] font-bold text-[#0F172A]">Missing Required Skills</h3>
+                      <span className="text-[11px] font-semibold text-[#DC2626] bg-[#FEF2F2] px-2.5 py-0.5 rounded-full">
+                        {modalMissingRequired.length} missing
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-2 mt-1.5">
+                      {modalMissingRequired.map((skill, idx) => (
+                        <span
+                          key={`${skill}-${idx}`}
+                          className="bg-[#FEF2F2] text-[#991B1B] border border-[#FECACA] rounded-[8px] px-3 py-1.5 text-[12px] font-medium flex items-center gap-1.5"
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#DC2626]" />
+                          <span>{skill}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Missing Preferred Skills */}
+                {modalMissingPreferred.length > 0 && (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-[14px] font-bold text-[#0F172A]">Missing Preferred Skills</h3>
+                      <span className="text-[11px] font-semibold text-[#D97706] bg-[#FFFBEB] px-2.5 py-0.5 rounded-full">
+                        {modalMissingPreferred.length} missing
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-2 mt-1.5">
+                      {modalMissingPreferred.map((skill, idx) => (
+                        <span
+                          key={`${skill}-${idx}`}
+                          className="bg-[#FFFBEB] text-[#92400E] border border-[#FDE68A] rounded-[8px] px-3 py-1.5 text-[12px] font-medium"
+                        >
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Missing Keywords */}
+                {modalMissingKeywords.length > 0 && (
+                  <div>
+                    <h3 className="text-[14px] font-bold text-[#0F172A] mb-2">Missing Keywords</h3>
+                    <div className="flex flex-wrap gap-2 mt-1.5">
+                      {modalMissingKeywords.map((kw, idx) => (
+                        <span
+                          key={`${kw}-${idx}`}
+                          className="bg-[#F1F5F9] text-[#475569] border border-slate-200 rounded-[8px] px-3 py-1.5 text-[12px] font-medium"
+                        >
+                          {kw}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Job Details (if available) */}
+                {(selectedJobModal.experience || selectedJobModal.workMode || selectedJobModal.type || selectedJobModal.fullLocation) && (
+                  <div>
+                    <h3 className="text-[14px] font-bold text-[#0F172A] mb-2.5">Job details</h3>
+                    <div className="grid grid-cols-2 gap-y-2.5 gap-x-4">
+                      {selectedJobModal.experience && (
+                        <div className="flex items-center gap-2 text-[13px]">
+                          <span className="text-[#64748B]">Experience</span>
+                          <span className="font-semibold text-[#0F172A]">{selectedJobModal.experience}</span>
+                        </div>
+                      )}
+                      {selectedJobModal.workMode && (
+                        <div className="flex items-center gap-2 text-[13px]">
+                          <span className="text-[#64748B]">Work mode</span>
+                          <span className="font-semibold text-[#0F172A]">{selectedJobModal.workMode}</span>
+                        </div>
+                      )}
+                      {selectedJobModal.type && (
+                        <div className="flex items-center gap-2 text-[13px]">
+                          <span className="text-[#64748B]">Employment type</span>
+                          <span className="font-semibold text-[#0F172A]">{selectedJobModal.type}</span>
+                        </div>
+                      )}
+                      {(selectedJobModal.fullLocation || selectedJobModal.location) && (
+                        <div className="flex items-center gap-2 text-[13px]">
+                          <span className="text-[#64748B]">Location</span>
+                          <span className="font-semibold text-[#0F172A]">{selectedJobModal.fullLocation || selectedJobModal.location}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* Job Description */}
-              <div>
-                <h3 className="text-[14.5px] font-bold text-[#0F172A]">Job description</h3>
-                <p className="text-[13px] text-[#475569] leading-relaxed mt-1.5">
-                  {selectedJobModal.description}
+              {/* Modal Footer */}
+              <div className="p-5 border-t border-slate-100 bg-white shrink-0 flex flex-col gap-2.5">
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsJobSaved(!isJobSaved)}
+                    className={`flex-1 h-[44px] rounded-[12px] border text-[13.5px] font-medium flex items-center justify-center gap-2 transition-colors cursor-pointer ${
+                      isJobSaved
+                        ? "border-blue-300 bg-blue-50 text-[#2563EB]"
+                        : "border-[#BFDBFE] bg-white text-[#2563EB] hover:bg-blue-50/50"
+                    }`}
+                  >
+                    <svg
+                      className="w-4 h-4"
+                      fill={isJobSaved ? "currentColor" : "none"}
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+                    </svg>
+                    <span>{isJobSaved ? "Saved" : "Save job"}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="flex-1 h-[44px] rounded-[12px] bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-[13.5px] font-medium flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.99] transition-all cursor-pointer"
+                  >
+                    <span>Apply now</span>
+                    <span>→</span>
+                  </button>
+                </div>
+
+                <p className="text-[11.5px] text-[#94A3B8] text-center">
+                  Your application quota will be reserved before submission.
                 </p>
               </div>
-
-              {/* Key Responsibilities */}
-              <div>
-                <h3 className="text-[14px] font-bold text-[#0F172A]">Key responsibilities:</h3>
-                <ul className="space-y-2 mt-2">
-                  {selectedJobModal.responsibilities.map((resp, idx) => (
-                    <li key={idx} className="text-[13px] text-[#475569] flex items-start gap-2 leading-snug">
-                      <span className="text-[#94A3B8] shrink-0">•</span>
-                      <span>{resp}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* Required Skills */}
-              <div>
-                <h3 className="text-[14px] font-bold text-[#0F172A]">Required skills</h3>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {selectedJobModal.requiredSkills.map((skill) => (
-                    <span
-                      key={skill}
-                      className="bg-[#F1F5F9] text-[#334155] rounded-[8px] px-3 py-1.5 text-[12.5px] font-medium"
-                    >
-                      {skill}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              {/* Preferred Skills */}
-              <div>
-                <h3 className="text-[14px] font-bold text-[#0F172A]">Preferred skills</h3>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {selectedJobModal.preferredSkills.map((skill) => (
-                    <span
-                      key={skill}
-                      className="bg-[#F1F5F9] text-[#334155] rounded-[8px] px-3 py-1.5 text-[12.5px] font-medium"
-                    >
-                      {skill}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              {/* Job Details */}
-              <div>
-                <h3 className="text-[14px] font-bold text-[#0F172A] mb-2.5">Job details</h3>
-                <div className="grid grid-cols-2 gap-y-2.5 gap-x-4">
-                  <div className="flex items-center gap-2 text-[13px]">
-                    <span className="text-[#64748B]">Experience</span>
-                    <span className="font-semibold text-[#0F172A]">{selectedJobModal.experience}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-[13px]">
-                    <span className="text-[#64748B]">Work mode</span>
-                    <span className="font-semibold text-[#0F172A]">{selectedJobModal.workMode}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-[13px]">
-                    <span className="text-[#64748B]">Employment type</span>
-                    <span className="font-semibold text-[#0F172A]">{selectedJobModal.type}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-[13px]">
-                    <span className="text-[#64748B]">Location</span>
-                    <span className="font-semibold text-[#0F172A]">{selectedJobModal.fullLocation}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-5 border-t border-slate-100 bg-white shrink-0 flex flex-col gap-2.5">
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsJobSaved(!isJobSaved)}
-                  className={`flex-1 h-[44px] rounded-[12px] border text-[13.5px] font-medium flex items-center justify-center gap-2 transition-colors cursor-pointer ${
-                    isJobSaved
-                      ? "border-blue-300 bg-blue-50 text-[#2563EB]"
-                      : "border-[#BFDBFE] bg-white text-[#2563EB] hover:bg-blue-50/50"
-                  }`}
-                >
-                  <svg
-                    className="w-4 h-4"
-                    fill={isJobSaved ? "currentColor" : "none"}
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-                  </svg>
-                  <span>{isJobSaved ? "Saved" : "Save job"}</span>
-                </button>
-
-                <button
-                  type="button"
-                  className="flex-1 h-[44px] rounded-[12px] bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-[13.5px] font-medium flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.99] transition-all cursor-pointer"
-                >
-                  <span>Apply now</span>
-                  <span>→</span>
-                </button>
-              </div>
-
-              <p className="text-[11.5px] text-[#94A3B8] text-center">
-                Your application quota will be reserved before submission.
-              </p>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };
