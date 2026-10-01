@@ -60,6 +60,15 @@ export const RESUME_ENDPOINTS = {
   SET_PRIMARY: (id) => `${API_BASE_URL}/api/resumes/${id}/set-primary`,
 };
 
+export const ENHANCE_RESUME_ENDPOINTS = {
+  GET_ENHANCED_RESUME: `${RESUME_API_BASE_URL}/api/v1/Get_EnhancedResume_for_PoorJDScore`,
+  GET_SCORE_FOR_ENHANCED_RESUME: `${RESUME_API_BASE_URL}/api/v1/Get_Score_for_EnhancedResume`,
+};
+
+export const MORE_JOBS_ENDPOINTS = {
+  GET_MORE_JDS: `${RESUME_API_BASE_URL}/api/v1/Get_N_moreJDs_for_Res`,
+};
+
 export const ENDPOINTS = {
   BASE_URL: API_BASE_URL,
   AUTH: AUTH_ENDPOINTS,
@@ -67,6 +76,8 @@ export const ENDPOINTS = {
   ONBOARDING: ONBOARDING_ENDPOINTS,
   PROFILE: PROFILE_ENDPOINTS,
   RESUME: RESUME_ENDPOINTS,
+  ENHANCE_RESUME: ENHANCE_RESUME_ENDPOINTS,
+  MORE_JOBS: MORE_JOBS_ENDPOINTS,
 };
 
 export default ENDPOINTS;

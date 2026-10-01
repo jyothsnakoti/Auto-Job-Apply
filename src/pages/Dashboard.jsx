@@ -2,7 +2,17 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
-import { getStoredUser, getOnboardingProfile, getStoredJobMatches, getOnboardingState } from "../services/api";
+import { 
+  getStoredUser, 
+  getOnboardingProfile, 
+  getStoredJobMatches, 
+  getOnboardingState,
+  getEnhancedResume,
+  getScoreForEnhancedResume,
+  getCandidateId,
+  getStoredResumeId,
+  getJobId
+} from "../services/api";
 
 import dashboard1Icon from "../assets/dashboard1.svg";
 import dashboard2Icon from "../assets/dashboard2.svg";
@@ -119,71 +129,164 @@ const DocumentIcon = ({ color = "#6366F1" }) => (
   </svg>
 );
 
+// Helper to clean raw HTML tags (&nbsp;, <br/>, <p>, etc.) and normalize whitespace
+const cleanHtmlText = (str) => {
+  if (!str || typeof str !== "string") return "";
+  return str
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<\/?[^>]+(>|$)/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n\s*\n\s*\n+/g, "\n\n")
+    .trim();
+};
+
+const extractCleanJobTitle = (rawTitle, rawText, index = 0) => {
+  let title = cleanHtmlText(rawTitle || "");
+  const text = cleanHtmlText(rawText || "");
+
+  // If title is already clean, concise (<= 55 chars) and doesn't look like a long unparsed sentence
+  if (
+    title &&
+    title.length <= 55 &&
+    !title.toLowerCase().startsWith("the ") &&
+    !title.toLowerCase().includes("is looking for") &&
+    !title.toLowerCase().includes("we are looking") &&
+    !title.toLowerCase().includes("team is seeking") &&
+    !title.includes("\n")
+  ) {
+    return title;
+  }
+
+  const candidateText = title || text;
+  if (candidateText) {
+    // 1. Check for "is looking for a / an [Role Title] to / who / in"
+    const lookingMatch = candidateText.match(
+      /(?:is\s+looking\s+for\s+(?:a|an)?|we\s+are\s+looking\s+for\s+(?:a|an)?|seeking\s+(?:a|an)?|hiring\s+(?:a|an)?)\s+([A-Z][A-Za-z0-9\s\-/+(),&]+?)(?:\s+to|\s+who|\s+in|\s+at|\s+with|[.,;\n\r]|$)/i
+    );
+    if (lookingMatch && lookingMatch[1] && lookingMatch[1].trim().length >= 3 && lookingMatch[1].trim().length <= 60) {
+      return lookingMatch[1].trim();
+    }
+
+    // 2. Check for explicit "Title:" or "Role:" or "Position:"
+    const explicitMatch = candidateText.match(
+      /(?:job\s+title|title|role|position)\s*[:-]\s*([^\n\r,;.]+)/i
+    );
+    if (explicitMatch && explicitMatch[1] && explicitMatch[1].trim().length >= 3 && explicitMatch[1].trim().length <= 60) {
+      return explicitMatch[1].trim();
+    }
+
+    // 3. Known industry role matches in candidateText
+    const knownRolePatterns = [
+      /\b(Front[ -]?End\s+Engineer(?:\s+[I|V|X\d]+)?(?:\s*\([A-Z0-9]+\))?)\b/i,
+      /\b(Back[ -]?End\s+Engineer(?:\s+[I|V|X\d]+)?(?:\s*\([A-Z0-9]+\))?)\b/i,
+      /\b(Full[ -]?Stack\s+Engineer(?:\s+[I|V|X\d]+)?(?:\s*\([A-Z0-9]+\))?)\b/i,
+      /\b(Software\s+Development\s+Engineer(?:\s+[I|V|X\d]+)?(?:\s*\([A-Z0-9]+\))?)\b/i,
+      /\b(Software\s+Engineer(?:\s+[I|V|X\d]+)?(?:\s*\([A-Z0-9]+\))?)\b/i,
+      /\b(UI\/UX\s+Designer(?:\s+[I|V|X\d]+)?)\b/i,
+      /\b(Product\s+Designer(?:\s+[I|V|X\d]+)?)\b/i,
+      /\b(Product\s+Manager(?:\s+[I|V|X\d]+)?)\b/i,
+      /\b(Data\s+Scientist(?:\s+[I|V|X\d]+)?)\b/i,
+      /\b(Machine\s+Learning\s+Engineer(?:\s+[I|V|X\d]+)?)\b/i,
+      /\b(DevOps\s+Engineer(?:\s+[I|V|X\d]+)?)\b/i,
+      /\b(Cloud\s+Architect(?:\s+[I|V|X\d]+)?)\b/i,
+      /\b(Site\s+Reliability\s+Engineer(?:\s+[I|V|X\d]+)?)\b/i,
+      /\b(QA\s+Engineer(?:\s+[I|V|X\d]+)?)\b/i,
+      /\b(Mobile\s+Developer(?:\s+[I|V|X\d]+)?)\b/i,
+      /\b(iOS\s+Developer(?:\s+[I|V|X\d]+)?)\b/i,
+      /\b(Android\s+Developer(?:\s+[I|V|X\d]+)?)\b/i,
+    ];
+
+    for (const pattern of knownRolePatterns) {
+      const match = candidateText.match(pattern);
+      if (match && match[1]) {
+        return match[1].trim();
+      }
+    }
+
+    // 4. First line fallback
+    const firstLine = candidateText.split("\n")[0].replace(/^#+\s*/, "").trim();
+    if (firstLine && firstLine.length <= 50 && !firstLine.toLowerCase().includes("http")) {
+      return firstLine;
+    }
+  }
+
+  return `Position #${index + 1}`;
+};
+
+const extractCleanCompany = (rawCompany, rawText) => {
+  let company = cleanHtmlText(rawCompany || "");
+  const text = cleanHtmlText(rawText || "");
+
+  if (company && company.length <= 40 && !company.toLowerCase().includes("hiring") && !company.includes("\n")) {
+    return company;
+  }
+
+  const candidateText = company || text;
+  if (candidateText) {
+    const textLower = candidateText.toLowerCase();
+    if (textLower.includes("amazon") || textLower.includes("luna")) return "Amazon";
+    if (textLower.includes("google")) return "Google";
+    if (textLower.includes("microsoft")) return "Microsoft";
+    if (textLower.includes("atlassian")) return "Atlassian";
+    if (textLower.includes("shopify")) return "Shopify";
+    if (textLower.includes("meta") || textLower.includes("facebook")) return "Meta";
+    if (textLower.includes("apple")) return "Apple";
+    if (textLower.includes("netflix")) return "Netflix";
+
+    const compMatch = candidateText.match(/(?:company|organization|employer|at)\s*[:-]\s*([A-Za-z0-9\s&.,'-]+)/i);
+    if (compMatch && compMatch[1] && compMatch[1].trim().length <= 35) {
+      return compMatch[1].trim();
+    }
+  }
+
+  return company || "Hiring Organization";
+};
+
 const transformMatchToJob = (match, index = 0) => {
   if (!match) return null;
 
-  if (match.title && match.company && match.matchPercent !== undefined && match.logo) {
-    return {
-      ...match,
-      id: match.id || match.job_id || index + 1,
-    };
-  }
+  const rawText = match.full_jd_text || match.preview || match.description || "";
+  const cleanedFullText = cleanHtmlText(rawText);
 
-  const overallScore =
+  const title = extractCleanJobTitle(match.title || match.job_title || match.role, rawText, index);
+  const company = extractCleanCompany(match.company || match.company_name, rawText);
+
+  const rawScore =
     typeof match.overall_score === "number"
       ? match.overall_score
       : typeof match.score_data?.overall_score === "number"
       ? match.score_data.overall_score
       : typeof match.score === "number"
       ? match.score
-      : 85;
+      : (typeof match.overall_score === "string" && !isNaN(Number(match.overall_score)) && match.overall_score.trim() !== "")
+      ? Number(match.overall_score)
+      : null;
 
-  const matchPercent = Math.min(100, Math.max(1, Math.round(overallScore)));
-
-  const text = match.full_jd_text || match.preview || match.description || "";
-
-  // Title extraction
-  let title = match.title || match.job_title || match.role || "";
-  if (!title && text) {
-    const titleMatch = text.match(/(?:title|role|position|job title)\s*[:-]\s*([^\n\r,]+)/i);
-    if (titleMatch && titleMatch[1]) {
-      title = titleMatch[1].trim();
-    } else {
-      const firstLine = text.split("\n")[0].replace(/^#+\s*/, "").trim();
-      if (firstLine && firstLine.length < 60 && !firstLine.toLowerCase().includes("http")) {
-        title = firstLine;
-      }
-    }
-  }
-  if (!title) {
-    title = `Position #${index + 1}`;
-  }
-
-  // Company extraction
-  let company = match.company || match.company_name || "";
-  if (!company && text) {
-    const companyMatch = text.match(/(?:company|organization|employer)\s*[:-]\s*([^\n\r,]+)/i);
-    if (companyMatch && companyMatch[1]) {
-      company = companyMatch[1].trim();
-    }
-  }
-  if (!company) {
-    company = "Hiring Organization";
-  }
+  const matchPercent =
+    rawScore !== null && !isNaN(rawScore)
+      ? Math.min(100, Math.max(1, Math.round(Number(rawScore))))
+      : null;
 
   // Pick logo based on company
   let logo = aiLogo;
   const compLower = company.toLowerCase();
   if (compLower.includes("google")) logo = googleLogo;
   else if (compLower.includes("microsoft")) logo = microsoftLogo;
-  else if (compLower.includes("amazon")) logo = amazonLogo;
+  else if (compLower.includes("amazon") || compLower.includes("luna")) logo = amazonLogo;
   else if (compLower.includes("shopify")) logo = shopifyLogo;
 
   // Location
-  let location = match.location || match.city || "";
-  if (!location && text) {
-    const locMatch = text.match(/(?:location|place|city)\s*[:-]\s*([^\n\r]+)/i);
-    if (locMatch && locMatch[1]) {
+  let location = cleanHtmlText(match.location || match.city || "");
+  if (!location && cleanedFullText) {
+    const locMatch = cleanedFullText.match(/(?:location|place|city)\s*[:-]\s*([^\n\r]+)/i);
+    if (locMatch && locMatch[1] && locMatch[1].trim().length <= 40) {
       location = locMatch[1].trim();
     }
   }
@@ -194,62 +297,72 @@ const transformMatchToJob = (match, index = 0) => {
   // Skills
   const requiredSkills =
     Array.isArray(match.requiredSkills) && match.requiredSkills.length > 0
-      ? match.requiredSkills
+      ? match.requiredSkills.map(cleanHtmlText)
       : Array.isArray(match.skills) && match.skills.length > 0
-      ? match.skills
+      ? match.skills.map(cleanHtmlText)
       : Array.isArray(match.extracted_skills) && match.extracted_skills.length > 0
-      ? match.extracted_skills
-      : Array.isArray(match.score_data?.missing_required_skills) && match.score_data.missing_required_skills.length > 0
-      ? match.score_data.missing_required_skills
+      ? match.extracted_skills.map(cleanHtmlText)
       : [];
 
   const preferredSkills =
     Array.isArray(match.preferredSkills) && match.preferredSkills.length > 0
-      ? match.preferredSkills
-      : Array.isArray(match.score_data?.missing_preferred_skills) && match.score_data.missing_preferred_skills.length > 0
-      ? match.score_data.missing_preferred_skills
+      ? match.preferredSkills.map(cleanHtmlText)
       : [];
 
-  let matchColor = "bg-[#ECFDF5] text-[#059669]";
-  if (matchPercent < 80) {
-    matchColor = "bg-slate-100 text-slate-700";
-  } else if (matchPercent < 90) {
-    matchColor = "bg-[#FFFBEB] text-[#D97706]";
+  let matchText = matchPercent !== null ? `${matchPercent}% match` : "ATS Match";
+  let matchColor = "bg-[#EEF2FF] text-[#4F46E5]";
+  if (matchPercent !== null) {
+    if (matchPercent < 70) {
+      matchColor = "bg-slate-100 text-slate-700";
+    } else if (matchPercent < 85) {
+      matchColor = "bg-[#FFFBEB] text-[#D97706]";
+    } else {
+      matchColor = "bg-[#ECFDF5] text-[#059669]";
+    }
   }
 
-  const description =
-    match.description ||
-    match.preview ||
-    (match.full_jd_text ? match.full_jd_text.slice(0, 300) + "..." : "") ||
-    "Job description available upon viewing details.";
+  let description = cleanHtmlText(match.description || match.preview || (match.full_jd_text ? match.full_jd_text.slice(0, 400) + "..." : ""));
+  if (!description) {
+    description = "Job description available upon viewing details.";
+  }
 
-  const responsibilities =
-    Array.isArray(match.responsibilities) && match.responsibilities.length > 0
-      ? match.responsibilities
-      : [];
+  let responsibilities = [];
+  if (Array.isArray(match.responsibilities) && match.responsibilities.length > 0) {
+    responsibilities = match.responsibilities.map(cleanHtmlText).filter(Boolean);
+  } else if (cleanedFullText) {
+    const lines = cleanedFullText
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l.startsWith("•") || l.startsWith("-") || l.startsWith("*") || (l.length > 25 && l.length < 200));
+    if (lines.length > 0) {
+      responsibilities = lines.slice(0, 6).map((l) => l.replace(/^[•\-*]\s*/, ""));
+    }
+  }
 
   return {
     id: match.job_id || match.id || `match-${index + 1}`,
     job_id: match.job_id || match.id || `match-${index + 1}`,
+    JDid: match.job_id || match.id || `match-${index + 1}`,
     title,
     company,
     location,
-    fullLocation: match.fullLocation || location,
-    type: match.type || match.employment_type || "Full-time",
-    workMode: match.workMode || match.work_mode || (location.toLowerCase().includes("remote") ? "Remote" : "On-site"),
-    department: match.department || "Engineering",
-    posted: match.posted || "Recent match",
-    match: `${matchPercent}% match`,
+    fullLocation: cleanHtmlText(match.fullLocation || location),
+    type: cleanHtmlText(match.type || match.employment_type || "Full-time"),
+    workMode: cleanHtmlText(match.workMode || match.work_mode || (location.toLowerCase().includes("remote") ? "Remote" : "On-site")),
+    department: cleanHtmlText(match.department || "Engineering"),
+    posted: cleanHtmlText(match.posted || "Recent match"),
+    match: matchText,
     matchPercent,
+    rawScore,
     matchColor,
-    logo,
+    logo: match.logo || logo,
     description,
     responsibilities,
     requiredSkills,
     preferredSkills,
-    experience: match.experience || "Not specified",
+    experience: cleanHtmlText(match.experience || "2 – 5 years"),
     scoreData: match.score_data || null,
-    fullJdText: match.full_jd_text || "",
+    fullJdText: cleanedFullText,
     rawMatch: match,
   };
 };
@@ -353,6 +466,16 @@ const Dashboard = () => {
   // Jobs State (Fetched from resume match endpoint / storage)
   const [jobs, setJobs] = useState([]);
   const [isLoadingJobs, setIsLoadingJobs] = useState(false);
+
+  // Enhance Resume States
+  const [isEnhancing, setIsEnhancing] = useState(false);
+  const [enhanceError, setEnhanceError] = useState(null);
+  const [enhanceSuccess, setEnhanceSuccess] = useState(null);
+  const [enhancedResultsMap, setEnhancedResultsMap] = useState({});
+  const [showEnhancedModal, setShowEnhancedModal] = useState(false);
+  const [copiedResume, setCopiedResume] = useState(false);
+  const [isUpdatingAts, setIsUpdatingAts] = useState(false);
+  const [updatedAtsScores, setUpdatedAtsScores] = useState({});
 
   // Filter States
   const [selectedDate, setSelectedDate] = useState("Last 7 days");
@@ -481,6 +604,127 @@ const Dashboard = () => {
 
     loadUserData();
   }, []);
+
+  // Enhance Resume Action Handler
+  const handleEnhanceResume = async () => {
+    if (isEnhancing || !selectedJobModal) return;
+    setEnhanceError(null);
+    setEnhanceSuccess(null);
+
+    const candidateId = getCandidateId();
+    const resumeId = getStoredResumeId();
+    const selectedJobId = getJobId(selectedJobModal);
+
+    console.log("[Dashboard] Triggering Enhance Resume with dynamic IDs:", {
+      JDid: selectedJobId,
+      Candidateid: candidateId,
+      ResumeID: resumeId,
+    });
+
+    if (!selectedJobId || !candidateId || !resumeId) {
+      const missing = [];
+      if (!selectedJobId) missing.push("Job ID (JDid)");
+      if (!candidateId) missing.push("Candidate ID (Candidateid)");
+      if (!resumeId) missing.push("Resume ID (ResumeID)");
+
+      setEnhanceError(
+        `Required information is missing: ${missing.join(", ")}. Please ensure you are logged in and have uploaded a resume.`
+      );
+      return;
+    }
+
+    try {
+      setIsEnhancing(true);
+
+      const payload = {
+        JDid: selectedJobId,
+        Candidateid: candidateId,
+        ResumeID: resumeId,
+      };
+
+      const result = await getEnhancedResume(payload);
+      console.log("[Dashboard] Enhance Resume API Response:", result);
+
+      setEnhancedResultsMap((prev) => ({
+        ...prev,
+        [selectedJobId]: result,
+      }));
+      setEnhanceSuccess("Resume successfully enhanced for this role!");
+    } catch (err) {
+      console.error("[Dashboard] Enhance Resume Error:", err);
+      const errMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.detail ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Unable to enhance resume. Please try again.";
+      setEnhanceError(errMsg);
+    } finally {
+      setIsEnhancing(false);
+    }
+  };
+
+  const handleCopyEnhancedResume = (text) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedResume(true);
+    setTimeout(() => setCopiedResume(false), 2500);
+  };
+
+  const handleGetUpdatedAts = async () => {
+    if (!selectedJobModal || isUpdatingAts) return;
+    const jobId = getJobId(selectedJobModal);
+    const resumeId = getStoredResumeId();
+    const enhResult = enhancedResultsMap[jobId];
+    const enhResumeText =
+      enhResult?.EnhResume ||
+      enhResult?.enhResume ||
+      enhResult?.enhanced_resume ||
+      enhResult?.enhancedResume ||
+      "";
+
+    if (!jobId || !resumeId || !enhResumeText) {
+      setEnhanceError(
+        "Missing job details, resume ID, or enhanced resume text to calculate updated ATS score."
+      );
+      return;
+    }
+
+    try {
+      setIsUpdatingAts(true);
+      setEnhanceError(null);
+
+      const payload = {
+        JDid: jobId,
+        ResumeID: resumeId,
+        EnhResumeText: enhResumeText,
+      };
+
+      console.log("[Dashboard] Requesting updated ATS score with payload:", payload);
+      const response = await getScoreForEnhancedResume(payload);
+      console.log("[Dashboard] Updated ATS API response:", response);
+
+      const rawScore = response?.EnhATS ?? response?.score_data?.overall_score ?? response?.score;
+      if (rawScore !== undefined && rawScore !== null && !isNaN(Number(rawScore))) {
+        const parsedScore = Math.min(100, Math.max(1, Math.round(Number(rawScore))));
+        setUpdatedAtsScores((prev) => ({
+          ...prev,
+          [jobId]: parsedScore,
+        }));
+      }
+    } catch (err) {
+      console.error("[Dashboard] Error calculating updated ATS score:", err);
+      const errMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.detail ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Unable to fetch updated ATS score. Please try again.";
+      setEnhanceError(errMsg);
+    } finally {
+      setIsUpdatingAts(false);
+    }
+  };
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -1712,221 +1956,713 @@ const Dashboard = () => {
       </div>
 
       {/* Job Details Right Side Drawer Popup */}
-      {selectedJobModal && (
-        <div className="fixed inset-0 z-50 overflow-hidden">
-          {/* Backdrop Overlay */}
-          <div
-            className="fixed inset-0 bg-black/40 backdrop-blur-[2px] transition-opacity duration-300"
-            onClick={() => setSelectedJobModal(null)}
-          />
+      {selectedJobModal && (() => {
+        const selectedJobId = getJobId(selectedJobModal);
+        const currentMatch = selectedJobModal.rawMatch || jobs.find((j) => getJobId(j) === selectedJobId)?.rawMatch || null;
 
-          {/* Side Drawer Container */}
-          <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
-            <div className="w-screen max-w-[490px] bg-white shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-200">
-              
-              {/* Drawer Header */}
-              <div className="p-6 pb-4 border-b border-slate-100 flex items-start justify-between gap-4 shrink-0 bg-white">
-                <div className="flex items-start gap-3.5">
-                  <div className="w-[44px] h-[44px] rounded-[12px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2 mt-0.5">
-                    <img
-                      src={selectedJobModal.logo}
-                      alt={selectedJobModal.company}
-                      className="w-full h-full object-contain"
-                    />
+        const rawInitialScore =
+          typeof currentMatch?.overall_score === "number"
+            ? currentMatch.overall_score
+            : typeof currentMatch?.score_data?.overall_score === "number"
+            ? currentMatch.score_data.overall_score
+            : typeof currentMatch?.score === "number"
+            ? currentMatch.score
+            : (typeof currentMatch?.overall_score === "string" && !isNaN(Number(currentMatch.overall_score)) && currentMatch.overall_score.trim() !== "")
+            ? Number(currentMatch.overall_score)
+            : typeof selectedJobModal.rawScore === "number"
+            ? selectedJobModal.rawScore
+            : typeof selectedJobModal.matchPercent === "number"
+            ? selectedJobModal.matchPercent
+            : null;
+
+        const activeAtsScore =
+          selectedJobId && updatedAtsScores[selectedJobId] !== undefined
+            ? updatedAtsScores[selectedJobId]
+            : rawInitialScore !== null && !isNaN(rawInitialScore)
+            ? Math.min(100, Math.max(1, Math.round(Number(rawInitialScore))))
+            : null;
+
+        const scoreData = currentMatch?.score_data || selectedJobModal.scoreData || null;
+        const missingKeywords = Array.isArray(scoreData?.missing_keywords) ? scoreData.missing_keywords.filter(Boolean) : [];
+        const missingRequiredSkills = Array.isArray(scoreData?.missing_required_skills) ? scoreData.missing_required_skills.filter(Boolean) : [];
+        const missingPreferredSkills = Array.isArray(scoreData?.missing_preferred_skills) ? scoreData.missing_preferred_skills.filter(Boolean) : [];
+
+        return (
+          <div className="fixed inset-0 z-50 overflow-hidden">
+            {/* Backdrop Overlay */}
+            <div
+              className="fixed inset-0 bg-black/40 backdrop-blur-[2px] transition-opacity duration-300"
+              onClick={() => setSelectedJobModal(null)}
+            />
+
+            {/* Side Drawer Container */}
+            <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
+              <div className="w-screen max-w-[490px] bg-white shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-200">
+                
+                {/* Drawer Header */}
+                <div className="p-6 pb-4 border-b border-slate-100 flex items-start justify-between gap-4 shrink-0 bg-white">
+                  <div className="flex items-start gap-3.5 flex-1 min-w-0 pr-2">
+                    <div className="w-[46px] h-[46px] rounded-[12px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2 mt-0.5">
+                      <img
+                        src={selectedJobModal.logo}
+                        alt={extractCleanCompany(selectedJobModal.company, selectedJobModal.description || selectedJobModal.fullJdText)}
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+
+                    <div className="flex flex-col flex-1 min-w-0">
+                      <h2 className="text-[18px] font-bold text-[#0F172A] tracking-tight leading-snug break-words">
+                        {extractCleanJobTitle(selectedJobModal.title, selectedJobModal.description || selectedJobModal.fullJdText)}
+                      </h2>
+
+                      <div className="flex items-center gap-1.5 text-[13.5px] text-[#475569] font-medium mt-1">
+                        <span className="truncate">{extractCleanCompany(selectedJobModal.company, selectedJobModal.description || selectedJobModal.fullJdText)}</span>
+                        <VerifiedTick />
+                      </div>
+
+                      <div className="flex items-center gap-2.5 text-[12px] text-[#64748B] mt-2 flex-wrap">
+                        <span>{cleanHtmlText(selectedJobModal.fullLocation || selectedJobModal.location)}</span>
+                        <span className="text-slate-300">•</span>
+                        <span>{cleanHtmlText(selectedJobModal.type || "Full-time")}</span>
+                        <span className="text-slate-300">•</span>
+                        <span>{cleanHtmlText(selectedJobModal.workMode || "On-site")}</span>
+                      </div>
+                      <div className="text-[12px] text-[#64748B] mt-1">
+                        {cleanHtmlText(selectedJobModal.department || "Software Engineering")}
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="flex flex-col">
-                    <h2 className="text-[18px] font-bold text-[#0F172A] tracking-tight leading-tight">
-                      {selectedJobModal.title}
-                    </h2>
+                  {/* Right Actions (Close & Enhance Resume) */}
+                  <div className="flex flex-col items-end justify-between self-stretch shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedJobModal(null);
+                        setEnhanceError(null);
+                        setEnhanceSuccess(null);
+                      }}
+                      className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
+                    >
+                      <svg className="w-5 h-5 stroke-[2]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
 
-                    <div className="flex items-center gap-1.5 text-[13.5px] text-[#475569] font-medium mt-0.5">
-                      <span>{selectedJobModal.company}</span>
-                      <VerifiedTick />
-                    </div>
-
-                    <div className="flex items-center gap-3 text-[12px] text-[#64748B] mt-2 flex-wrap">
-                      <span>{selectedJobModal.fullLocation || selectedJobModal.location}</span>
-                      <span>{selectedJobModal.type || "Full-time"}</span>
-                      <span>{selectedJobModal.workMode || "On-site"}</span>
-                    </div>
-                    <div className="text-[12px] text-[#64748B] mt-0.5">
-                      {selectedJobModal.department || "Software Engineering"}
-                    </div>
+                    <button
+                      type="button"
+                      onClick={handleEnhanceResume}
+                      disabled={isEnhancing}
+                      className={`mt-2 text-white text-[13px] font-medium px-4 py-2 rounded-lg transition-all cursor-pointer shadow-sm shrink-0 whitespace-nowrap flex items-center gap-1.5 ${
+                        isEnhancing
+                          ? "bg-indigo-300 cursor-not-allowed"
+                          : "bg-[#4F46E5] hover:bg-[#4338CA]"
+                      }`}
+                    >
+                      {isEnhancing ? (
+                        <>
+                          <svg className="animate-spin w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          </svg>
+                          <span>Enhancing...</span>
+                        </>
+                      ) : enhancedResultsMap[selectedJobId] ? (
+                        <>
+                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                          <span>Resume Enhanced</span>
+                        </>
+                      ) : (
+                        "Enhance Resume"
+                      )}
+                    </button>
                   </div>
                 </div>
 
-                {/* Right Actions (Close & Enhance Resume) */}
-                <div className="flex flex-col items-end justify-between self-stretch shrink-0">
+                {/* Drawer Scrollable Body */}
+                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+
+                  {/* Error Banner */}
+                  {enhanceError && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-3 text-[12.5px] flex items-start justify-between gap-2 animate-in fade-in">
+                      <div className="flex items-start gap-2">
+                        <svg className="w-4 h-4 text-red-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>{enhanceError}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setEnhanceError(null)}
+                        className="text-red-400 hover:text-red-600 font-bold ml-2 cursor-pointer"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Success Banner */}
+                  {enhanceSuccess && (
+                    <div className="bg-[#EEF2FF] border border-[#C7D2FE] text-[#4F46E5] rounded-xl p-3 text-[12.5px] flex items-start justify-between gap-2 animate-in fade-in">
+                      <div className="flex items-start gap-2">
+                        <svg className="w-4 h-4 text-[#4F46E5] shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
+                        </svg>
+                        <div>
+                          <p className="font-semibold text-[#3730A3]">{enhanceSuccess}</p>
+                          <p className="text-[11.5px] text-[#4F46E5] mt-0.5">Resume tailored to bridge skill and keyword gaps for this role.</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setEnhanceSuccess(null)}
+                        className="text-[#4F46E5] hover:text-[#3730A3] font-bold ml-2 cursor-pointer"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )}
+
+                  {/* AI Enhanced Resume Card (When API Response is available) */}
+                  {enhancedResultsMap[selectedJobId] && (
+                    <div className="rounded-[16px] border border-[#C7D2FE] bg-gradient-to-br from-indigo-50/70 via-indigo-50/30 to-slate-50 p-4.5 space-y-3.5 shadow-xs">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-md bg-[#4F46E5] text-white flex items-center justify-center text-xs font-bold">
+                            AI
+                          </div>
+                          <h4 className="text-[14px] font-bold text-[#0F172A]">AI Enhanced Resume</h4>
+                        </div>
+                        <span className="text-[11px] font-semibold bg-[#EEF2FF] text-[#4F46E5] border border-[#C7D2FE] px-2.5 py-0.5 rounded-full">
+                          Job-Tailored
+                        </span>
+                      </div>
+
+                      {/* Bridgeable Gaps */}
+                      {enhancedResultsMap[selectedJobId]?.bridgeable_gaps && (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[12px] font-bold text-slate-800">
+                              Bridged Keywords & Gaps:
+                            </span>
+                            {Array.isArray(enhancedResultsMap[selectedJobId].bridgeable_gaps) && (
+                              <span className="text-[11px] font-semibold text-[#4F46E5] bg-[#EEF2FF] border border-[#C7D2FE] px-2 py-0.5 rounded-full">
+                                {enhancedResultsMap[selectedJobId].bridgeable_gaps.length} Skills Optimized
+                              </span>
+                            )}
+                          </div>
+                          <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                            {Array.isArray(enhancedResultsMap[selectedJobId].bridgeable_gaps) ? (
+                              enhancedResultsMap[selectedJobId].bridgeable_gaps.map((gap, i) => {
+                                if (typeof gap === "string") {
+                                  return (
+                                    <div
+                                      key={i}
+                                      className="flex items-center gap-2 bg-white text-slate-800 border border-[#E0E7FF] rounded-lg p-2.5 shadow-2xs"
+                                    >
+                                      <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">✓</span>
+                                      <span className="text-[12px] font-semibold text-slate-900">{gap}</span>
+                                    </div>
+                                  );
+                                }
+
+                                const skill = gap?.skill || gap?.name || gap?.title || "";
+                                const severity = gap?.severity || (gap?.source ? String(gap.source).toUpperCase() : "");
+                                const rationale = gap?.rationale || gap?.description || gap?.reason || "";
+
+                                return (
+                                  <div
+                                    key={i}
+                                    className="bg-white text-slate-800 border border-[#E0E7FF] rounded-xl p-2.5 shadow-2xs space-y-1"
+                                  >
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="flex items-center gap-1.5 min-w-0">
+                                        <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">✓</span>
+                                        <span className="text-[12px] font-bold text-slate-900 truncate">
+                                          {skill || "Optimized Skill"}
+                                        </span>
+                                      </div>
+                                      {severity && (
+                                        <span
+                                          className={`text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 border ${
+                                            severity === "CRITICAL"
+                                              ? "bg-amber-50 text-amber-700 border-amber-200"
+                                              : severity === "PREFERRED"
+                                              ? "bg-blue-50 text-blue-700 border-blue-200"
+                                              : "bg-indigo-50 text-[#4F46E5] border-indigo-200"
+                                          }`}
+                                        >
+                                          {severity}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {rationale && (
+                                      <p className="text-[11px] text-slate-600 leading-snug pl-5.5 font-normal">
+                                        {rationale}
+                                      </p>
+                                    )}
+                                  </div>
+                                );
+                              })
+                            ) : typeof enhancedResultsMap[selectedJobId].bridgeable_gaps === "object" ? (
+                              Object.entries(enhancedResultsMap[selectedJobId].bridgeable_gaps).map(([k, v], i) => (
+                                <div
+                                  key={i}
+                                  className="bg-white text-slate-800 border border-[#E0E7FF] rounded-xl p-2.5 shadow-2xs space-y-1"
+                                >
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">✓</span>
+                                    <span className="text-[12px] font-bold text-slate-900">{k}</span>
+                                  </div>
+                                  <p className="text-[11px] text-slate-600 leading-snug pl-5.5 font-normal">
+                                    {String(v)}
+                                  </p>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-[12px] text-slate-600">{String(enhancedResultsMap[selectedJobId].bridgeable_gaps)}</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Enhanced Resume Preview */}
+                      {(enhancedResultsMap[selectedJobId]?.EnhResume ||
+                        enhancedResultsMap[selectedJobId]?.enhResume ||
+                        enhancedResultsMap[selectedJobId]?.enhanced_resume) && (
+                        <div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-[12px] font-semibold text-slate-700">Enhanced Resume Preview:</span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleCopyEnhancedResume(
+                                  enhancedResultsMap[selectedJobId]?.EnhResume ||
+                                    enhancedResultsMap[selectedJobId]?.enhResume ||
+                                    enhancedResultsMap[selectedJobId]?.enhanced_resume
+                                )
+                              }
+                              className="text-[11.5px] font-medium text-[#4F46E5] hover:text-[#3730A3] flex items-center gap-1 cursor-pointer"
+                            >
+                              {copiedResume ? "✓ Copied" : "Copy Text"}
+                            </button>
+                          </div>
+                          <div className="bg-white rounded-lg border border-slate-200 p-3 max-h-[160px] overflow-y-auto text-[11.5px] text-slate-700 whitespace-pre-wrap font-mono leading-relaxed">
+                            {enhancedResultsMap[selectedJobId]?.EnhResume ||
+                              enhancedResultsMap[selectedJobId]?.enhResume ||
+                              enhancedResultsMap[selectedJobId]?.enhanced_resume}
+                          </div>
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => setShowEnhancedModal(true)}
+                        className="w-full py-2 bg-white hover:bg-indigo-50/50 border border-[#C7D2FE] text-[#4F46E5] text-[12px] font-semibold rounded-xl transition-colors cursor-pointer text-center"
+                      >
+                        View Full Enhanced Resume
+                      </button>
+                    </div>
+                  )}
+                  
+                  {/* ATS Match Box */}
+                  <div className="rounded-[16px] border border-slate-200/80 bg-[#F8FAFC]/70 p-4.5 flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-4 min-w-0">
+                      <div className="relative w-[68px] h-[68px] shrink-0 flex items-center justify-center">
+                        <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                          <path
+                            className="text-slate-200"
+                            strokeWidth="3.2"
+                            stroke="currentColor"
+                            fill="none"
+                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                          />
+                          {activeAtsScore !== null && (
+                            <path
+                              className="text-[#4F46E5]"
+                              strokeDasharray={`${activeAtsScore}, 100`}
+                              strokeWidth="3.2"
+                              strokeLinecap="round"
+                              stroke="currentColor"
+                              fill="none"
+                              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                            />
+                          )}
+                        </svg>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                          <span className="text-[14px] font-bold text-[#0F172A] leading-none">
+                            {activeAtsScore !== null ? `${activeAtsScore}%` : "N/A"}
+                          </span>
+                          <span className="text-[9px] text-[#64748B] font-medium leading-none mt-0.5">
+                            Match
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col">
+                        <h3 className="text-[14.5px] font-bold text-[#0F172A]">ATS Match</h3>
+                        <p className="text-[12px] text-[#64748B] mt-0.5 leading-snug">
+                          {activeAtsScore !== null
+                            ? activeAtsScore >= 80
+                              ? "Strong match based on your profile, skills, experience and preferences."
+                              : activeAtsScore >= 60
+                              ? "Moderate match. Enhancing your resume can bridge key skill and keyword gaps."
+                              : "Lower match. Review identified gaps below or click Enhance Resume."
+                            : "ATS score unavailable for this job."}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Get Updated ATS Button (Appears when resume has been enhanced) */}
+                    {enhancedResultsMap[selectedJobId] && (
+                      <button
+                        type="button"
+                        onClick={handleGetUpdatedAts}
+                        disabled={isUpdatingAts}
+                        className="px-4 py-2.5 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-[13px] font-semibold rounded-xl shadow-xs shrink-0 whitespace-nowrap transition-all active:scale-[0.98] cursor-pointer flex items-center gap-1.5"
+                      >
+                        {isUpdatingAts ? (
+                          <>
+                            <svg className="animate-spin w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            </svg>
+                            <span>Updating...</span>
+                          </>
+                        ) : (
+                          "Get Updated ATS"
+                        )}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* ATS Identified Gaps & Missing Skills from Resume Upload Response */}
+                  {(missingRequiredSkills.length > 0 || missingPreferredSkills.length > 0 || missingKeywords.length > 0) && (
+                    <div className="rounded-[16px] border border-amber-200/80 bg-gradient-to-br from-amber-50/60 to-orange-50/30 p-4 space-y-3 shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-md bg-amber-100 text-amber-800 text-[11px] font-bold flex items-center justify-center">!</span>
+                          <h4 className="text-[13px] font-bold text-amber-950">ATS Identified Gaps</h4>
+                        </div>
+                        <span className="text-[10.5px] font-semibold text-amber-800 bg-amber-100/80 border border-amber-200 px-2 py-0.5 rounded-full">
+                          {missingRequiredSkills.length + missingPreferredSkills.length + missingKeywords.length} Gaps
+                        </span>
+                      </div>
+
+                      {missingRequiredSkills.length > 0 && (
+                        <div>
+                          <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">Missing Required Skills:</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {missingRequiredSkills.map((skill, i) => (
+                              <span key={i} className="bg-white border border-amber-200 text-amber-900 text-[11.5px] font-medium px-2.5 py-0.5 rounded-md shadow-2xs">
+                                • {skill}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {missingPreferredSkills.length > 0 && (
+                        <div>
+                          <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">Missing Preferred Skills:</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {missingPreferredSkills.map((skill, i) => (
+                              <span key={i} className="bg-white border border-amber-200 text-amber-900 text-[11.5px] font-medium px-2.5 py-0.5 rounded-md shadow-2xs">
+                                • {skill}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {missingKeywords.length > 0 && (
+                        <div>
+                          <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">Missing Keywords:</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {missingKeywords.map((kw, i) => (
+                              <span key={i} className="bg-white border border-amber-200 text-slate-700 text-[11px] font-normal px-2 py-0.5 rounded-md">
+                                {kw}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Job Description */}
+                  <div>
+                    <h3 className="text-[14px] font-bold text-[#0F172A]">Job description</h3>
+                    <div className="text-[12.5px] text-[#475569] leading-relaxed mt-1.5 whitespace-pre-line">
+                      {cleanHtmlText(selectedJobModal.description || selectedJobModal.fullJdText || selectedJobModal.preview)}
+                    </div>
+                  </div>
+
+                  {/* Key Responsibilities */}
+                  <div>
+                    <h3 className="text-[14px] font-bold text-[#0F172A]">Key responsibilities:</h3>
+                    <ul className="space-y-2 mt-2">
+                      {(selectedJobModal.responsibilities || []).map((resp, idx) => (
+                        <li key={idx} className="text-[12.5px] text-[#475569] flex items-start gap-2 leading-snug">
+                          <span className="text-[#94A3B8] shrink-0">•</span>
+                          <span>{resp}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {/* Required Skills */}
+                  <div>
+                    <h3 className="text-[14px] font-bold text-[#0F172A]">Required skills</h3>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {(selectedJobModal.requiredSkills || []).map((skill) => (
+                        <span
+                          key={skill}
+                          className="bg-[#F1F5F9] text-[#334155] rounded-[8px] px-3 py-1.5 text-[12px] font-medium"
+                        >
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Preferred Skills */}
+                  <div>
+                    <h3 className="text-[14px] font-bold text-[#0F172A]">Preferred skills</h3>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {(selectedJobModal.preferredSkills || []).map((skill) => (
+                        <span
+                          key={skill}
+                          className="bg-[#F1F5F9] text-[#334155] rounded-[8px] px-3 py-1.5 text-[12px] font-medium"
+                        >
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Job Details */}
+                  <div>
+                    <h3 className="text-[14px] font-bold text-[#0F172A] mb-2.5">Job details</h3>
+                    <div className="grid grid-cols-2 gap-y-3 gap-x-4">
+                      <div className="flex flex-col text-[12.5px]">
+                        <span className="text-[#64748B]">Experience</span>
+                        <span className="font-semibold text-[#0F172A] mt-0.5">{selectedJobModal.experience}</span>
+                      </div>
+                      <div className="flex flex-col text-[12.5px]">
+                        <span className="text-[#64748B]">Work mode</span>
+                        <span className="font-semibold text-[#0F172A] mt-0.5">{selectedJobModal.workMode}</span>
+                      </div>
+                      <div className="flex flex-col text-[12.5px]">
+                        <span className="text-[#64748B]">Employment type</span>
+                        <span className="font-semibold text-[#0F172A] mt-0.5">{selectedJobModal.type}</span>
+                      </div>
+                      <div className="flex flex-col text-[12.5px]">
+                        <span className="text-[#64748B]">Location</span>
+                        <span className="font-semibold text-[#0F172A] mt-0.5">{selectedJobModal.fullLocation}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Drawer Footer */}
+                <div className="p-5 border-t border-slate-100 bg-white shrink-0 flex items-center gap-3">
                   <button
                     type="button"
-                    onClick={() => setSelectedJobModal(null)}
-                    className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
+                    onClick={() => setIsJobSaved(!isJobSaved)}
+                    className={`flex-1 h-[42px] rounded-[10px] border text-[13px] font-medium flex items-center justify-center gap-2 transition-colors cursor-pointer ${
+                      isJobSaved
+                        ? "border-[#A5B4FC] bg-indigo-50 text-[#4F46E5]"
+                        : "border-[#C7D2FE] bg-white text-[#4F46E5] hover:bg-indigo-50/50"
+                    }`}
                   >
-                    <svg className="w-5 h-5 stroke-[2]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    <svg
+                      className="w-4 h-4"
+                      fill={isJobSaved ? "currentColor" : "none"}
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
                     </svg>
+                    <span>{isJobSaved ? "Saved" : "Save job"}</span>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => navigate("/resume-setup")}
-                    className="mt-2 bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-[13px] font-medium px-4 py-2 rounded-lg transition-colors cursor-pointer shadow-sm shrink-0 whitespace-nowrap"
+                    className="flex-1 h-[42px] rounded-[10px] bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-[13px] font-medium flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.99] transition-all cursor-pointer"
                   >
-                    Enhance Resume
+                    <span>Apply now</span>
+                    <span>→</span>
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        );
+      })()}
 
-              {/* Drawer Scrollable Body */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                
-                {/* ATS Match Box */}
-                <div className="rounded-[16px] border border-slate-200/80 bg-[#F8FAFC]/70 p-4.5 flex items-center gap-4">
-                  <div className="relative w-[68px] h-[68px] shrink-0 flex items-center justify-center">
-                    <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                      <path
-                        className="text-slate-200"
-                        strokeWidth="3.2"
-                        stroke="currentColor"
-                        fill="none"
-                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                      />
-                      <path
-                        className="text-[#0D9488]"
-                        strokeDasharray={`${selectedJobModal.matchPercent || 96}, 100`}
-                        strokeWidth="3.2"
-                        strokeLinecap="round"
-                        stroke="currentColor"
-                        fill="none"
-                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                      />
-                    </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="text-[14px] font-bold text-[#0F172A] leading-none">
-                        {selectedJobModal.matchPercent || 96}%
-                      </span>
-                      <span className="text-[9px] text-[#64748B] font-medium leading-none mt-0.5">
-                        Match
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col">
-                    <h3 className="text-[14.5px] font-bold text-[#0F172A]">ATS Match</h3>
-                    <p className="text-[12px] text-[#64748B] mt-0.5 leading-snug">
-                      Strong match based on your profile, skills, experience and preferences.
-                    </p>
-                  </div>
+      {/* Full Enhanced Resume Modal View */}
+      {showEnhancedModal && selectedJobModal && enhancedResultsMap[getJobId(selectedJobModal)] && (
+        <div className="fixed inset-0 z-[60] overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="p-6 pb-4 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-[#EEF2FF] border border-[#C7D2FE] flex items-center justify-center text-[#4F46E5] font-bold text-sm">
+                  AI
                 </div>
-
-                {/* Job Description */}
                 <div>
-                  <h3 className="text-[14px] font-bold text-[#0F172A]">Job description</h3>
-                  <p className="text-[12.5px] text-[#475569] leading-relaxed mt-1.5">
-                    {selectedJobModal.description}
+                  <h3 className="text-lg font-bold text-[#0F172A]">AI Enhanced Resume</h3>
+                  <p className="text-xs text-[#64748B] mt-0.5">
+                    Tailored specifically for {selectedJobModal.title} at {selectedJobModal.company}
                   </p>
                 </div>
-
-                {/* Key Responsibilities */}
-                <div>
-                  <h3 className="text-[14px] font-bold text-[#0F172A]">Key responsibilities:</h3>
-                  <ul className="space-y-2 mt-2">
-                    {(selectedJobModal.responsibilities || []).map((resp, idx) => (
-                      <li key={idx} className="text-[12.5px] text-[#475569] flex items-start gap-2 leading-snug">
-                        <span className="text-[#94A3B8] shrink-0">•</span>
-                        <span>{resp}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                {/* Required Skills */}
-                <div>
-                  <h3 className="text-[14px] font-bold text-[#0F172A]">Required skills</h3>
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {(selectedJobModal.requiredSkills || []).map((skill) => (
-                      <span
-                        key={skill}
-                        className="bg-[#F1F5F9] text-[#334155] rounded-[8px] px-3 py-1.5 text-[12px] font-medium"
-                      >
-                        {skill}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Preferred Skills */}
-                <div>
-                  <h3 className="text-[14px] font-bold text-[#0F172A]">Preferred skills</h3>
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {(selectedJobModal.preferredSkills || []).map((skill) => (
-                      <span
-                        key={skill}
-                        className="bg-[#F1F5F9] text-[#334155] rounded-[8px] px-3 py-1.5 text-[12px] font-medium"
-                      >
-                        {skill}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Job Details */}
-                <div>
-                  <h3 className="text-[14px] font-bold text-[#0F172A] mb-2.5">Job details</h3>
-                  <div className="grid grid-cols-2 gap-y-3 gap-x-4">
-                    <div className="flex flex-col text-[12.5px]">
-                      <span className="text-[#64748B]">Experience</span>
-                      <span className="font-semibold text-[#0F172A] mt-0.5">{selectedJobModal.experience}</span>
-                    </div>
-                    <div className="flex flex-col text-[12.5px]">
-                      <span className="text-[#64748B]">Work mode</span>
-                      <span className="font-semibold text-[#0F172A] mt-0.5">{selectedJobModal.workMode}</span>
-                    </div>
-                    <div className="flex flex-col text-[12.5px]">
-                      <span className="text-[#64748B]">Employment type</span>
-                      <span className="font-semibold text-[#0F172A] mt-0.5">{selectedJobModal.type}</span>
-                    </div>
-                    <div className="flex flex-col text-[12.5px]">
-                      <span className="text-[#64748B]">Location</span>
-                      <span className="font-semibold text-[#0F172A] mt-0.5">{selectedJobModal.fullLocation}</span>
-                    </div>
-                  </div>
-                </div>
-
               </div>
 
-              {/* Drawer Footer */}
-              <div className="p-5 border-t border-slate-100 bg-white shrink-0 flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsJobSaved(!isJobSaved)}
-                  className={`flex-1 h-[42px] rounded-[10px] border text-[13px] font-medium flex items-center justify-center gap-2 transition-colors cursor-pointer ${
-                    isJobSaved
-                      ? "border-blue-300 bg-blue-50 text-[#2563EB]"
-                      : "border-[#BFDBFE] bg-white text-[#2563EB] hover:bg-blue-50/50"
-                  }`}
+                  onClick={() =>
+                    handleCopyEnhancedResume(
+                      enhancedResultsMap[getJobId(selectedJobModal)]?.EnhResume ||
+                        enhancedResultsMap[getJobId(selectedJobModal)]?.enhResume ||
+                        enhancedResultsMap[getJobId(selectedJobModal)]?.enhanced_resume
+                    )
+                  }
+                  className="px-3.5 py-1.5 bg-[#EEF2FF] hover:bg-[#E0E7FF] text-[#4F46E5] text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
                 >
-                  <svg
-                    className="w-4 h-4"
-                    fill={isJobSaved ? "currentColor" : "none"}
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                   </svg>
-                  <span>{isJobSaved ? "Saved" : "Save job"}</span>
+                  <span>{copiedResume ? "Copied!" : "Copy Resume"}</span>
                 </button>
 
                 <button
                   type="button"
-                  className="flex-1 h-[42px] rounded-[10px] bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-[13px] font-medium flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.99] transition-all cursor-pointer"
+                  onClick={() => setShowEnhancedModal(false)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                 >
-                  <span>Apply now</span>
-                  <span>→</span>
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                 </button>
               </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-4 flex-1">
+              {/* Bridged Gaps Summary */}
+              {enhancedResultsMap[getJobId(selectedJobModal)]?.bridgeable_gaps && (
+                <div className="bg-[#EEF2FF]/70 border border-[#C7D2FE] rounded-xl p-4.5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-[#312E81] uppercase tracking-wide">
+                      Bridged Skills & Qualifications
+                    </h4>
+                    {Array.isArray(enhancedResultsMap[getJobId(selectedJobModal)].bridgeable_gaps) && (
+                      <span className="text-[11px] font-semibold text-[#4F46E5] bg-white border border-[#C7D2FE] px-2 py-0.5 rounded-full">
+                        {enhancedResultsMap[getJobId(selectedJobModal)].bridgeable_gaps.length} Tailored Improvements
+                      </span>
+                    )}
+                  </div>
+                  <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
+                    {Array.isArray(enhancedResultsMap[getJobId(selectedJobModal)].bridgeable_gaps) ? (
+                      enhancedResultsMap[getJobId(selectedJobModal)].bridgeable_gaps.map((gap, i) => {
+                        if (typeof gap === "string") {
+                          return (
+                            <div key={i} className="flex items-center gap-2 bg-white text-slate-800 border border-[#E0E7FF] rounded-lg p-2.5 shadow-2xs">
+                              <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">✓</span>
+                              <span className="text-xs font-semibold text-slate-900">{gap}</span>
+                            </div>
+                          );
+                        }
+
+                        const skill = gap?.skill || gap?.name || gap?.title || "";
+                        const severity = gap?.severity || (gap?.source ? String(gap.source).toUpperCase() : "");
+                        const rationale = gap?.rationale || gap?.description || gap?.reason || "";
+
+                        return (
+                          <div
+                            key={i}
+                            className="bg-white text-slate-800 border border-[#E0E7FF] rounded-xl p-3 shadow-2xs space-y-1.5"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">✓</span>
+                                <span className="text-xs font-bold text-slate-900">
+                                  {skill || "Optimized Skill"}
+                                </span>
+                              </div>
+                              {severity && (
+                                <span
+                                  className={`text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                                    severity === "CRITICAL"
+                                      ? "bg-amber-50 text-amber-700 border-amber-200"
+                                      : severity === "PREFERRED"
+                                      ? "bg-blue-50 text-blue-700 border-blue-200"
+                                      : "bg-indigo-50 text-[#4F46E5] border-indigo-200"
+                                  }`}
+                                >
+                                  {severity}
+                                </span>
+                              )}
+                            </div>
+                            {rationale && (
+                              <p className="text-xs text-slate-600 leading-relaxed pl-6 font-normal">
+                                {rationale}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })
+                    ) : typeof enhancedResultsMap[getJobId(selectedJobModal)].bridgeable_gaps === "object" ? (
+                      Object.entries(enhancedResultsMap[getJobId(selectedJobModal)].bridgeable_gaps).map(([k, v], i) => (
+                        <div
+                          key={i}
+                          className="bg-white text-slate-800 border border-[#E0E7FF] rounded-xl p-3 shadow-2xs space-y-1"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">✓</span>
+                            <span className="text-xs font-bold text-slate-900">{k}</span>
+                          </div>
+                          <p className="text-xs text-slate-600 leading-relaxed pl-6 font-normal">
+                            {String(v)}
+                          </p>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-xs text-[#4F46E5]">{String(enhancedResultsMap[getJobId(selectedJobModal)].bridgeable_gaps)}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Enhanced Resume Content */}
+              <div>
+                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
+                  Enhanced Resume Text
+                </h4>
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 text-xs text-slate-800 font-mono whitespace-pre-wrap leading-relaxed select-text">
+                  {enhancedResultsMap[getJobId(selectedJobModal)]?.EnhResume ||
+                    enhancedResultsMap[getJobId(selectedJobModal)]?.enhResume ||
+                    enhancedResultsMap[getJobId(selectedJobModal)]?.enhanced_resume ||
+                    "No enhanced resume text content returned."}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowEnhancedModal(false)}
+                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
