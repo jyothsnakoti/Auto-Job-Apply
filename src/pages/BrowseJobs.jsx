@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
 import { getMoreJobsForResume, getPrimaryResumeId, getOnboardingState } from "../services/api";
@@ -158,6 +159,7 @@ const VerifiedTick = () => (
 );
 
 const BrowseJobs = () => {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [selectedJobModal, setSelectedJobModal] = useState(null);
