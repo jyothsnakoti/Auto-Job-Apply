@@ -4,6 +4,7 @@ import { AlertCircle, Loader2 } from 'lucide-react';
 import AuthLayout from './AuthLayout';
 import { loginWithLinkedIn, getLinkedInConfig } from '../../services/authService';
 import { getBillingStatus } from '../../services/billingService';
+import { checkUserHasResume } from '../../services/resumeService';
 
 const LinkedInCallback = () => {
   const navigate = useNavigate();
@@ -87,16 +88,34 @@ const LinkedInCallback = () => {
           return;
         }
 
+        // Check if user already has an active billing plan
+        let hasActivePlan = false;
         try {
           const billing = await getBillingStatus(result.accessToken);
-          if (billing && billing.hasPlan === true) {
-            navigate('/dashboard', { replace: true });
-          } else {
-            navigate('/plan', { replace: true });
-          }
+          hasActivePlan = Boolean(billing && billing.hasPlan === true);
         } catch {
-          navigate('/plan', { replace: true });
+          hasActivePlan = false;
         }
+
+        if (!hasActivePlan) {
+          navigate('/plan', { replace: true });
+          return;
+        }
+
+        // Check if user has a resume
+        let hasResume = false;
+        try {
+          hasResume = await checkUserHasResume(result.accessToken);
+        } catch (resumeCheckErr) {
+          console.warn('Could not check user resume after LinkedIn login:', resumeCheckErr);
+        }
+
+        if (!hasResume) {
+          navigate('/resume-setup', { replace: true });
+          return;
+        }
+
+        navigate('/dashboard', { replace: true });
       } catch (err) {
         console.error('LinkedIn exchange error:', err);
         setStatus('error');

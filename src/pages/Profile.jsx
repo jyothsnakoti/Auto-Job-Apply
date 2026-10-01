@@ -7,6 +7,12 @@ import {
   updatePersonalProfile,
   updateLocationProfile,
   updateWorkPreferencesProfile,
+  getResumes,
+  uploadResume,
+  downloadResume,
+  deleteResume,
+  setPrimaryResume,
+  validateResumeFile,
 } from "../services/api";
 
 const toCapitalizedYesNo = (val, defaultVal = "No") => {
@@ -90,6 +96,176 @@ const Profile = () => {
   const [startImmediately, setStartImmediately] = useState("Yes");
   const [reliableTransportation, setReliableTransportation] = useState("No");
   const [workplaceAccommodations, setWorkplaceAccommodations] = useState("Prefer Not to say");
+
+  // Resume Management State
+  const [resumes, setResumes] = useState([]);
+  const [isLoadingResumes, setIsLoadingResumes] = useState(true);
+  const [resumeLoadError, setResumeLoadError] = useState(null);
+  const [isUploadingResume, setIsUploadingResume] = useState(false);
+  const [resumeUploadError, setResumeUploadError] = useState(null);
+  const [downloadingResumeId, setDownloadingResumeId] = useState(null);
+  const [downloadError, setDownloadError] = useState(null);
+  const [deletingResumeId, setDeletingResumeId] = useState(null);
+  const [settingPrimaryId, setSettingPrimaryId] = useState(null);
+  const resumeFileInputRef = React.useRef(null);
+
+  const formatResumeDate = (dateVal) => {
+    if (!dateVal) return "Uploaded recently";
+    try {
+      const date = new Date(dateVal);
+      if (isNaN(date.getTime())) return String(dateVal);
+      return date.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
+    } catch {
+      return String(dateVal);
+    }
+  };
+
+  const formatResumeSize = (size) => {
+    if (!size || isNaN(size)) return null;
+    const bytes = Number(size);
+    if (bytes < 1024 * 1024) {
+      return `${(bytes / 1024).toFixed(1)} KB`;
+    }
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const fetchUserResumes = async () => {
+    try {
+      setIsLoadingResumes(true);
+      setResumeLoadError(null);
+      const data = await getResumes();
+      let list = [];
+      if (Array.isArray(data)) {
+        list = data;
+      } else if (data && Array.isArray(data.resumes)) {
+        list = data.resumes;
+      } else if (data && Array.isArray(data.data)) {
+        list = data.data;
+      } else if (data && (data.id || data.fileName || data.name || data.title)) {
+        list = [data];
+      }
+      setResumes(list);
+    } catch (err) {
+      console.error("Failed to load resumes:", err);
+      setResumeLoadError("Unable to load resumes.");
+    } finally {
+      setIsLoadingResumes(false);
+    }
+  };
+
+  const handleDownloadResume = async (resume) => {
+    const targetId = resume?.id ?? resume?.resumeId ?? resume?._id ?? resume?.fileId ?? resume?.uuid;
+    if (!targetId && targetId !== 0) {
+      setDownloadError("Invalid resume identifier. Please refresh the page and try again.");
+      return;
+    }
+    if (downloadingResumeId === targetId) return;
+    try {
+      setDownloadingResumeId(targetId);
+      setDownloadError(null);
+      const filename =
+        resume.fileName ||
+        resume.filename ||
+        resume.name ||
+        resume.title ||
+        "resume.pdf";
+      await downloadResume(targetId, filename);
+    } catch (err) {
+      console.error("Failed to download resume:", err);
+      setDownloadError(err.message || "Failed to download resume.");
+    } finally {
+      setDownloadingResumeId(null);
+    }
+  };
+
+  const handleDeleteResume = async (resume) => {
+    const targetId = resume?.id ?? resume?.resumeId ?? resume?._id ?? resume?.fileId ?? resume?.uuid;
+    if (!targetId && targetId !== 0) {
+      setDownloadError("Invalid resume identifier. Please refresh the page and try again.");
+      return;
+    }
+    if (deletingResumeId === targetId) return;
+    try {
+      setDeletingResumeId(targetId);
+      setDownloadError(null);
+      await deleteResume(targetId);
+      await fetchUserResumes();
+      setToast({
+        show: true,
+        message: "Resume deleted successfully!",
+        type: "success",
+      });
+    } catch (err) {
+      console.error("Failed to delete resume:", err);
+      setDownloadError(err.message || "Failed to delete resume. Please try again.");
+    } finally {
+      setDeletingResumeId(null);
+    }
+  };
+
+  const handleSetPrimary = async (resume) => {
+    const targetId = resume?.id ?? resume?.resumeId ?? resume?._id ?? resume?.fileId ?? resume?.uuid;
+    if (!targetId && targetId !== 0) {
+      setDownloadError("Invalid resume identifier. Please refresh the page and try again.");
+      return;
+    }
+    if (settingPrimaryId === targetId) return;
+    try {
+      setSettingPrimaryId(targetId);
+      setDownloadError(null);
+      await setPrimaryResume(targetId);
+      await fetchUserResumes();
+      setToast({
+        show: true,
+        message: "Default resume updated successfully!",
+        type: "success",
+      });
+    } catch (err) {
+      console.error("Failed to set default resume:", err);
+      setDownloadError(err.message || "Unable to set this resume as default.");
+    } finally {
+      setSettingPrimaryId(null);
+    }
+  };
+
+  const handleResumeFileSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Reset file input so identical file can be re-selected if needed
+    e.target.value = "";
+
+    const validation = validateResumeFile(file);
+    if (!validation.valid) {
+      setResumeUploadError(validation.error);
+      return;
+    }
+
+    try {
+      setIsUploadingResume(true);
+      setResumeUploadError(null);
+      await uploadResume(file);
+      await fetchUserResumes();
+      setToast({
+        show: true,
+        message: "Resume uploaded successfully!",
+        type: "success",
+      });
+    } catch (err) {
+      console.error("Resume upload error from profile:", err);
+      setResumeUploadError(err.message || "Unable to upload resume. Please try again.");
+    } finally {
+      setIsUploadingResume(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUserResumes();
+  }, []);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -343,7 +519,7 @@ const Profile = () => {
         <Header />
 
         {/* Profile Main Content */}
-        <main className="flex-1 px-8 py-7 flex flex-col gap-6 w-full bg-[#F8FAFC]">
+        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-7 flex flex-col gap-6 w-full bg-[#F8FAFC]">
           {/* Page Heading */}
           <div className="flex flex-col gap-1">
             <h1 className="text-[20px] md:text-[22px] font-bold text-black tracking-tight">
@@ -508,7 +684,7 @@ const Profile = () => {
             </div>
 
             {/* 2. Resume Management (5 Cols) */}
-            <div className="lg:col-span-5 bg-white rounded-[20px] border border-[#E2E8F0] p-6 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col justify-between">
+            <div className="lg:col-span-5 bg-white rounded-[20px] border border-[#E2E8F0] p-4 sm:p-6 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col justify-between">
               <div>
                 {/* Header */}
                 <div className="flex items-start justify-between gap-3">
@@ -522,47 +698,278 @@ const Profile = () => {
                   </div>
                 </div>
 
-                {/* Uploaded Resume Card */}
-                <div className="mt-5 p-3.5 rounded-[14px] border border-[#E2E8F0] bg-[#F8FAFC]/70 flex items-center justify-between gap-3 hover:bg-slate-50 transition-colors">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-[42px] h-[42px] rounded-[10px] bg-[#EEF2FF] text-[#4F46E5] flex items-center justify-center shrink-0">
+                {/* Upload or Download Errors */}
+                {resumeUploadError && (
+                  <div className="mt-3.5 p-3 rounded-[12px] bg-red-50 border border-red-200/80 text-red-700 text-xs font-medium flex items-center justify-between gap-2 animate-in fade-in">
+                    <span>{resumeUploadError}</span>
+                    <button
+                      type="button"
+                      onClick={() => setResumeUploadError(null)}
+                      className="text-red-500 hover:text-red-700 font-bold ml-2 cursor-pointer"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+
+                {downloadError && (
+                  <div className="mt-3.5 p-3 rounded-[12px] bg-red-50 border border-red-200/80 text-red-700 text-xs font-medium flex items-center justify-between gap-2 animate-in fade-in">
+                    <span>{downloadError}</span>
+                    <button
+                      type="button"
+                      onClick={() => setDownloadError(null)}
+                      className="text-red-500 hover:text-red-700 font-bold ml-2 cursor-pointer"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+
+                {/* Content: Loading State */}
+                {isLoadingResumes ? (
+                  <div className="mt-5 p-6 rounded-[14px] border border-[#E2E8F0] bg-[#F8FAFC]/70 flex flex-col items-center justify-center gap-2 text-center">
+                    <svg className="w-5 h-5 text-[#4F46E5] animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    <span className="text-[13px] font-medium text-[#64748B]">Loading resumes...</span>
+                  </div>
+                ) : resumeLoadError ? (
+                  /* Error State */
+                  <div className="mt-5 p-5 rounded-[14px] border border-red-200 bg-red-50/60 flex flex-col items-center justify-center gap-2 text-center">
+                    <span className="text-[13px] font-medium text-red-700">Unable to load resumes.</span>
+                    <button
+                      type="button"
+                      onClick={fetchUserResumes}
+                      className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors cursor-pointer shadow-xs"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                ) : resumes.length === 0 ? (
+                  /* Empty State */
+                  <div className="mt-5 p-6 rounded-[14px] border border-dashed border-[#CBD5E1] bg-[#F8FAFC]/50 flex flex-col items-center justify-center gap-1 text-center">
+                    <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-1">
                       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                         <polyline points="14 2 14 8 20 8" />
-                        <line x1="16" y1="13" x2="8" y2="13" />
-                        <line x1="16" y1="17" x2="8" y2="17" />
                       </svg>
                     </div>
-
-                    <div className="flex flex-col min-w-0">
-                      <span className="text-[13.5px] font-bold text-[#0F172A] truncate">
-                        {`${(fullName || 'User').replace(/\s+/g, '_')}_Resume.pdf`}
-                      </span>
-                      <span className="text-[11.5px] text-[#94A3B8] mt-0.5">
-                        Uploaded on Oct 20, 2024 • 1.2 MB
-                      </span>
-                    </div>
+                    <span className="text-[13.5px] font-semibold text-[#0F172A]">No resumes uploaded yet</span>
+                    <span className="text-[12px] text-[#64748B]">Upload your resume to get matched with opportunities.</span>
                   </div>
+                ) : (
+                  /* List of Resumes */
+                  <div className="mt-4 flex flex-col gap-3 max-h-[340px] overflow-y-auto pr-0.5">
+                    {resumes.map((resume, idx) => {
+                      const realResumeId = resume.id ?? resume.resumeId ?? resume.fileId ?? resume._id ?? resume.uuid;
+                      const resumeId = realResumeId;
+                      const itemKey = realResumeId ?? `resume-item-${idx}`;
+                      const resumeName =
+                        resume.fileName ||
+                        resume.filename ||
+                        resume.name ||
+                        resume.title ||
+                        `${(fullName || "User").replace(/\s+/g, "_")}_Resume.pdf`;
+                      const uploadDate = formatResumeDate(
+                        resume.uploadedAt ||
+                          resume.createdAt ||
+                          resume.uploadDate ||
+                          resume.created_at
+                      );
+                      const sizeStr = formatResumeSize(resume.fileSize || resume.size);
+                      const isDownloading = realResumeId !== undefined && downloadingResumeId === realResumeId;
+                      const isDeleting = realResumeId !== undefined && deletingResumeId === realResumeId;
+                      const isSettingPrimary = realResumeId !== undefined && settingPrimaryId === realResumeId;
 
-                  <button
-                    type="button"
-                    className="text-slate-400 hover:text-slate-700 p-1.5 rounded-md hover:bg-slate-200/50 transition-colors cursor-pointer shrink-0"
-                  >
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                      <circle cx="12" cy="5" r="1.5" />
-                      <circle cx="12" cy="12" r="1.5" />
-                      <circle cx="12" cy="19" r="1.5" />
-                    </svg>
-                  </button>
-                </div>
+                      const hasExplicitPrimary = resumes.some(
+                        (r) =>
+                          r.isPrimary === true ||
+                          r.primary === true ||
+                          r.isDefault === true ||
+                          r.default === true
+                      );
+                      const isPrimary = Boolean(
+                        resume.isPrimary === true ||
+                          resume.primary === true ||
+                          resume.isDefault === true ||
+                          resume.default === true ||
+                          (!hasExplicitPrimary && idx === 0)
+                      );
 
-                {/* Upload Resume Button */}
+                      return (
+                        <div
+                          key={itemKey}
+                          className={`p-3 sm:p-3.5 rounded-[14px] border flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3 transition-colors ${
+                            isPrimary
+                              ? "border-indigo-200/80 bg-indigo-50/30 hover:bg-indigo-50/50"
+                              : "border-[#E2E8F0] bg-[#F8FAFC]/70 hover:bg-slate-50"
+                          }`}
+                        >
+                          {/* File Icon + Info + Default Badge */}
+                          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+                            <div className={`w-[38px] h-[38px] rounded-[10px] flex items-center justify-center shrink-0 ${
+                              isPrimary ? "bg-[#EEF2FF] text-[#4F46E5]" : "bg-slate-100 text-slate-500"
+                            }`}>
+                              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                <polyline points="14 2 14 8 20 8" />
+                                <line x1="16" y1="13" x2="8" y2="13" />
+                                <line x1="16" y1="17" x2="8" y2="17" />
+                              </svg>
+                            </div>
+
+                            <div className="flex flex-col min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="text-[13px] font-bold text-[#0F172A] truncate" title={resumeName}>
+                                  {resumeName}
+                                </span>
+                                {isPrimary && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-indigo-50 text-[#4F46E5] border border-indigo-200/80 shadow-2xs shrink-0">
+                                    <svg className="w-2.5 h-2.5 text-[#4F46E5]" fill="currentColor" viewBox="0 0 20 20">
+                                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                    </svg>
+                                    Default
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[11px] text-[#94A3B8] mt-0.5 truncate">
+                                Uploaded: {uploadDate} {sizeStr ? `• ${sizeStr}` : ""}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Action Buttons Toolbar */}
+                          <div className="flex items-center gap-1.5 shrink-0 justify-end self-end md:self-center">
+                            {/* Make Default Button (if not already default) */}
+                            {!isPrimary && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleSetPrimary({
+                                    ...resume,
+                                    id: realResumeId,
+                                    fileName: resumeName,
+                                  })
+                                }
+                                disabled={isDownloading || isDeleting || isSettingPrimary}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-[#E2E8F0] hover:bg-indigo-50 hover:border-indigo-200 hover:text-[#4F46E5] text-slate-600 text-[11.5px] sm:text-[12px] font-medium transition-all cursor-pointer shadow-2xs disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
+                                title="Set as default resume"
+                              >
+                                {isSettingPrimary ? (
+                                  <>
+                                    <svg className="w-3.5 h-3.5 text-[#4F46E5] animate-spin" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                    </svg>
+                                    <span>Setting...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <svg className="w-3.5 h-3.5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                                    </svg>
+                                    <span>Make Default</span>
+                                  </>
+                                )}
+                              </button>
+                            )}
+
+                            {/* Download Button */}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleDownloadResume({
+                                  ...resume,
+                                  id: realResumeId,
+                                  fileName: resumeName,
+                                })
+                              }
+                              disabled={isDownloading || isDeleting || isSettingPrimary}
+                              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-white border border-[#E2E8F0] hover:bg-slate-50 hover:border-slate-300 text-[#4F46E5] text-[11.5px] sm:text-[12px] font-semibold transition-all cursor-pointer shadow-2xs disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
+                              title="Download resume file"
+                            >
+                              {isDownloading ? (
+                                <>
+                                  <svg className="w-3.5 h-3.5 text-[#4F46E5] animate-spin" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                  </svg>
+                                  <span className="hidden xs:inline">Downloading...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                    <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                  </svg>
+                                  <span>Download</span>
+                                </>
+                              )}
+                            </button>
+
+                            {/* Dustbin / Trash Delete Button */}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleDeleteResume({
+                                  ...resume,
+                                  id: realResumeId,
+                                  fileName: resumeName,
+                                })
+                              }
+                              disabled={isDownloading || isDeleting || isSettingPrimary}
+                              className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white border border-[#E2E8F0] hover:bg-red-50 hover:border-red-200 text-slate-400 hover:text-red-600 transition-all cursor-pointer shadow-2xs disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
+                              title="Delete resume"
+                              aria-label={`Delete ${resumeName}`}
+                            >
+                              {isDeleting ? (
+                                <svg className="w-3.5 h-3.5 text-red-500 animate-spin" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                </svg>
+                              ) : (
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Hidden File Input */}
+                <input
+                  ref={resumeFileInputRef}
+                  type="file"
+                  accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  onChange={handleResumeFileSelect}
+                  style={{ display: "none" }}
+                />
+
+                {/* Upload New Resume Button */}
                 <button
                   type="button"
-                  className="w-full mt-4 h-[40px] px-4 rounded-[10px] bg-[#4F46E5] hover:bg-[#4338CA] text-white text-[13px] font-semibold flex items-center justify-center gap-1.5 shadow-2xs active:scale-[0.99] transition-all cursor-pointer"
+                  onClick={() => resumeFileInputRef.current?.click()}
+                  disabled={isUploadingResume}
+                  className="w-full mt-4 h-[40px] px-4 rounded-[10px] bg-[#4F46E5] hover:bg-[#4338CA] text-white text-[13px] font-semibold flex items-center justify-center gap-1.5 shadow-2xs active:scale-[0.99] transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <span className="text-base leading-none font-normal">+</span>
-                  <span>Upload Resume</span>
+                  {isUploadingResume ? (
+                    <>
+                      <svg className="w-4 h-4 text-white animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      <span>Uploading Resume...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-base leading-none font-normal">+</span>
+                      <span>Upload New Resume</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>

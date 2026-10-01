@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import logoSrc from '../assets/Background.svg';
-import { logoutUser, getStoredUser, getOnboardingState, setOnboardingState } from '../services/api';
+import { logoutUser, getStoredUser, getOnboardingState, setOnboardingState, uploadResume } from '../services/api';
 
 const ResumeSetup = () => {
     const navigate = useNavigate();
@@ -14,6 +14,8 @@ const ResumeSetup = () => {
     const [userEmail, setUserEmail] = useState('');
     const [selectedFile, setSelectedFile] = useState(null);
     const [fileError, setFileError] = useState('');
+    const [isUploading, setIsUploading] = useState(false);
+    const [uploadSuccess, setUploadSuccess] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
     const [isHoveredContinue, setIsHoveredContinue] = useState(false);
 
@@ -23,7 +25,7 @@ const ResumeSetup = () => {
 
         const state = getOnboardingState();
         if (state.resumeName && !selectedFile) {
-            setSelectedFile({ name: state.resumeName, size: state.resumeSize || 1024 * 1024 * 1.2 });
+            setSelectedFile({ name: state.resumeName, size: state.resumeSize || 1024 * 1024 * 1.2, isSaved: true });
         }
     }, []);
 
@@ -103,13 +105,55 @@ const ResumeSetup = () => {
         }
     };
 
-    const handleContinue = () => {
-        if (!selectedFile) return;
-        setOnboardingState({
-            resumeName: selectedFile?.name,
-            resumeSize: selectedFile?.size,
-        });
-        navigate('/location-setup', { state: { resumeName: selectedFile?.name } });
+    const handleContinue = async () => {
+        if (!selectedFile || isUploading) return;
+
+        // If selectedFile is a newly picked File, upload to backend POST /api/resumes
+        if (selectedFile instanceof File) {
+            setIsUploading(true);
+            setFileError('');
+
+            try {
+                const response = await uploadResume(selectedFile);
+                setUploadSuccess(true);
+
+                // Save resume metadata/identifier to onboarding state
+                setOnboardingState({
+                    resumeName: selectedFile.name,
+                    resumeSize: selectedFile.size,
+                    resumeId: response?.id || response?.resumeId || response?.data?.id || null,
+                    resumeUploaded: true,
+                });
+
+                // Navigate to next onboarding step
+                navigate('/location-setup', {
+                    state: {
+                        resumeName: selectedFile.name,
+                        resumeId: response?.id || response?.resumeId,
+                    },
+                });
+            } catch (err) {
+                console.error('Resume upload failed:', err);
+                setIsUploading(false);
+                if (err.status === 401) {
+                    setFileError('Your session has expired. Please log in again.');
+                } else if (err.status === 413) {
+                    setFileError('Resume file is too large. Maximum allowed size is 10MB.');
+                } else if (err.status === 415) {
+                    setFileError('Please upload a supported resume format (PDF, DOC, or DOCX).');
+                } else {
+                    setFileError(err.message || 'Unable to upload your resume. Please try again.');
+                }
+            }
+        } else {
+            // Already uploaded/restored in session
+            setOnboardingState({
+                resumeName: selectedFile?.name,
+                resumeSize: selectedFile?.size,
+                resumeUploaded: true,
+            });
+            navigate('/location-setup', { state: { resumeName: selectedFile?.name } });
+        }
     };
 
     const formatFileSize = (bytes) => {
@@ -704,19 +748,47 @@ const ResumeSetup = () => {
 
                             {fileError && <p style={styles.errorBanner}>{fileError}</p>}
 
-                            {/* CONTINUE BUTTON */}
+                            {/* CONTINUE / UPLOAD BUTTON */}
                             <button
                                 type="button"
-                                disabled={!selectedFile}
+                                disabled={!selectedFile || isUploading}
                                 onClick={handleContinue}
-                                style={styles.continueBtn(!!selectedFile, isHoveredContinue)}
+                                style={styles.continueBtn(!!selectedFile && !isUploading, isHoveredContinue)}
                                 onMouseEnter={() => setIsHoveredContinue(true)}
                                 onMouseLeave={() => setIsHoveredContinue(false)}
                             >
-                                <span>Continue</span>
-                                <svg viewBox="0 0 24 24" style={styles.arrowSvg}>
-                                    <path d="M5 12h14M12 5l7 7-7 7" />
-                                </svg>
+                                {isUploading ? (
+                                    <>
+                                        <svg
+                                            className="animate-spin"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            style={{ width: '18px', height: '18px' }}
+                                        >
+                                            <circle
+                                                cx="12"
+                                                cy="12"
+                                                r="10"
+                                                stroke="currentColor"
+                                                strokeWidth="4"
+                                                style={{ opacity: 0.25 }}
+                                            />
+                                            <path
+                                                fill="currentColor"
+                                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                                style={{ opacity: 0.75 }}
+                                            />
+                                        </svg>
+                                        <span>Uploading...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span>Upload & Continue</span>
+                                        <svg viewBox="0 0 24 24" style={styles.arrowSvg}>
+                                            <path d="M5 12h14M12 5l7 7-7 7" />
+                                        </svg>
+                                    </>
+                                )}
                             </button>
                         </div>
                     </div>

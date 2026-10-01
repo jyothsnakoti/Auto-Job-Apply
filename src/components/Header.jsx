@@ -116,45 +116,60 @@ const Header = () => {
   };
 
   return (
-    <header className="sticky top-0 z-20 flex h-[70px] w-full shrink-0 items-center justify-between bg-white border-b border-[#F1F5F9] px-8 shadow-[0_1px_3px_0_rgba(0,0,0,0.02)]">
-      {/* Search Bar */}
-      <div className="flex h-[40px] w-full max-w-[540px] items-center gap-2.5 rounded-full border border-[#E2E8F0] bg-white px-4 focus-within:border-slate-400 transition-colors">
-        {/* Search Icon */}
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          className="shrink-0 text-[#94A3B8]"
+    <header className="sticky top-0 z-20 flex h-[70px] w-full shrink-0 items-center justify-between bg-white border-b border-[#F1F5F9] px-4 sm:px-6 lg:px-8 shadow-[0_1px_3px_0_rgba(0,0,0,0.02)]">
+      {/* Left side: Hamburger button (mobile) + Search Bar */}
+      <div className="flex items-center gap-2 sm:gap-3 flex-1 max-w-[540px]">
+        {/* Mobile Hamburger Toggle Button */}
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new CustomEvent("toggleMobileSidebar"))}
+          className="lg:hidden flex items-center justify-center w-9 h-9 -ml-1 rounded-lg text-slate-600 hover:bg-slate-100 hover:text-[#4F46E5] focus:outline-none transition-colors cursor-pointer shrink-0"
+          aria-label="Open navigation menu"
         >
-          <circle cx="11" cy="11" r="7" />
-          <path d="m20 20-3.5-3.5" />
-        </svg>
+          <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
 
-        <input
-          type="text"
-          placeholder="Search jobs, companies, skills, or keywords..."
-          className="w-full min-w-0 border-0 bg-transparent text-[13px] text-slate-700 outline-none placeholder:text-[#94A3B8]"
-        />
+        {/* Search Bar */}
+        <div className="flex h-[40px] w-full items-center gap-2.5 rounded-full border border-[#E2E8F0] bg-white px-3 sm:px-4 focus-within:border-slate-400 transition-colors min-w-0">
+          {/* Search Icon */}
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            className="shrink-0 text-[#94A3B8]"
+          >
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.5-3.5" />
+          </svg>
+
+          <input
+            type="text"
+            placeholder="Search jobs, companies, skills..."
+            className="w-full min-w-0 border-0 bg-transparent text-[12.5px] sm:text-[13px] text-slate-700 outline-none placeholder:text-[#94A3B8]"
+          />
+        </div>
       </div>
 
       {/* User Profile & Dropdown */}
-      <div ref={dropdownRef} className="relative ml-4 shrink-0">
+      <div ref={dropdownRef} className="relative ml-3 sm:ml-4 shrink-0">
         <button
           type="button"
           onClick={() => setIsDropdownOpen((prev) => !prev)}
-          className="flex items-center gap-[10px] cursor-pointer hover:opacity-90 transition-opacity bg-transparent border-none p-1 rounded-lg focus:outline-none"
+          className="flex items-center gap-2 sm:gap-[10px] cursor-pointer hover:opacity-90 transition-opacity bg-transparent border-none p-1 rounded-lg focus:outline-none"
         >
           {/* Avatar */}
-          <div className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-[#EEF2FF] text-[#4F46E5] font-semibold text-[13px]">
+          <div className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-[#EEF2FF] text-[#4F46E5] font-semibold text-[13px] shrink-0">
             <span>{userInitial}</span>
           </div>
 
           {/* User Name */}
           <span
-            className="text-[13px] font-medium text-[#1E293B] max-w-[200px] truncate"
+            className="hidden sm:inline-block text-[13px] font-medium text-[#1E293B] max-w-[160px] md:max-w-[200px] truncate"
             title={userName || userEmail || "User"}
           >
             {userName || userEmail || "User"}

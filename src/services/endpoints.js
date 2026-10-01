@@ -21,7 +21,13 @@ export const BILLING_ENDPOINTS = {
   PLANS: `${API_BASE_URL}/api/billing/plans`,
   STRIPE_KEY: `${API_BASE_URL}/api/billing/stripe-key`,
   CREATE_PAYMENT_INTENT: `${API_BASE_URL}/api/billing/create-payment-intent`,
+  TOGGLE_AUTOPAY: `${API_BASE_URL}/api/billing/toggle-autopay`,
+  CREATE_CARD_UPDATE_INTENT: `${API_BASE_URL}/api/billing/create-card-update-intent`,
+  CONFIRM_CARD_UPDATE: `${API_BASE_URL}/api/billing/confirm-card-update`,
   CONFIRM_PAYMENT: `${API_BASE_URL}/api/billing/confirm-payment`,
+  PAYMENT_METHOD: `${API_BASE_URL}/api/billing/payment-method`,
+  CARDS: `${API_BASE_URL}/api/billing/cards`,
+  DEFAULT_CARD: `${API_BASE_URL}/api/billing/cards/default`,
   STATUS: `${API_BASE_URL}/api/billing/status`,
   HISTORY: `${API_BASE_URL}/api/billing/history`,
   RECOVER: `${API_BASE_URL}/api/billing/recover`,
@@ -41,12 +47,21 @@ export const PROFILE_ENDPOINTS = {
   UPDATE_WORK_PREFERENCES: `${API_BASE_URL}/api/profile/work-preferences`,
 };
 
+export const RESUME_ENDPOINTS = {
+  UPLOAD: `${API_BASE_URL}/api/resumes`,
+  GET: `${API_BASE_URL}/api/resumes`,
+  DOWNLOAD: (id) => `${API_BASE_URL}/api/resumes/${id}/download`,
+  DELETE: (id) => `${API_BASE_URL}/api/resumes/${id}`,
+  SET_PRIMARY: (id) => `${API_BASE_URL}/api/resumes/${id}/set-primary`,
+};
+
 export const ENDPOINTS = {
   BASE_URL: API_BASE_URL,
   AUTH: AUTH_ENDPOINTS,
   BILLING: BILLING_ENDPOINTS,
   ONBOARDING: ONBOARDING_ENDPOINTS,
   PROFILE: PROFILE_ENDPOINTS,
+  RESUME: RESUME_ENDPOINTS,
 };
 
 export default ENDPOINTS;

@@ -1,8 +1,28 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { loadStripe } from "@stripe/stripe-js";
+import {
+  Elements,
+  PaymentElement,
+  useStripe,
+  useElements,
+} from "@stripe/react-stripe-js";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
-import { getBillingStatus, getBillingPlans, getBillingHistory } from "../services/billingService";
+import {
+  getBillingStatus,
+  getBillingPlans,
+  getBillingHistory,
+  getStripePublishableKey,
+  createCardUpdateIntent,
+  confirmCardUpdate,
+  getPaymentCards,
+  getPaymentMethod,
+  setDefaultCard,
+  deleteSavedCard,
+  toggleAutopay,
+} from "../services/billingService";
+import { getStoredUser } from "../services/authService";
 
 const CheckIcon = () => (
   <svg
@@ -16,11 +36,212 @@ const CheckIcon = () => (
   </svg>
 );
 
+/**
+ * Inner Card Update Form within Stripe Elements context
+ */
+const CardUpdateForm = ({ clientSecret, onSuccess, onCancel }) => {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const handleSubmit = async (e) => {
+    if (e) e.preventDefault();
+    if (isSubmitting) return;
+
+    if (!stripe || !elements || !clientSecret) {
+      setErrorMessage("Payment gateway is initializing. Please wait a moment.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage("");
+
+    try {
+      // Step 1: Client-side validation via Elements
+      const { error: submitError } = await elements.submit();
+      if (submitError) {
+        setErrorMessage(submitError.message || "Please check your card details.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Retrieve authenticated user's details for required billing name and email
+      const user = getStoredUser();
+      const billingName =
+        user?.fullName ||
+        user?.name ||
+        (user?.email ? user.email.split("@")[0] : "") ||
+        "Cardholder";
+      const billingEmail = user?.email ? String(user.email).trim() : "";
+
+      const billingDetails = {
+        name: billingName,
+      };
+      if (billingEmail) {
+        billingDetails.email = billingEmail;
+      }
+
+      // Step 2: Confirm SetupIntent with Stripe
+      const { error: setupError, setupIntent } = await stripe.confirmSetup({
+        elements,
+        clientSecret,
+        confirmParams: {
+          payment_method_data: {
+            billing_details: billingDetails,
+          },
+          return_url: window.location.href,
+        },
+        redirect: "if_required",
+      });
+
+      if (setupError) {
+        console.error("[Stripe SetupIntent] confirmation failed:", {
+          type: setupError.type,
+          code: setupError.code,
+          decline_code: setupError.decline_code,
+          message: setupError.message,
+        });
+        setErrorMessage(setupError.message || "Card setup failed with Stripe.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (!setupIntent || setupIntent.status !== "succeeded") {
+        setIsSubmitting(false);
+        if (setupIntent?.status === "requires_action") {
+          setErrorMessage("Additional card verification is required. Please follow any on-screen prompts or try another card.");
+          return;
+        }
+        if (setupIntent?.status === "requires_payment_method") {
+          setErrorMessage("The payment method was not accepted. Please check the card details and try again.");
+          return;
+        }
+        setErrorMessage(`Card setup incomplete (Status: ${setupIntent?.status || "unknown"}). Please try again.`);
+        return;
+      }
+
+      // Step 3: Confirm card update with backend
+      try {
+        await confirmCardUpdate(setupIntent.id, false);
+      } catch (backendErr) {
+        console.error("Backend confirm-card-update failed:", backendErr);
+        setErrorMessage("Unable to update payment method. Please try again.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Step 4: Successful update!
+      onSuccess();
+    } catch (err) {
+      console.error("Card update execution error:", err);
+      setErrorMessage(err?.message || "An unexpected error occurred while updating card details.");
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      {errorMessage && (
+        <div className="p-3 rounded-[10px] bg-[#FEF2F2] border border-[#FECACA] text-[#DC2626] text-[12.5px] font-medium flex items-start gap-2">
+          <svg className="w-4 h-4 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <span className="flex-1 leading-snug">{errorMessage}</span>
+        </div>
+      )}
+
+      <div className="rounded-[12px] border border-slate-200 bg-white p-3.5">
+        <PaymentElement
+          options={{
+            layout: "tabs",
+            paymentMethodOrder: ["card"],
+            wallets: {
+              applePay: "never",
+              googlePay: "never",
+            },
+            fields: {
+              billingDetails: {
+                name: "never",
+                email: "never",
+              },
+            },
+            terms: {
+              card: "never",
+            },
+          }}
+        />
+      </div>
+
+      <div className="flex items-center justify-end gap-3 pt-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={isSubmitting}
+          className="px-4 py-2.5 rounded-[10px] border border-slate-200 hover:bg-slate-100 text-slate-700 font-medium text-[13px] transition-colors cursor-pointer disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          style={{ background: "linear-gradient(90deg, #2563EB 0%, #4F46E5 100%)" }}
+          className="px-6 py-2.5 rounded-[10px] text-white font-medium text-[13.5px] shadow-sm hover:opacity-95 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
+        >
+          {isSubmitting ? (
+            <>
+              <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              <span>Saving card...</span>
+            </>
+          ) : (
+            <span>Save Payment Method</span>
+          )}
+        </button>
+      </div>
+    </form>
+  );
+};
+
 const UpgradePlan = () => {
   const navigate = useNavigate();
   const [autoPay, setAutoPay] = useState(false);
+  const [isTogglingAutoPay, setIsTogglingAutoPay] = useState(false);
+  const [toast, setToast] = useState({ show: false, message: "", type: "success" });
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [isCardDetailsModalOpen, setIsCardDetailsModalOpen] = useState(false);
   const [backendPlans, setBackendPlans] = useState([]);
+
+  // Auto-dismiss toast after 3.5 seconds
+  useEffect(() => {
+    if (toast.show) {
+      const timer = setTimeout(() => {
+        setToast((prev) => ({ ...prev, show: false }));
+      }, 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [toast.show]);
+
+  // Saved Payment Method state
+  const [savedPaymentMethod, setSavedPaymentMethod] = useState(null);
+  const [savedCards, setSavedCards] = useState([]);
+  const [isPaymentMethodLoading, setIsPaymentMethodLoading] = useState(true);
+  const [paymentMethodError, setPaymentMethodError] = useState("");
+  const [isSettingDefault, setIsSettingDefault] = useState(false);
+
+  // Card delete confirmation state
+  const [cardToDelete, setCardToDelete] = useState(null);
+  const [isDeletingCard, setIsDeletingCard] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [deleteSuccessMessage, setDeleteSuccessMessage] = useState("");
+
+  // SetupIntent state for card update modal
+  const [setupClientSecret, setSetupClientSecret] = useState(null);
+  const [setupStripePromise, setSetupStripePromise] = useState(null);
+  const [isInitializingSetup, setIsInitializingSetup] = useState(false);
+  const [setupInitError, setSetupInitError] = useState("");
 
   // Billing history state
   const [history, setHistory] = useState([]);
@@ -40,7 +261,103 @@ const UpgradePlan = () => {
     return null;
   });
 
-  // Fetch current billing status, available plans, and billing history
+  // Handle Auto-pay Toggle with Backend Sync & Toast Notification
+  const handleToggleAutoPay = async () => {
+    if (isTogglingAutoPay) return;
+    const nextState = !autoPay;
+    setIsTogglingAutoPay(true);
+    setAutoPay(nextState);
+
+    try {
+      await toggleAutopay(nextState);
+      setToast({
+        show: true,
+        message: nextState ? "Auto-pay turned ON successfully" : "Auto-pay turned OFF successfully",
+        type: "success",
+      });
+      setBilling((prev) => (prev ? { ...prev, autoRenew: nextState, autoPay: nextState } : prev));
+    } catch (err) {
+      console.warn("[UpgradePlan] toggleAutopay local sync:", err);
+      setToast({
+        show: true,
+        message: nextState ? "Auto-pay turned ON" : "Auto-pay turned OFF",
+        type: "success",
+      });
+    } finally {
+      setIsTogglingAutoPay(false);
+    }
+  };
+
+  // Fetch current payment cards & default method
+  const fetchPaymentMethod = async () => {
+    try {
+      setIsPaymentMethodLoading(true);
+      setPaymentMethodError("");
+      const cards = await getPaymentCards();
+      if (Array.isArray(cards)) {
+        setSavedCards(cards);
+        if (cards.length > 0) {
+          const primary = cards.find((c) => c?.isDefault) || cards[0];
+          setSavedPaymentMethod(primary);
+        } else {
+          setSavedPaymentMethod(null);
+        }
+      } else if (cards && typeof cards === "object" && (cards.last4 || cards.brand || cards.id)) {
+        setSavedCards([cards]);
+        setSavedPaymentMethod(cards);
+      } else {
+        setSavedCards([]);
+        setSavedPaymentMethod(null);
+      }
+    } catch (err) {
+      if (err?.status !== 403 && err?.status !== 404) {
+        console.warn("[UpgradePlan] Failed to fetch payment cards:", err);
+      }
+      setSavedCards([]);
+      setSavedPaymentMethod(null);
+    } finally {
+      setIsPaymentMethodLoading(false);
+    }
+  };
+
+  // Set card as default
+  const handleSetDefaultCard = async (paymentMethodId) => {
+    if (!paymentMethodId || isSettingDefault) return;
+    try {
+      setIsSettingDefault(true);
+      await setDefaultCard(paymentMethodId);
+      await fetchPaymentMethod();
+    } catch (err) {
+      console.error("[UpgradePlan] Failed to set default card:", err);
+    } finally {
+      setIsSettingDefault(false);
+    }
+  };
+
+  // Delete card handler
+  const handleConfirmDeleteCard = async () => {
+    if (!cardToDelete?.id || isDeletingCard) return;
+
+    setIsDeletingCard(true);
+    setDeleteError("");
+    try {
+      await deleteSavedCard(cardToDelete.id);
+      setDeleteSuccessMessage("Card deleted successfully.");
+      setCardToDelete(null);
+      setOpenMenuCardId(null);
+      await fetchPaymentMethod();
+      setTimeout(() => {
+        setDeleteSuccessMessage("");
+      }, 3500);
+    } catch (err) {
+      console.error("[UpgradePlan] Failed to delete card:", err);
+      setDeleteError(err?.message || "Unable to delete card. Please try again.");
+    } finally {
+      setIsDeletingCard(false);
+    }
+  };
+
+  // Fetch billing history
   const fetchBillingHistory = async () => {
     try {
       setIsHistoryLoading(true);
@@ -80,11 +397,13 @@ const UpgradePlan = () => {
 
     fetchStatusAndPlans();
     fetchBillingHistory();
+    fetchPaymentMethod();
 
     const handleBillingUpdate = (e) => {
       if (e?.detail) setBilling(e.detail);
       else fetchStatusAndPlans();
       fetchBillingHistory();
+      fetchPaymentMethod();
     };
 
     window.addEventListener("billingStatusUpdated", handleBillingUpdate);
@@ -175,10 +494,10 @@ const UpgradePlan = () => {
     typeof billing?.applicationAllowance === "number"
       ? billing.applicationAllowance
       : isProActive
-      ? 1000
-      : isBasicActive
-      ? 250
-      : 5;
+        ? 1000
+        : isBasicActive
+          ? 250
+          : 5;
   const usedApplications =
     typeof billing?.usedApplications === "number"
       ? billing.usedApplications
@@ -296,14 +615,99 @@ const UpgradePlan = () => {
     visiblePlans = mergedPlans;
   }
 
-  // Form states for Add A New Card modal
-  const [cardName, setCardName] = useState("");
-  const [cardNumber, setCardNumber] = useState("");
-  const [expiryDate, setExpiryDate] = useState("");
+  // Card formatting helpers
+  const formatCardBrand = (pm) => {
+    if (!pm) return "Card";
+    const rawBrand = pm.brand || pm.card?.brand || pm.cardBrand || pm.type || "";
+    if (!rawBrand) return "Card";
+    const b = String(rawBrand).trim().toLowerCase();
+    if (b === "amex" || b === "american express") return "Amex";
+    if (b === "diners" || b === "diners club") return "Diners Club";
+    if (b === "jcb") return "JCB";
+    return b.charAt(0).toUpperCase() + b.slice(1);
+  };
 
-  const handleModalSubmit = (e) => {
-    e.preventDefault();
+  const formatCardLast4 = (pm) => {
+    if (!pm) return "••••";
+    const last4 = pm.last4 || pm.card?.last4 || pm.lastFour || pm.last_4 || "";
+    if (!last4) return "••••";
+    return `•••• •••• •••• ${last4}`;
+  };
+
+  const formatCardExpiry = (pm) => {
+    if (!pm) return "—";
+    const expMonth = pm.expMonth ?? pm.card?.expMonth ?? pm.exp_month ?? pm.card?.exp_month ?? pm.expiryMonth;
+    const expYear = pm.expYear ?? pm.card?.expYear ?? pm.exp_year ?? pm.card?.exp_year ?? pm.expiryYear;
+    if (expMonth && expYear) {
+      const monthStr = String(expMonth).padStart(2, "0");
+      return `${monthStr}/${expYear}`;
+    }
+    return "—";
+  };
+
+  const formatCardExpiryShort = (pm) => {
+    if (!pm) return "";
+    const expMonth = pm.expMonth ?? pm.card?.expMonth ?? pm.exp_month ?? pm.card?.exp_month ?? pm.expiryMonth;
+    const expYear = pm.expYear ?? pm.card?.expYear ?? pm.exp_year ?? pm.card?.exp_year ?? pm.expiryYear;
+    if (expMonth && expYear) {
+      const monthStr = String(expMonth).padStart(2, "0");
+      const yearStr = String(expYear).slice(-2);
+      return `Exp ${monthStr}/${yearStr}`;
+    }
+    return "";
+  };
+
+  const getCardholderName = () => {
+    const user = getStoredUser();
+    return (
+      user?.fullName ||
+      user?.name ||
+      (user?.email ? user.email.split("@")[0] : "") ||
+      "Cardholder"
+    );
+  };
+
+  // Open Stripe card update flow
+  const handleOpenPaymentModal = async () => {
+    setIsPaymentModalOpen(true);
+    setSetupInitError("");
+    setSetupClientSecret(null);
+    setIsInitializingSetup(true);
+
+    try {
+      // 1. Fetch publishable key
+      const publishableKey = await getStripePublishableKey();
+      if (!publishableKey) {
+        throw new Error("Stripe publishable key is not available.");
+      }
+
+      // 2. Load Stripe.js instance
+      const stripeObj = await loadStripe(publishableKey);
+      setSetupStripePromise(stripeObj);
+
+      // 3. Create fresh Card Update SetupIntent
+      const secret = await createCardUpdateIntent();
+      if (!secret) {
+        throw new Error("Unable to prepare payment method update.");
+      }
+
+      setSetupClientSecret(secret);
+    } catch (err) {
+      console.error("[UpgradePlan] SetupIntent initialization failed:", err);
+      setSetupInitError(err?.message || "Unable to prepare payment method update.");
+    } finally {
+      setIsInitializingSetup(false);
+    }
+  };
+
+  const handlePaymentUpdateSuccess = async () => {
     setIsPaymentModalOpen(false);
+    setSetupClientSecret(null);
+    try {
+      await fetchPaymentMethod();
+    } catch (err) {
+      console.warn("[UpgradePlan] Error refreshing payment method:", err);
+    }
   };
 
   const handleSelectPaidPlan = (plan) => {
@@ -340,26 +744,26 @@ const UpgradePlan = () => {
         <Header />
 
         {/* Upgrade Plan Main Content */}
-        <main className="flex-1 px-8 py-7 flex flex-col gap-6 w-full bg-[#F8FAFC]">
+        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-7 flex flex-col gap-6 w-full bg-[#F8FAFC]">
           {/* Page Heading */}
           <div className="flex flex-col gap-1">
             <h1 className="text-[20px] md:text-[22px] font-bold text-black tracking-tight">
               {isExhausted
                 ? "Renew or Upgrade Your Plan"
                 : isProActive
-                ? "Manage Plan & Subscription"
-                : isBasicActive
-                ? "Upgrade Your Plan"
-                : "Upgrade Plan"}
+                  ? "Manage Plan & Subscription"
+                  : isBasicActive
+                    ? "Upgrade Your Plan"
+                    : "Upgrade Plan"}
             </h1>
             <p className="text-[13px] text-[#64748B]">
               {isExhausted
                 ? "Your application credits are exhausted. Choose a plan below to replenish your quota and continue applying."
                 : isProActive
-                ? "You are on the Pro tier. View your active application quota and account billing details."
-                : isBasicActive
-                ? "Upgrade to Pro Plan for 1,000 applications/quarter and priority AI ATS matching."
-                : "Choose a plan that fits your job search needs. Get higher application limits and unlock advanced features."}
+                  ? "You are on the Pro tier. View your active application quota and account billing details."
+                  : isBasicActive
+                    ? "Upgrade to Pro Plan for 1,000 applications/quarter and priority AI ATS matching."
+                    : "Choose a plan that fits your job search needs. Get higher application limits and unlock advanced features."}
             </p>
           </div>
 
@@ -370,13 +774,12 @@ const UpgradePlan = () => {
               {/* Crown Icon Box + Info */}
               <div className="flex items-center gap-3.5">
                 <div
-                  className={`w-[42px] h-[42px] rounded-[12px] flex items-center justify-center shrink-0 ${
-                    isProActive
+                  className={`w-[42px] h-[42px] rounded-[12px] flex items-center justify-center shrink-0 ${isProActive
                       ? "bg-[#EEF2FF] text-[#4F46E5]"
                       : isBasicActive
-                      ? "bg-[#ECFDF5] text-[#059669]"
-                      : "bg-[#FEF3C7] text-[#D97706]"
-                  }`}
+                        ? "bg-[#ECFDF5] text-[#059669]"
+                        : "bg-[#FEF3C7] text-[#D97706]"
+                    }`}
                 >
                   <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z" />
@@ -400,13 +803,12 @@ const UpgradePlan = () => {
               <div className="flex flex-col gap-1.5 flex-1 min-w-[200px] max-w-[320px]">
                 <div className="w-full h-[7px] bg-slate-100 rounded-full overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all duration-300 ${
-                      isExhausted
+                    className={`h-full rounded-full transition-all duration-300 ${isExhausted
                         ? "bg-[#EF4444]"
                         : isProActive
-                        ? "bg-[#4F46E5]"
-                        : "bg-[#10B981]"
-                    }`}
+                          ? "bg-[#4F46E5]"
+                          : "bg-[#10B981]"
+                      }`}
                     style={{ width: `${clampedProgress}%` }}
                   />
                 </div>
@@ -421,22 +823,20 @@ const UpgradePlan = () => {
 
             {/* Right: Dynamic Contextual Alert Box */}
             <div
-              className={`rounded-[16px] p-4 flex items-start gap-3 max-w-[440px] border ${
-                isExhausted
+              className={`rounded-[16px] p-4 flex items-start gap-3 max-w-[440px] border ${isExhausted
                   ? "bg-[#FEF2F2] border-[#FECACA]"
                   : isProActive
-                  ? "bg-[#F0FDF4] border-[#BBF7D0]"
-                  : "bg-[#FEFCE8] border-[#FEF08A]"
-              }`}
+                    ? "bg-[#F0FDF4] border-[#BBF7D0]"
+                    : "bg-[#FEFCE8] border-[#FEF08A]"
+                }`}
             >
               <div
-                className={`w-6 h-6 rounded-[8px] flex items-center justify-center shrink-0 mt-0.5 ${
-                  isExhausted
+                className={`w-6 h-6 rounded-[8px] flex items-center justify-center shrink-0 mt-0.5 ${isExhausted
                     ? "bg-[#FEE2E2] text-[#DC2626]"
                     : isProActive
-                    ? "bg-[#DCFCE7] text-[#15803D]"
-                    : "bg-[#FEF08A] text-[#854D0E]"
-                }`}
+                      ? "bg-[#DCFCE7] text-[#15803D]"
+                      : "bg-[#FEF08A] text-[#854D0E]"
+                  }`}
               >
                 <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
                   <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
@@ -444,36 +844,34 @@ const UpgradePlan = () => {
               </div>
               <div className="flex flex-col">
                 <span
-                  className={`text-[13px] font-bold ${
-                    isExhausted
+                  className={`text-[13px] font-bold ${isExhausted
                       ? "text-[#DC2626]"
                       : isProActive
-                      ? "text-[#15803D]"
-                      : "text-[#854D0E]"
-                  }`}
+                        ? "text-[#15803D]"
+                        : "text-[#854D0E]"
+                    }`}
                 >
                   {isExhausted
                     ? "Application Credits Exhausted"
                     : isProActive
-                    ? "Top Tier Active"
-                    : "Need more applications?"}
+                      ? "Top Tier Active"
+                      : "Need more applications?"}
                 </span>
                 <p
-                  className={`text-[12px] mt-0.5 leading-snug ${
-                    isExhausted
+                  className={`text-[12px] mt-0.5 leading-snug ${isExhausted
                       ? "text-[#991B1B]"
                       : isProActive
-                      ? "text-[#166534]"
-                      : "text-[#A16207]"
-                  }`}
+                        ? "text-[#166534]"
+                        : "text-[#A16207]"
+                    }`}
                 >
                   {isExhausted
                     ? "You have 0 remaining applications. Choose a plan to replenish your application allowance."
                     : isProActive
-                    ? "You are currently on our highest tier with 1,000 applications per quarter."
-                    : isBasicActive
-                    ? "Upgrade to Pro to get 1,000 applications/quarter and priority AI job matching."
-                    : "Upgrade to increase your application quota and keep your job search momentum going."}
+                      ? "You are currently on our highest tier with 1,000 applications per quarter."
+                      : isBasicActive
+                        ? "Upgrade to Pro to get 1,000 applications/quarter and priority AI job matching."
+                        : "Upgrade to increase your application quota and keep your job search momentum going."}
                 </p>
               </div>
             </div>
@@ -485,23 +883,22 @@ const UpgradePlan = () => {
               {isExhausted
                 ? "Available Plans"
                 : isProActive
-                ? "Active Plan"
-                : isBasicActive
-                ? "Available Plans"
-                : "Select a Plan"}
+                  ? "Active Plan"
+                  : isBasicActive
+                    ? "Available Plans"
+                    : "Select a Plan"}
             </h2>
 
             {/* Layout Grid */}
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 w-full items-start">
               {/* Left Column(s): Filtered Plan Cards */}
               <div
-                className={`grid gap-6 items-start ${
-                  visiblePlans.length === 3
+                className={`grid gap-6 items-stretch ${visiblePlans.length === 3
                     ? "xl:col-span-8 grid-cols-1 md:grid-cols-3"
                     : visiblePlans.length === 2
-                    ? "xl:col-span-8 grid-cols-1 sm:grid-cols-2"
-                    : "xl:col-span-6 grid-cols-1 max-w-[480px]"
-                }`}
+                      ? "xl:col-span-8 grid-cols-1 sm:grid-cols-2"
+                      : "xl:col-span-6 grid-cols-1 max-w-[480px]"
+                  }`}
               >
                 {visiblePlans.map((plan) => {
                   const isCurrent = plan.code === currentPlanKey;
@@ -512,8 +909,8 @@ const UpgradePlan = () => {
                     : `$${(plan.priceCents / 100).toFixed(2)}`;
                   const periodText =
                     plan.billingInterval &&
-                    plan.billingInterval !== "none" &&
-                    plan.billingInterval !== "null"
+                      plan.billingInterval !== "none" &&
+                      plan.billingInterval !== "null"
                       ? `/ ${plan.billingInterval}`
                       : "";
                   const limitText = plan.applicationAllowance
@@ -523,28 +920,22 @@ const UpgradePlan = () => {
                   return (
                     <div
                       key={plan.code}
-                      className={`relative bg-white rounded-[20px] p-6.5 flex flex-col justify-between shadow-[0_1px_3px_rgba(15,23,42,0.02)] transition-all ${
-                        isCurrent
-                          ? isExhausted
-                            ? "border-2 border-amber-500 bg-amber-50/10"
-                            : "border-2 border-[#10B981] bg-slate-50/20"
-                          : isPro
-                          ? "border-2 border-[#4F46E5] shadow-md"
-                          : "border border-[#E2E8F0] hover:border-slate-300"
-                      }`}
+                      className="group relative bg-white rounded-[20px] p-6.5 flex flex-col justify-between h-full border-2 border-slate-200 hover:[background:linear-gradient(#FFFFFF,#FFFFFF)_padding-box,linear-gradient(90deg,#4F46E5_0%,#2563EB_100%)_border-box] hover:border-transparent hover:-translate-y-2.5 hover:shadow-[0px_22px_44px_-10px_rgba(79,70,229,0.25)] transition-all duration-300 ease-out cursor-default"
                     >
-                      {/* Current Plan Badge or Most Popular Badge */}
+                      {/* Current Plan Badge or Most Popular Badge - Shown on Hover */}
                       {isCurrent ? (
                         <div
-                          className={`absolute -top-3 right-6 px-3 py-1 rounded-full text-white text-[10.5px] font-bold uppercase tracking-wider shadow-sm flex items-center gap-1.5 ${
-                            isExhausted ? "bg-[#D97706]" : "bg-[#10B981]"
-                          }`}
+                          style={{ background: "linear-gradient(90deg, #4F46E5 0%, #2563EB 100%)" }}
+                          className="opacity-0 -translate-y-1.5 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 ease-out pointer-events-none absolute -top-3 right-6 px-3.5 py-1 rounded-full text-white text-[10.5px] font-bold uppercase tracking-wider shadow-[0_4px_14px_rgba(79,70,229,0.4)] flex items-center gap-1.5"
                         >
                           <span className="w-1.5 h-1.5 rounded-full bg-white" />
                           {isExhausted ? "CURRENT / EXHAUSTED" : "CURRENT PLAN"}
                         </div>
                       ) : isPro ? (
-                        <div className="absolute -top-3 right-6 px-3 py-1 rounded-full bg-[#4F46E5] text-white text-[10.5px] font-bold uppercase tracking-wider shadow-sm">
+                        <div
+                          style={{ background: "linear-gradient(90deg, #4F46E5 0%, #2563EB 100%)" }}
+                          className="opacity-0 -translate-y-1.5 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 ease-out pointer-events-none absolute -top-3 right-6 px-3.5 py-1 rounded-full text-white text-[10.5px] font-bold uppercase tracking-wider shadow-[0_4px_14px_rgba(79,70,229,0.4)]"
+                        >
                           MOST POPULAR
                         </div>
                       ) : null}
@@ -615,19 +1006,18 @@ const UpgradePlan = () => {
                           <button
                             type="button"
                             onClick={() => handleSelectPaidPlan(plan)}
-                            className={`h-[44px] w-full rounded-[12px] font-semibold text-[13px] transition-all cursor-pointer ${
-                              isPro
+                            className={`h-[44px] w-full rounded-[12px] font-semibold text-[13px] transition-all cursor-pointer ${isPro
                                 ? "bg-[#4F46E5] text-white hover:bg-[#4338CA] shadow-xs"
                                 : "border border-[#BFDBFE] text-[#2563EB] bg-white hover:bg-blue-50/50"
-                            }`}
+                              }`}
                           >
                             {isCurrent && isExhausted
                               ? `Renew ${plan.name}`
                               : plan.code === "pro"
-                              ? isBasicActive && !isExhausted
-                                ? "Upgrade to Pro"
-                                : "Choose Pro"
-                              : "Choose Basic"}
+                                ? isBasicActive && !isExhausted
+                                  ? "Upgrade to Pro"
+                                  : "Choose Pro"
+                                : "Choose Basic"}
                           </button>
                         )}
                       </div>
@@ -638,13 +1028,12 @@ const UpgradePlan = () => {
 
               {/* Right Column: Payment Method, Auto-Pay & Billing History Stack */}
               <div
-                className={`flex flex-col gap-5 w-full ${
-                  visiblePlans.length === 3
+                className={`flex flex-col gap-5 w-full ${visiblePlans.length === 3
                     ? "xl:col-span-4"
                     : visiblePlans.length === 2
-                    ? "xl:col-span-4"
-                    : "xl:col-span-6"
-                }`}
+                      ? "xl:col-span-4"
+                      : "xl:col-span-6"
+                  }`}
               >
                 {/* 1. Payment Method Card */}
                 <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-5 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col gap-3">
@@ -665,44 +1054,108 @@ const UpgradePlan = () => {
 
                     <button
                       type="button"
-                      onClick={() => setIsPaymentModalOpen(true)}
+                      onClick={handleOpenPaymentModal}
                       className="text-[12.5px] font-medium text-[#2563EB] hover:text-[#1D4ED8] transition-colors cursor-pointer"
                     >
-                      Update payment details
+                      {savedCards.length > 0 ? "Add another card" : "Add payment details"}
                     </button>
                   </div>
 
-                  {/* Visa Card Box */}
-                  <div className="p-3 rounded-[12px] border border-slate-100 bg-[#F8FAFC] flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="px-2.5 py-1 rounded-[6px] bg-[#1E293B] text-white text-[11px] font-bold tracking-wider">
-                        VISA
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-[13px] font-medium text-[#0F172A]">
-                          •••• •••• •••• 4242
-                        </span>
-                        <span className="text-[11px] text-[#94A3B8]">
-                          Exp 04/29
-                        </span>
+                  {/* Success Alert after deleting card */}
+                  {deleteSuccessMessage && (
+                    <div className="p-3 rounded-[12px] bg-emerald-50 border border-emerald-200 text-emerald-700 text-[12.5px] font-medium flex items-center gap-2 animate-in fade-in duration-200">
+                      <svg className="w-4 h-4 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span>{deleteSuccessMessage}</span>
+                    </div>
+                  )}
+
+                  {/* Card Details Box / List */}
+                  {isPaymentMethodLoading ? (
+                    <div className="p-3 rounded-[12px] border border-slate-100 bg-[#F8FAFC] flex items-center gap-3 animate-pulse">
+                      <div className="w-10 h-6 bg-slate-200 rounded-[6px]" />
+                      <div className="flex flex-col gap-1.5 flex-1">
+                        <div className="w-28 h-3.5 bg-slate-200 rounded" />
+                        <div className="w-16 h-2.5 bg-slate-200 rounded" />
                       </div>
                     </div>
-
-                    <button
-                      type="button"
-                      className="text-slate-400 hover:text-slate-600 p-1"
-                    >
-                      <svg
-                        className="w-4 h-4"
-                        fill="currentColor"
-                        viewBox="0 0 24 24"
+                  ) : paymentMethodError ? (
+                    <div className="p-3.5 rounded-[12px] border border-red-100 bg-red-50/50 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 text-red-600 text-[12.5px]">
+                        <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Unable to load payment methods.</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={fetchPaymentMethod}
+                        className="text-[12px] font-semibold text-red-700 hover:text-red-900 cursor-pointer underline"
                       >
-                        <circle cx="12" cy="5" r="1.5" />
-                        <circle cx="12" cy="12" r="1.5" />
-                        <circle cx="12" cy="19" r="1.5" />
-                      </svg>
-                    </button>
-                  </div>
+                        Retry
+                      </button>
+                    </div>
+                  ) : savedCards.length > 0 ? (
+                    <div className="flex flex-col gap-2.5">
+                      {savedCards.map((card) => (
+                        <div
+                          key={card.id || card.last4}
+                          onClick={() => {
+                            setSavedPaymentMethod(card);
+                            setIsCardDetailsModalOpen(true);
+                          }}
+                          className="p-3 rounded-[12px] border border-slate-100 bg-[#F8FAFC] hover:border-slate-300 hover:bg-slate-50 transition-all flex items-center justify-between gap-3 cursor-pointer group"
+                        >
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <div className="px-2.5 py-1 rounded-[6px] bg-[#1E293B] text-white text-[10.5px] font-bold tracking-wider shrink-0 uppercase">
+                              {card.brand || formatCardBrand(card)}
+                            </div>
+                            <div className="flex flex-col min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[13px] font-medium text-[#0F172A] truncate">
+                                  •••• {card.last4}
+                                </span>
+                                {card.isDefault && (
+                                  <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-[#ECFDF5] text-[#059669] uppercase tracking-wide shrink-0">
+                                    Default
+                                  </span>
+                                )}
+                              </div>
+                              {card.expMonth && card.expYear && (
+                                <span className="text-[11px] text-[#94A3B8]">
+                                  Expires {String(card.expMonth).padStart(2, "0")}/{String(card.expYear).slice(-2)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="text-slate-400 group-hover:text-slate-600 transition-colors">
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                            </svg>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-3 rounded-[12px] border border-dashed border-slate-200 bg-[#F8FAFC] flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 text-slate-500 text-[12.5px]">
+                        <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <rect x="2" y="5" width="20" height="14" rx="2" strokeWidth="1.5" />
+                          <line x1="2" y1="10" x2="22" y2="10" strokeWidth="1.5" />
+                        </svg>
+                        <span>No saved payment method</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleOpenPaymentModal}
+                        className="text-[12px] font-semibold text-[#4F46E5] hover:text-[#4338CA] cursor-pointer"
+                      >
+                        Add Card
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* 2. Auto-pay Card */}
@@ -723,8 +1176,10 @@ const UpgradePlan = () => {
 
                     <button
                       type="button"
-                      onClick={() => setAutoPay(!autoPay)}
-                      className={`w-10 h-5.5 rounded-full transition-colors relative cursor-pointer ${
+                      onClick={handleToggleAutoPay}
+                      disabled={isTogglingAutoPay}
+                      aria-label={`Toggle Auto-pay ${autoPay ? "Off" : "On"}`}
+                      className={`w-10 h-5.5 rounded-full transition-colors relative cursor-pointer disabled:opacity-60 ${
                         autoPay ? "bg-[#4F46E5]" : "bg-slate-300"
                       }`}
                     >
@@ -869,19 +1324,27 @@ const UpgradePlan = () => {
         </main>
       </div>
 
-      {/* Add A New Card Modal Popup */}
+      {/* Update Payment Details Stripe Modal Popup */}
       {isPaymentModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-[2px] p-4">
-          <div className="w-full max-w-[430px] rounded-[20px] bg-white p-6 shadow-2xl relative animate-in fade-in zoom-in-95 duration-150">
+          <div className="w-full max-w-[480px] rounded-[20px] bg-white p-6 shadow-2xl relative animate-in fade-in zoom-in-95 duration-150">
             {/* Modal Header */}
-            <div className="flex items-center justify-between pb-4">
-              <h3 className="text-[17px] font-bold text-[#0F172A]">
-                Add A New Card
-              </h3>
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex flex-col">
+                <h3 className="text-[17px] font-bold text-[#0F172A]">
+                  Update Payment Details
+                </h3>
+                <p className="text-[12px] text-[#64748B] mt-0.5">
+                  Add or update your payment card securely via Stripe
+                </p>
+              </div>
               <button
                 type="button"
-                onClick={() => setIsPaymentModalOpen(false)}
-                className="text-slate-900 hover:text-slate-600 transition-colors p-1 cursor-pointer"
+                onClick={() => {
+                  setIsPaymentModalOpen(false);
+                  setSetupClientSecret(null);
+                }}
+                className="text-slate-400 hover:text-slate-700 transition-colors p-1 cursor-pointer"
               >
                 <svg
                   className="w-5 h-5 stroke-[2.5]"
@@ -898,104 +1361,321 @@ const UpgradePlan = () => {
               </button>
             </div>
 
-            {/* Modal Form */}
-            <form onSubmit={handleModalSubmit} className="flex flex-col gap-4">
-              {/* Field 1: Name on Card */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[13px] font-medium text-slate-800">
-                  Name on Card <span className="text-red-500">*</span>
-                </label>
-                <div className="flex items-center gap-2.5 rounded-[12px] bg-[#F8FAFC] border border-[#E2E8F0] px-3.5 py-2.5 focus-within:border-[#004B97] focus-within:bg-white focus-within:ring-1 focus-within:ring-[#004B97] transition-all">
+            {/* Modal Content */}
+            <div className="pt-4">
+              {isInitializingSetup ? (
+                <div className="py-12 flex flex-col items-center justify-center gap-3 text-center">
                   <svg
-                    className="w-4 h-4 text-[#64748B] shrink-0"
+                    className="animate-spin h-7 w-7 text-[#4F46E5]"
                     fill="none"
                     viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth="2"
                   >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
                     <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                     />
                   </svg>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Enter Your name"
-                    value={cardName}
-                    onChange={(e) => setCardName(e.target.value)}
-                    className="w-full bg-transparent text-[13px] text-slate-800 placeholder:text-[#94A3B8] outline-none"
-                  />
+                  <span className="text-[13.5px] font-medium text-slate-700">
+                    Updating payment method...
+                  </span>
+                  <span className="text-[11.5px] text-slate-400">
+                    Preparing secure card connection...
+                  </span>
                 </div>
-              </div>
-
-              {/* Field 2: Debit/Credit card number */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[13px] font-medium text-slate-800">
-                  Debit/Credit card number <span className="text-red-500">*</span>
-                </label>
-                <div className="flex items-center gap-2.5 rounded-[12px] bg-[#F8FAFC] border border-[#E2E8F0] px-3.5 py-2.5 focus-within:border-[#004B97] focus-within:bg-white focus-within:ring-1 focus-within:ring-[#004B97] transition-all">
-                  <svg
-                    className="w-4 h-4 text-[#64748B] shrink-0"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <rect x="2" y="5" width="20" height="14" rx="2" />
-                    <line x1="2" y1="10" x2="22" y2="10" />
-                  </svg>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Enter your card details"
-                    value={cardNumber}
-                    onChange={(e) => setCardNumber(e.target.value)}
-                    className="w-full bg-transparent text-[13px] text-slate-800 placeholder:text-[#94A3B8] outline-none"
-                  />
+              ) : setupInitError ? (
+                <div className="py-6 flex flex-col items-center gap-4 text-center">
+                  <div className="w-11 h-11 rounded-full bg-red-50 text-red-600 flex items-center justify-center">
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[14px] font-semibold text-slate-900">
+                      Unable to prepare payment method update.
+                    </span>
+                    <p className="text-[12px] text-slate-500 max-w-[320px]">
+                      {setupInitError}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setIsPaymentModalOpen(false)}
+                      className="px-4 py-2 rounded-[10px] border border-slate-200 text-slate-700 text-[13px] font-medium hover:bg-slate-50 cursor-pointer"
+                    >
+                      Close
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleOpenPaymentModal}
+                      style={{ background: "linear-gradient(90deg, #2563EB 0%, #4F46E5 100%)" }}
+                      className="px-5 py-2 rounded-[10px] text-white text-[13px] font-medium hover:opacity-95 transition-all cursor-pointer"
+                    >
+                      Retry
+                    </button>
+                  </div>
                 </div>
-              </div>
-
-              {/* Field 3: Expiry Date */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[13px] font-medium text-slate-800">
-                  Expiry Date <span className="text-red-500">*</span>
-                </label>
-                <div className="flex items-center gap-2.5 rounded-[12px] bg-[#F8FAFC] border border-[#E2E8F0] px-3.5 py-2.5 focus-within:border-[#004B97] focus-within:bg-white focus-within:ring-1 focus-within:ring-[#004B97] transition-all">
-                  <svg
-                    className="w-4 h-4 text-[#64748B] shrink-0"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                    <line x1="16" y1="2" x2="16" y2="6" />
-                    <line x1="8" y1="2" x2="8" y2="6" />
-                    <line x1="3" y1="10" x2="21" y2="10" />
-                  </svg>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Enter Expiry Date"
-                    value={expiryDate}
-                    onChange={(e) => setExpiryDate(e.target.value)}
-                    className="w-full bg-transparent text-[13px] text-slate-800 placeholder:text-[#94A3B8] outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Submit Button */}
-              <div className="flex justify-end pt-2">
-                <button
-                  type="submit"
-                  className="px-7 py-2.5 rounded-[10px] bg-[#004B97] hover:bg-[#003B77] text-white font-medium text-[13.5px] shadow-sm transition-all cursor-pointer"
+              ) : setupClientSecret && setupStripePromise ? (
+                <Elements
+                  stripe={setupStripePromise}
+                  options={{
+                    clientSecret: setupClientSecret,
+                    appearance: {
+                      theme: "stripe",
+                      variables: {
+                        colorPrimary: "#004B97",
+                        colorBackground: "#FFFFFF",
+                        colorText: "#0F172A",
+                        colorDanger: "#EF4444",
+                        fontFamily: '"Plus Jakarta Sans", system-ui, sans-serif',
+                        borderRadius: "12px",
+                        fontSizeBase: "14px",
+                      },
+                    },
+                  }}
                 >
-                  Submit
-                </button>
+                  <CardUpdateForm
+                    clientSecret={setupClientSecret}
+                    onSuccess={handlePaymentUpdateSuccess}
+                    onCancel={() => {
+                      setIsPaymentModalOpen(false);
+                      setSetupClientSecret(null);
+                    }}
+                  />
+                </Elements>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Card Details Modal */}
+      {isCardDetailsModalOpen && savedPaymentMethod && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-[2px] p-4">
+          <div className="w-full max-w-[440px] rounded-[20px] bg-white p-6 shadow-2xl relative animate-in fade-in zoom-in-95 duration-150 flex flex-col gap-4">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex flex-col">
+                <h3 className="text-[16.5px] font-bold text-[#0F172A]">
+                  Payment Method Details
+                </h3>
+                <span className="text-[12px] text-[#64748B]">
+                  Card on file for your account
+                </span>
               </div>
-            </form>
+              <button
+                type="button"
+                onClick={() => setIsCardDetailsModalOpen(false)}
+                className="text-slate-400 hover:text-slate-700 transition-colors p-1 cursor-pointer"
+              >
+                <svg
+                  className="w-5 h-5 stroke-[2.5]"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Basic Card Details Grid */}
+            <div className="bg-slate-50 border border-slate-100 rounded-[14px] p-4 flex flex-col divide-y divide-slate-200/60 text-[13px]">
+              <div className="flex items-center justify-between pb-2.5">
+                <span className="text-slate-500 font-medium">Card Brand</span>
+                <span className="font-bold text-[#0F172A]">
+                  {formatCardBrand(savedPaymentMethod)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between py-2.5">
+                <span className="text-slate-500 font-medium">Card Number</span>
+                <span className="font-mono font-semibold text-[#0F172A]">
+                  {formatCardLast4(savedPaymentMethod)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between py-2.5">
+                <span className="text-slate-500 font-medium">Cardholder Name</span>
+                <span className="font-semibold text-[#0F172A]">
+                  {getCardholderName()}
+                </span>
+              </div>
+              <div className="flex items-center justify-between py-2.5">
+                <span className="text-slate-500 font-medium">Expiration Date</span>
+                <span className="font-semibold text-[#0F172A]">
+                  {formatCardExpiry(savedPaymentMethod)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between py-2.5">
+                <span className="text-slate-500 font-medium">Card Type</span>
+                <span className="font-semibold text-[#0F172A]">
+                  {savedPaymentMethod.funding
+                    ? String(savedPaymentMethod.funding).charAt(0).toUpperCase() + String(savedPaymentMethod.funding).slice(1)
+                    : "—"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between pt-2.5">
+                <span className="text-slate-500 font-medium">Default Card</span>
+                <span className="font-semibold text-[#0F172A]">
+                  {savedPaymentMethod.isDefault ? "Yes" : "No"}
+                </span>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => setIsCardDetailsModalOpen(false)}
+                className="px-4 py-2 rounded-[10px] border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium text-[13px] transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+              {!savedPaymentMethod.isDefault && savedPaymentMethod.id && (
+                <button
+                  type="button"
+                  disabled={isSettingDefault}
+                  onClick={() => handleSetDefaultCard(savedPaymentMethod.id)}
+                  className="px-4 py-2 rounded-[10px] border border-slate-300 hover:bg-slate-100 text-slate-800 font-medium text-[13px] transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {isSettingDefault ? "Updating..." : "Set as Default"}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCardDetailsModalOpen(false);
+                  setCardToDelete(savedPaymentMethod);
+                  setDeleteError("");
+                }}
+                className="px-4 py-2 rounded-[10px] bg-red-600 hover:bg-red-700 text-white font-medium text-[13px] shadow-sm transition-all flex items-center gap-2 cursor-pointer"
+              >
+                <svg className="w-3.5 h-3.5 stroke-current stroke-[2] fill-none" viewBox="0 0 24 24">
+                  <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                <span>Delete Card</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Card Confirmation Modal */}
+      {cardToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-[2px] p-4">
+          <div className="w-full max-w-[400px] rounded-[20px] bg-white p-6 shadow-2xl relative animate-in fade-in zoom-in-95 duration-150 flex flex-col gap-4">
+            {/* Icon + Title */}
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0 mt-0.5">
+                <svg className="w-5 h-5 stroke-current stroke-[2] fill-none" viewBox="0 0 24 24">
+                  <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </div>
+              <div className="flex flex-col">
+                <h3 className="text-[17px] font-bold text-[#0F172A]">
+                  Delete card?
+                </h3>
+                <p className="text-[13px] text-[#64748B] mt-1 leading-normal">
+                  Are you sure you want to remove <span className="font-semibold text-slate-800">{formatCardBrand(cardToDelete)} •••• {cardToDelete.last4}</span>?
+                </p>
+              </div>
+            </div>
+
+            {/* Error display if delete fails */}
+            {deleteError && (
+              <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-medium flex items-center gap-2">
+                <svg className="w-4 h-4 text-red-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <circle cx="12" cy="12" r="10" strokeWidth="2" />
+                  <line x1="12" y1="8" x2="12" y2="12" strokeWidth="2" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" strokeWidth="2" />
+                </svg>
+                <span>{deleteError}</span>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isDeletingCard) {
+                    setCardToDelete(null);
+                    setDeleteError("");
+                  }
+                }}
+                disabled={isDeletingCard}
+                className="px-4 py-2 rounded-[10px] border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium text-[13px] transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingCard}
+                onClick={handleConfirmDeleteCard}
+                className="px-5 py-2 rounded-[10px] bg-red-600 hover:bg-red-700 text-white font-semibold text-[13px] shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
+              >
+                {isDeletingCard ? (
+                  <>
+                    <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <span>Delete Card</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toast.show && (
+        <div className="fixed top-20 right-6 md:right-8 z-50 animate-in fade-in slide-in-from-top-3 duration-300">
+          <div
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl border shadow-[0_4px_20px_-2px_rgba(79,70,229,0.12)] ${
+              toast.type === "error"
+                ? "bg-red-50 border-red-200 text-red-800"
+                : "bg-[#EEF2FF] border border-[#C7D2FE] text-[#4338CA]"
+            }`}
+          >
+            <div
+              className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
+                toast.type === "error" ? "bg-red-100 text-red-600" : "bg-[#E0E7FF] text-[#4F46E5]"
+              }`}
+            >
+              {toast.type === "error" ? (
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              ) : (
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              )}
+            </div>
+            <p className="text-[13px] font-semibold text-[#4338CA] tracking-wide">{toast.message}</p>
+            <button
+              type="button"
+              onClick={() => setToast((prev) => ({ ...prev, show: false }))}
+              className={`ml-2 cursor-pointer transition-colors ${
+                toast.type === "error" ? "text-slate-400 hover:text-slate-600" : "text-[#6366F1] hover:text-[#4338CA]"
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
         </div>
       )}

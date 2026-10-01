@@ -164,42 +164,28 @@ const Plan = () => {
             alignItems: 'stretch',
         },
         card: (isPro, isHovered) => ({
-            background: isPro
-                ? isHovered
-                    ? 'linear-gradient(180deg, #FFFFFF 0%, #EDE9FE 100%)'
-                    : 'linear-gradient(180deg, #FFFFFF 0%, #FAF5FF 100%)'
-                : isHovered
-                    ? 'linear-gradient(180deg, #FFFFFF 0%, #F5F3FF 100%)'
-                    : '#FFFFFF',
+            background: isHovered
+                ? 'linear-gradient(#FFFFFF, #FFFFFF) padding-box, linear-gradient(90deg, #4F46E5 0%, #2563EB 100%) border-box'
+                : '#FFFFFF',
             borderRadius: '24px',
             padding: 'clamp(32px, 2.4vw, 42px) clamp(28px, 2.2vw, 38px)',
-            border: isPro
-                ? isHovered
-                    ? '2px solid #6366F1'
-                    : '2px solid #818CF8'
-                : isHovered
-                    ? '1px solid #A5B4FC'
-                    : '1px solid #E2E8F0',
-            boxShadow: isPro
-                ? isHovered
-                    ? '0px 25px 50px -10px rgba(79, 70, 229, 0.3), 0px 0px 0px 1px rgba(99, 102, 241, 0.2)'
-                    : '0px 8px 24px rgba(79, 70, 229, 0.15)'
-                : isHovered
-                    ? '0px 22px 45px -10px rgba(79, 70, 229, 0.18), 0px 0px 0px 1px rgba(99, 102, 241, 0.12)'
-                    : '0px 8px 24px rgba(79, 70, 229, 0.08)',
-            transform: isHovered ? 'translateY(-8px)' : 'translateY(0)',
-            transition: 'all 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
+            border: isHovered ? '2px solid transparent' : '2px solid #E2E8F0',
+            boxShadow: isHovered
+                ? '0px 20px 40px -10px rgba(79, 70, 229, 0.25)'
+                : '0px 8px 24px rgba(0, 0, 0, 0.04)',
+            transform: isHovered ? 'translateY(-6px)' : 'translateY(0)',
+            transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
             display: 'flex',
             flexDirection: 'column',
             boxSizing: 'border-box',
             position: 'relative',
             cursor: 'default',
         }),
-        popularBadge: {
+        popularBadge: (isHovered = false) => ({
             position: 'absolute',
             top: '-18px',
             right: '28px',
-            background: 'linear-gradient(90deg, #4F46E5 0%, #6366F1 100%)',
+            background: 'linear-gradient(90deg, #4F46E5 0%, #2563EB 100%)',
             color: '#FFFFFF',
             fontFamily: '"Plus Jakarta Sans", sans-serif',
             fontWeight: '700',
@@ -210,7 +196,10 @@ const Plan = () => {
             borderRadius: '9999px',
             boxShadow: '0px 4px 14px rgba(79, 70, 229, 0.45)',
             zIndex: 2,
-        },
+            opacity: isHovered ? 1 : 0,
+            transition: 'opacity 0.25s ease, transform 0.25s ease',
+            pointerEvents: 'none',
+        }),
         planTitle: {
             fontFamily: '"Plus Jakarta Sans", sans-serif',
             fontWeight: '700',
@@ -530,7 +519,7 @@ const Plan = () => {
                                     onMouseLeave={() => setHoveredCard(null)}
                                 >
                                     {isPro && (
-                                        <span style={styles.popularBadge}>MOST POPULAR</span>
+                                        <span style={styles.popularBadge(hoveredCard === planKey)}>MOST POPULAR</span>
                                     )}
 
                                     <h2 style={styles.planTitle}>{plan.name}</h2>
