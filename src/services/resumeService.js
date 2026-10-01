@@ -432,7 +432,54 @@ export const uploadResume = async (file, metadata = null, token = null, options 
 
   console.log('[resumeService] Normalized resume payload:', normalizedData);
 
+  // Persist matched jobs to storage and notify subscribers
+  if (Array.isArray(normalizedData.matches) && normalizedData.matches.length > 0) {
+    try {
+      localStorage.setItem('jobMatches', JSON.stringify(normalizedData.matches));
+      sessionStorage.setItem('jobMatches', JSON.stringify(normalizedData.matches));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('jobMatchesUpdated', { detail: normalizedData.matches }));
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   return normalizedData;
+};
+
+/**
+ * Retrieve saved job matches from storage or onboarding state
+ * @returns {Array} List of matched jobs
+ */
+export const getStoredJobMatches = () => {
+  try {
+    const raw =
+      sessionStorage.getItem('jobMatches') ||
+      localStorage.getItem('jobMatches');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  try {
+    const rawState = sessionStorage.getItem('auto_job_apply_onboarding_state');
+    if (rawState) {
+      const state = JSON.parse(rawState);
+      if (Array.isArray(state?.matches) && state.matches.length > 0) {
+        return state.matches;
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return [];
 };
 
 /**
@@ -770,6 +817,7 @@ export default {
   getNByPlan,
   getUserId,
   uploadResume,
+  getStoredJobMatches,
   getResumes,
   downloadResume,
   deleteResume,
