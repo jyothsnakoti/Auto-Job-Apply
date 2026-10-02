@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
+import { getMoreJobsForResume, getPrimaryResumeId, getOnboardingState } from "../services/api";
 
 import googleLogo from "../assets/google.svg";
 import microsoftLogo from "../assets/microsoft.svg";
@@ -2281,6 +2282,14 @@ const BrowseJobs = () => {
                     <span>{isJobSaved ? "Saved" : "Save job"}</span>
                   </button>
 
+                  <button
+                    type="button"
+                    className="flex-1 h-[44px] rounded-[12px] bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-[13.5px] font-medium flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.99] transition-all cursor-pointer"
+                  >
+                    <span>Apply now</span>
+                    <span>→</span>
+                  </button>
+                </div>
                   <button
                     type="button"
                     className="flex-1 h-[44px] rounded-[12px] bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-[13.5px] font-medium flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.99] transition-all cursor-pointer"

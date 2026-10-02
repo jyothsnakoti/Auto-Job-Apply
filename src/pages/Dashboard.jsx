@@ -454,6 +454,68 @@ const recentApplications = [
   },
 ];
 
+const getMatchPercent = (job) => {
+  if (job?.overall_score !== undefined && job?.overall_score !== null) {
+    const num = Number(job.overall_score);
+    return isNaN(num) ? 0 : num;
+  }
+  if (job?.matchPercent !== undefined && job?.matchPercent !== null) {
+    return Number(job.matchPercent);
+  }
+  return 0;
+};
+
+const getMatchLabel = (job) => {
+  if (job?.overall_score !== undefined && job?.overall_score !== null) {
+    const num = Number(job.overall_score);
+    return `${Number.isInteger(num) ? num : num.toFixed(1)}% match`;
+  }
+  return job?.match || `${getMatchPercent(job)}% match`;
+};
+
+const getMatchBadgeColor = (percent) => {
+  if (percent >= 90) return "bg-[#ECFDF5] text-[#059669]";
+  if (percent >= 70) return "bg-[#EFF6FF] text-[#2563EB]";
+  if (percent >= 50) return "bg-[#FFFBEB] text-[#D97706]";
+  return "bg-[#FEF2F2] text-[#DC2626]";
+};
+
+const getMatchedSkills = (job) => {
+  if (job?.score_data?.match_details && Array.isArray(job.score_data.match_details)) {
+    return job.score_data.match_details
+      .map((m) => {
+        if (typeof m === "string") return m;
+        return m?.skill || m?.name || m?.keyword || m?.matched_skill || "";
+      })
+      .filter(Boolean);
+  }
+  if (job?.score_data?.matched_skills && Array.isArray(job.score_data.matched_skills)) {
+    return job.score_data.matched_skills;
+  }
+  return job?.requiredSkills || [];
+};
+
+const getMissingRequiredSkills = (job) => {
+  if (job?.score_data?.missing_required_skills && Array.isArray(job.score_data.missing_required_skills)) {
+    return job.score_data.missing_required_skills;
+  }
+  return [];
+};
+
+const getMissingPreferredSkills = (job) => {
+  if (job?.score_data?.missing_preferred_skills && Array.isArray(job.score_data.missing_preferred_skills)) {
+    return job.score_data.missing_preferred_skills;
+  }
+  return job?.preferredSkills || [];
+};
+
+const getMissingKeywords = (job) => {
+  if (job?.score_data?.missing_keywords && Array.isArray(job.score_data.missing_keywords)) {
+    return job.score_data.missing_keywords;
+  }
+  return [];
+};
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const [userName, setUserName] = useState("");
@@ -463,8 +525,10 @@ const Dashboard = () => {
   const [selectedJobModal, setSelectedJobModal] = useState(null);
   const [isJobSaved, setIsJobSaved] = useState(false);
 
-  // Jobs State (Fetched from resume match endpoint / storage)
+  // Dynamic Jobs & Browse Jobs Pagination State
   const [jobs, setJobs] = useState([]);
+  const [lastJobId, setLastJobId] = useState(null);
+  const [resumeId, setResumeId] = useState(null);
   const [isLoadingJobs, setIsLoadingJobs] = useState(false);
 
   // Enhance Resume States
@@ -492,6 +556,117 @@ const Dashboard = () => {
   const [selectedEmploymentTypes, setSelectedEmploymentTypes] = useState([]);
 
   const dropdownRef = useRef(null);
+
+  // Initialize Resume ID and any previously matched jobs from onboarding/profile state
+  useEffect(() => {
+    const initResumeAndJobs = async () => {
+      try {
+        const onboarding = getOnboardingState();
+        let activeResumeId = onboarding?.resumeId || null;
+
+        if (!activeResumeId) {
+          activeResumeId = await getPrimaryResumeId();
+        }
+
+        if (activeResumeId) {
+          setResumeId(activeResumeId);
+        }
+
+        if (Array.isArray(onboarding?.matches) && onboarding.matches.length > 0) {
+          setJobs(onboarding.matches);
+          const last = onboarding.matches[onboarding.matches.length - 1];
+          const cursor = last?.job_id || last?.id;
+          if (cursor) {
+            setLastJobId(cursor);
+          }
+          setHasLoadedInitialJobs(true);
+        }
+      } catch (err) {
+        console.warn("Could not initialize resume/jobs on Dashboard:", err);
+      }
+    };
+
+    initResumeAndJobs();
+  }, []);
+
+  const handleBrowseJobs = async () => {
+    if (isLoadingJobs) return;
+    setIsLoadingJobs(true);
+    setJobError(null);
+    setJobFeedbackMessage(null);
+
+    try {
+      let activeResumeId = resumeId;
+      if (!activeResumeId) {
+        activeResumeId = await getPrimaryResumeId();
+        if (activeResumeId) {
+          setResumeId(activeResumeId);
+        }
+      }
+
+      if (!activeResumeId) {
+        setJobError("No resume found. Please upload your resume to browse matching jobs.");
+        setIsLoadingJobs(false);
+        return;
+      }
+
+      // Determine dynamic last job ID cursor
+      let currentCursor = lastJobId;
+      if (!currentCursor && jobs.length > 0) {
+        const lastExisting = jobs[jobs.length - 1];
+        currentCursor = lastExisting?.job_id || lastExisting?.id || null;
+      }
+
+      console.log("[Dashboard] Calling getMoreJobsForResume with:", {
+        N: 10,
+        LastJDid: currentCursor || "",
+        top_k: 1000,
+        ResumeID: activeResumeId,
+      });
+
+      const result = await getMoreJobsForResume({
+        N: 10,
+        LastJDid: currentCursor || "",
+        top_k: 1000,
+        ResumeID: activeResumeId,
+      });
+
+      const newMatches = Array.isArray(result?.matches) ? result.matches : [];
+
+      if (newMatches.length === 0) {
+        if (jobs.length > 0) {
+          setJobFeedbackMessage("No more matching jobs found.");
+        } else {
+          setJobFeedbackMessage("No matching jobs found for your resume.");
+        }
+      } else {
+        setJobs((prevJobs) => {
+          // If previous jobs were static preview cards and not real API matches, replace them
+          const isPrevStatic = prevJobs.length > 0 && !prevJobs[0].job_id;
+          const baseJobs = isPrevStatic ? [] : prevJobs;
+          const existingIds = new Set(baseJobs.map((j) => j.job_id || j.id));
+          const filteredNew = newMatches.filter((m) => {
+            const id = m.job_id || m.id;
+            return id && !existingIds.has(id);
+          });
+          return [...baseJobs, ...filteredNew];
+        });
+
+        const lastMatch = newMatches[newMatches.length - 1];
+        const newCursor = lastMatch?.job_id || lastMatch?.id;
+        if (newCursor) {
+          setLastJobId(newCursor);
+        }
+        setHasLoadedInitialJobs(true);
+      }
+    } catch (err) {
+      console.error("Browse jobs error:", err);
+      setJobError("Unable to load more jobs. Please try again.");
+    } finally {
+      setIsLoadingJobs(false);
+    }
+  };
+
 
   // Fetch / Load Matched Jobs from resume matching source of truth
   useEffect(() => {
@@ -1662,6 +1837,183 @@ const Dashboard = () => {
               </div>
             </div>
 
+            {/* Error Message */}
+            {jobError && (
+              <div className="p-3.5 rounded-[12px] bg-red-50 border border-red-200 text-red-700 text-[13px] font-medium flex items-center justify-between gap-2 animate-in fade-in">
+                <span>{jobError}</span>
+                <button
+                  type="button"
+                  onClick={() => setJobError(null)}
+                  className="text-red-500 hover:text-red-700 font-bold ml-2 cursor-pointer"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+
+            {/* Feedback Message (e.g. No more matching jobs found) */}
+            {jobFeedbackMessage && (
+              <div className="p-3.5 rounded-[12px] bg-blue-50 border border-blue-200 text-blue-700 text-[13px] font-medium flex items-center justify-between gap-2 animate-in fade-in">
+                <span>{jobFeedbackMessage}</span>
+                <button
+                  type="button"
+                  onClick={() => setJobFeedbackMessage(null)}
+                  className="text-blue-500 hover:text-blue-700 font-bold ml-2 cursor-pointer"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+
+            {/* Job Cards Grid */}
+            {(() => {
+              const displayJobs = jobs.length > 0 ? jobs : (!hasLoadedInitialJobs ? topJobs : []);
+
+              if (displayJobs.length === 0) {
+                return (
+                  <div className="p-8 rounded-[16px] border border-dashed border-slate-200 bg-slate-50/50 flex flex-col items-center justify-center text-center gap-2">
+                    <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-1">
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <p className="text-[14px] font-semibold text-[#0F172A]">No more matching jobs found.</p>
+                    <p className="text-[12.5px] text-[#64748B]">Click &ldquo;Browse Jobs&rdquo; to find opportunities matched with your resume.</p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4.5 w-full">
+                  {displayJobs.map((job, idx) => {
+                    const scoreVal = getMatchPercent(job);
+                    const matchLabel = getMatchLabel(job);
+                    const matchColorClass = getMatchBadgeColor(scoreVal);
+                    const matchedSkills = getMatchedSkills(job);
+                    const missingRequired = getMissingRequiredSkills(job);
+                    const displayTitle = job.title || `Job Match #${idx + 1}`;
+                    const displayCompany =
+                      job.company ||
+                      (job.job_id
+                        ? `ID: ${job.job_id.length > 14 ? `${job.job_id.slice(0, 8)}...${job.job_id.slice(-4)}` : job.job_id}`
+                        : "Verified Match");
+
+                    return (
+                      <div
+                        key={job.job_id || job.id || `job-card-${idx}`}
+                        onClick={() => setSelectedJobModal(job)}
+                        className="bg-white rounded-[20px] border border-[#E2E8F0] p-5 flex flex-col justify-between shadow-[0_1px_3px_rgba(15,23,42,0.02)] hover:shadow-md hover:border-slate-300 transition-all duration-200 min-h-[230px] cursor-pointer group"
+                      >
+                        <div>
+                          {/* Top Header: Logo/Icon + Match Badge */}
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="w-[40px] h-[40px] rounded-[10px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2">
+                              {job.logo ? (
+                                <img
+                                  src={job.logo}
+                                  alt={job.company || "Job Logo"}
+                                  className="w-full h-full object-contain"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-[#4F46E5]">
+                                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                  </svg>
+                                </div>
+                              )}
+                            </div>
+                            <span
+                              className={`text-[12px] font-semibold px-2.5 py-0.5 rounded-full ${matchColorClass}`}
+                            >
+                              {matchLabel}
+                            </span>
+                          </div>
+
+                          {/* Job Title & Company */}
+                          <div className="mt-3.5">
+                            <h3 className="text-[15px] font-bold text-[#0F172A] tracking-tight leading-snug group-hover:text-[#4F46E5] transition-colors line-clamp-1">
+                              {displayTitle}
+                            </h3>
+                            <div
+                              className="flex items-center gap-1 text-[13px] text-[#64748B] font-normal mt-1 truncate"
+                              title={job.job_id || job.company}
+                            >
+                              <span className="truncate">{displayCompany}</span>
+                              {job.company && <VerifiedTick />}
+                            </div>
+                          </div>
+
+                          {/* Skills / Match Highlights or Location */}
+                          {matchedSkills.length > 0 ? (
+                            <div className="mt-3 flex flex-col gap-1.5">
+                              <div className="flex items-center gap-1 flex-wrap">
+                                {matchedSkills.slice(0, 3).map((skill, sIdx) => (
+                                  <span
+                                    key={`${skill}-${sIdx}`}
+                                    className="text-[11px] font-medium bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md truncate max-w-[110px]"
+                                  >
+                                    {skill}
+                                  </span>
+                                ))}
+                                {matchedSkills.length > 3 && (
+                                  <span className="text-[11px] font-medium text-[#64748B] bg-slate-50 px-1.5 py-0.5 rounded-md">
+                                    +{matchedSkills.length - 3}
+                                  </span>
+                                )}
+                              </div>
+                              {missingRequired.length > 0 && (
+                                <div className="text-[11.5px] text-[#DC2626] font-medium truncate">
+                                  Missing: {missingRequired.slice(0, 2).join(", ")}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            /* Fallback Location & Posted Date */
+                            <div className="mt-3 flex flex-col gap-1">
+                              <div className="flex items-center gap-1.5 text-[12.5px] text-[#64748B]">
+                                <img
+                                  src={mapIcon}
+                                  alt=""
+                                  className="w-[10px] h-[12px] object-contain shrink-0"
+                                />
+                                <span>{job.location || "Remote / Various"}</span>
+                              </div>
+                              <div className="text-[12px] text-[#94A3B8]">
+                                {job.posted || "AI Matched"}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex items-center gap-2.5 pt-4 mt-auto">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedJobModal(job);
+                            }}
+                            className="flex-1 h-[36px] rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] font-medium text-[#334155] hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-center"
+                          >
+                            View Details
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedJobModal(job);
+                            }}
+                            className="flex-1 h-[36px] rounded-[10px] bg-[#4F46E5] hover:bg-[#4338CA] text-[13px] font-medium text-white shadow-xs transition-colors cursor-pointer flex items-center justify-center active:scale-[0.99]"
+                          >
+                            Apply Now
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
             {/* Dynamic Job Cards Grid with Loading and Empty States */}
             {isLoadingJobs ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4.5 w-full">
@@ -2466,6 +2818,7 @@ const Dashboard = () => {
                     </div>
                   </div>
 
+                </div>
                 </div>
 
                 {/* Drawer Footer */}
