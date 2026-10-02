@@ -4,7 +4,6 @@ import { AlertCircle, Loader2 } from 'lucide-react';
 import AuthLayout from './AuthLayout';
 import { loginWithLinkedIn, getLinkedInConfig } from '../../services/authService';
 import { getBillingStatus } from '../../services/billingService';
-import { checkUserHasResume } from '../../services/resumeService';
 
 const LinkedInCallback = () => {
   const navigate = useNavigate();
@@ -92,26 +91,23 @@ const LinkedInCallback = () => {
         let hasActivePlan = false;
         try {
           const billing = await getBillingStatus(result.accessToken);
-          hasActivePlan = Boolean(billing && billing.hasPlan === true);
+          hasActivePlan = Boolean(
+            billing?.hasPlan === true ||
+            billing?.hasActivePlan === true ||
+            (typeof billing?.plan === 'string' && billing.plan.trim() !== '' && billing.plan.toLowerCase() !== 'none') ||
+            (typeof billing?.plancode === 'string' && billing.plancode.trim() !== '' && billing.plancode.toLowerCase() !== 'none') ||
+            (typeof billing?.planName === 'string' && billing.planName.trim() !== '' && !billing.planName.toLowerCase().includes('no active plan') && billing.planName.toLowerCase() !== 'none') ||
+            billing?.status === 'active' ||
+            billing?.status === 'trialing' ||
+            billing?.subscription?.status === 'active' ||
+            billing?.subscription?.status === 'trialing'
+          );
         } catch {
           hasActivePlan = false;
         }
 
         if (!hasActivePlan) {
           navigate('/plan', { replace: true });
-          return;
-        }
-
-        // Check if user has a resume
-        let hasResume = false;
-        try {
-          hasResume = await checkUserHasResume(result.accessToken);
-        } catch (resumeCheckErr) {
-          console.warn('Could not check user resume after LinkedIn login:', resumeCheckErr);
-        }
-
-        if (!hasResume) {
-          navigate('/resume-setup', { replace: true });
           return;
         }
 

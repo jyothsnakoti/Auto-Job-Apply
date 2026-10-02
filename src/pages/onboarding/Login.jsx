@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
 import AuthLayout from './AuthLayout';
-import { loginUser, getBillingStatus, initiateLinkedInAuth, checkUserHasResume } from '../../services/api';
+import { loginUser, getBillingStatus, initiateLinkedInAuth } from '../../services/api';
 
 const validateEmail = (email) => {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -78,46 +78,50 @@ const Login = () => {
     setIsSubmitting(true);
 
     try {
+      // 1. Hit Login Endpoint (POST /api/auth/login)
       const loginResult = await loginUser({
         email: emailTrimmed,
         password: password,
         rememberMe: formData.rememberMe,
       });
 
+      console.log('[Login] Login successful:', loginResult);
       const token = loginResult.accessToken;
 
-      // 1. Check whether user already has an active billing plan
+      // 2. Hit Billing Status Endpoint (GET /api/billing/status)
       let hasActivePlan = false;
       try {
         const billing = await getBillingStatus(token);
-        hasActivePlan = Boolean(billing && billing.hasPlan === true);
+        console.log('[Login] Billing status response:', billing);
+        hasActivePlan = Boolean(
+          billing?.hasPlan === true ||
+          billing?.hasActivePlan === true ||
+          (typeof billing?.plan === 'string' && billing.plan.trim() !== '' && billing.plan.toLowerCase() !== 'none') ||
+          (typeof billing?.plancode === 'string' && billing.plancode.trim() !== '' && billing.plancode.toLowerCase() !== 'none') ||
+          (typeof billing?.planName === 'string' && billing.planName.trim() !== '' && !billing.planName.toLowerCase().includes('no active plan') && billing.planName.toLowerCase() !== 'none') ||
+          billing?.status === 'active' ||
+          billing?.status === 'trialing' ||
+          billing?.subscription?.status === 'active' ||
+          billing?.subscription?.status === 'trialing'
+        );
       } catch (billingErr) {
-        console.warn('Could not fetch billing status:', billingErr);
+        console.warn('[Login] Could not fetch billing status:', billingErr);
+        hasActivePlan = false;
       }
 
+      // Navigate based on whether user has an active plan
       if (!hasActivePlan) {
-        // First-time or inactive user -> go to plan selection
+        // If no plan selected -> navigate to plans page
+        console.log('[Login] No plan selected -> navigating to /plan');
         navigate('/plan');
         return;
       }
 
-      // 2. Active plan exists -> Check whether user already has a resume
-      let hasResume = false;
-      try {
-        hasResume = await checkUserHasResume(token);
-      } catch (resumeCheckErr) {
-        console.warn('Could not verify user resume status:', resumeCheckErr);
-      }
-
-      if (!hasResume) {
-        // Has plan but no resume uploaded yet -> navigate to Resume Setup onboarding
-        navigate('/resume-setup');
-        return;
-      }
-
-      // 3. Has both plan and resume -> navigate directly to Dashboard
+      // If plan selected -> navigate to dashboard
+      console.log('[Login] Plan selected -> navigating to /dashboard');
       navigate('/dashboard');
     } catch (err) {
+      console.error('[Login] Submission error:', err);
       if (err.status === 401 || err.status === 403) {
         setError(err.message || 'Invalid email or password.');
       } else if (err.status === 404) {
