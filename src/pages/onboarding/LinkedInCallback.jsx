@@ -3,8 +3,6 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import AuthLayout from './AuthLayout';
 import { loginWithLinkedIn, getLinkedInConfig } from '../../services/authService';
-import { getBillingStatus } from '../../services/billingService';
-import { checkUserHasResume } from '../../services/resumeService';
 
 const LinkedInCallback = () => {
   const navigate = useNavigate();
@@ -76,7 +74,7 @@ const LinkedInCallback = () => {
 
       try {
         // 4. Exchange authorization code with backend POST /api/auth/linkedin
-        const result = await loginWithLinkedIn({
+        await loginWithLinkedIn({
           code,
           redirectUri: redirectUriToUse,
           rememberMe: savedRememberMe,
@@ -85,33 +83,6 @@ const LinkedInCallback = () => {
         // 5. Navigate using standard post-login flow
         if (savedReturnTo) {
           navigate(savedReturnTo, { replace: true });
-          return;
-        }
-
-        // Check if user already has an active billing plan
-        let hasActivePlan = false;
-        try {
-          const billing = await getBillingStatus(result.accessToken);
-          hasActivePlan = Boolean(billing && billing.hasPlan === true);
-        } catch {
-          hasActivePlan = false;
-        }
-
-        if (!hasActivePlan) {
-          navigate('/plan', { replace: true });
-          return;
-        }
-
-        // Check if user has a resume
-        let hasResume = false;
-        try {
-          hasResume = await checkUserHasResume(result.accessToken);
-        } catch (resumeCheckErr) {
-          console.warn('Could not check user resume after LinkedIn login:', resumeCheckErr);
-        }
-
-        if (!hasResume) {
-          navigate('/resume-setup', { replace: true });
           return;
         }
 

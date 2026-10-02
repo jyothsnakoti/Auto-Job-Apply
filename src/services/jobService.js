@@ -147,9 +147,13 @@ export const getMoreJobs = async (payload = {}) => {
 // Aliases for compatibility
 export const getNMoreJDsForResume = getMoreJobs;
 export const getMoreJDs = getMoreJobs;
+export const getMoreJobsForResume = getMoreJobs;
+export const getPrimaryResumeId = getStoredResumeId;
 
 export default {
   getMoreJobs,
+  getMoreJobsForResume,
+  getPrimaryResumeId,
   getNMoreJDsForResume,
   getMoreJDs,
   getLastJobId,

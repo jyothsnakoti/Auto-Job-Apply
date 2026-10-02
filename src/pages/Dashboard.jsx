@@ -11,7 +11,9 @@ import {
   getScoreForEnhancedResume,
   getCandidateId,
   getStoredResumeId,
-  getJobId
+  getJobId,
+  getMoreJobsForResume,
+  getPrimaryResumeId
 } from "../services/api";
 
 import dashboard1Icon from "../assets/dashboard1.svg";
@@ -530,6 +532,9 @@ const Dashboard = () => {
   const [lastJobId, setLastJobId] = useState(null);
   const [resumeId, setResumeId] = useState(null);
   const [isLoadingJobs, setIsLoadingJobs] = useState(false);
+  const [jobError, setJobError] = useState(null);
+  const [jobFeedbackMessage, setJobFeedbackMessage] = useState(null);
+  const [hasLoadedInitialJobs, setHasLoadedInitialJobs] = useState(false);
 
   // Enhance Resume States
   const [isEnhancing, setIsEnhancing] = useState(false);
@@ -1867,7 +1872,7 @@ const Dashboard = () => {
 
             {/* Job Cards Grid */}
             {(() => {
-              const displayJobs = jobs.length > 0 ? jobs : (!hasLoadedInitialJobs ? topJobs : []);
+              const displayJobs = filteredJobs;
 
               if (displayJobs.length === 0) {
                 return (
@@ -2818,7 +2823,6 @@ const Dashboard = () => {
                     </div>
                   </div>
 
-                </div>
                 </div>
 
                 {/* Drawer Footer */}

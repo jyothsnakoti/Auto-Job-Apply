@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
 import AuthLayout from './AuthLayout';
-import { loginUser, getBillingStatus, initiateLinkedInAuth, checkUserHasResume } from '../../services/api';
+import { loginUser, initiateLinkedInAuth } from '../../services/api';
 
 const validateEmail = (email) => {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -78,44 +78,13 @@ const Login = () => {
     setIsSubmitting(true);
 
     try {
-      const loginResult = await loginUser({
+      await loginUser({
         email: emailTrimmed,
         password: password,
         rememberMe: formData.rememberMe,
       });
 
-      const token = loginResult.accessToken;
-
-      // 1. Check whether user already has an active billing plan
-      let hasActivePlan = false;
-      try {
-        const billing = await getBillingStatus(token);
-        hasActivePlan = Boolean(billing && billing.hasPlan === true);
-      } catch (billingErr) {
-        console.warn('Could not fetch billing status:', billingErr);
-      }
-
-      if (!hasActivePlan) {
-        // First-time or inactive user -> go to plan selection
-        navigate('/plan');
-        return;
-      }
-
-      // 2. Active plan exists -> Check whether user already has a resume
-      let hasResume = false;
-      try {
-        hasResume = await checkUserHasResume(token);
-      } catch (resumeCheckErr) {
-        console.warn('Could not verify user resume status:', resumeCheckErr);
-      }
-
-      if (!hasResume) {
-        // Has plan but no resume uploaded yet -> navigate to Resume Setup onboarding
-        navigate('/resume-setup');
-        return;
-      }
-
-      // 3. Has both plan and resume -> navigate directly to Dashboard
+      // Existing user login successful -> navigate directly to Dashboard
       navigate('/dashboard');
     } catch (err) {
       if (err.status === 401 || err.status === 403) {

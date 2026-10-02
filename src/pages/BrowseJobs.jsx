@@ -2290,14 +2290,6 @@ const BrowseJobs = () => {
                     <span>→</span>
                   </button>
                 </div>
-                  <button
-                    type="button"
-                    className="flex-1 h-[44px] rounded-[12px] bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-[13.5px] font-medium flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.99] transition-all cursor-pointer"
-                  >
-                    <span>Apply now</span>
-                    <span>→</span>
-                  </button>
-                </div>
 
                 <p className="text-[11.5px] text-[#94A3B8] text-center">
                   Your application quota will be reserved before submission.
