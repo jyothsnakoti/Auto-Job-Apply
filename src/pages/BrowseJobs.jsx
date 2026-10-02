@@ -99,407 +99,6 @@ const experienceOptions = [
   "Lead / Principal (8+ yrs)",
 ];
 
-const initialJobs = [
-  {
-    id: 1,
-    title: "Software Engineer II",
-    company: "Google",
-    location: "Bengaluru, IN",
-    fullLocation: "Bengaluru, Karnataka, IN",
-    type: "Full-time",
-    workMode: "On-site",
-    department: "Software Engineering",
-    posted: "Posted 2 days ago",
-    match: "96% match",
-    matchPercent: 96,
-    matchColor: "bg-[#ECFDF5] text-[#059669]",
-    logo: googleLogo,
-    description:
-      "As a Software Engineer, you will design, develop, test, deploy and maintain software solutions that solve complex problems at scale. You will work with cross-functional teams to build products and services used by millions of users worldwide.",
-    responsibilities: [
-      "Design and develop scalable, reliable and efficient software systems",
-      "Collaborate with product, design and engineering teams",
-      "Write clean, maintainable and well-tested code",
-      "Participate in code reviews and technical discussions",
-      "Contribute to system design and architecture decisions",
-      "Improve existing systems for performance, scalability and reliability",
-    ],
-    requiredSkills: [
-      "Java",
-      "Python",
-      "C++",
-      "Data Structures",
-      "Algorithms",
-      "Software Development",
-    ],
-    preferredSkills: ["Distributed Systems", "Cloud", "SQL"],
-    experience: "2 – 6 years",
-  },
-  {
-    id: 2,
-    title: "Frontend Engineer",
-    company: "Microsoft",
-    location: "Hyderabad, IN",
-    fullLocation: "Hyderabad, Telangana, IN",
-    type: "Full-time",
-    workMode: "Hybrid",
-    department: "Frontend Engineering",
-    posted: "Posted 2 days ago",
-    match: "92% match",
-    matchPercent: 92,
-    matchColor: "bg-[#ECFDF5] text-[#059669]",
-    logo: microsoftLogo,
-    description:
-      "As a Frontend Engineer at Microsoft, you will architect and build highly intuitive, accessible, and responsive user interfaces that delight millions of enterprise and consumer users daily.",
-    responsibilities: [
-      "Develop responsive and accessible web applications using React, TypeScript, and modern web APIs",
-      "Partner with UX designers and product managers to iterate on product specs and wireframes",
-      "Ensure high performance, accessibility (a11y), and cross-browser compatibility across devices",
-      "Write comprehensive automated unit and integration tests",
-      "Champion code quality, review pull requests, and mentor junior engineers",
-    ],
-    requiredSkills: [
-      "React",
-      "TypeScript",
-      "JavaScript",
-      "HTML5/CSS3",
-      "Redux",
-      "Web Performance",
-    ],
-    preferredSkills: ["GraphQL", "Next.js", "Jest/Cypress"],
-    experience: "3 – 5 years",
-  },
-  {
-    id: 3,
-    title: "Software Development Engineer",
-    company: "Amazon",
-    location: "Bengaluru, IN",
-    fullLocation: "Bengaluru, Karnataka, IN",
-    type: "Full-time",
-    workMode: "On-site",
-    department: "Backend Engineering",
-    posted: "Posted 2 days ago",
-    match: "89% match",
-    matchPercent: 89,
-    matchColor: "bg-[#FFFBEB] text-[#D97706]",
-    logo: amazonLogo,
-    description:
-      "Join Amazon as an SDE to build and scale distributed web services that handle millions of transactions per second with ultra-low latency and high reliability.",
-    responsibilities: [
-      "Design and implement high-scale backend services using Java and AWS technologies",
-      "Own end-to-end service architecture, deployment pipelines, and operational readiness",
-      "Participate in design reviews, threat modeling, and reliability engineering",
-      "Collaborate with principal engineers to solve complex architectural challenges",
-    ],
-    requiredSkills: [
-      "Java",
-      "AWS",
-      "Distributed Systems",
-      "Microservices",
-      "Data Structures",
-    ],
-    preferredSkills: ["DynamoDB", "Kafka", "Docker/K8s"],
-    experience: "2 – 5 years",
-  },
-  {
-    id: 4,
-    title: "UI/UX Designer",
-    company: "Atlassian",
-    location: "Remote",
-    fullLocation: "Remote, Global",
-    type: "Full-time",
-    workMode: "Remote",
-    department: "Product Design",
-    posted: "Posted 2 days ago",
-    match: "87% match",
-    matchPercent: 87,
-    matchColor: "bg-[#FFFBEB] text-[#D97706]",
-    logo: aiLogo,
-    description:
-      "As a UI/UX Designer at Atlassian, you will craft seamless and intuitive collaboration workflows for Jira and Confluence, empowering agile teams across the globe.",
-    responsibilities: [
-      "Create high-fidelity wireframes, user journeys, prototypes, and UI specifications in Figma",
-      "Conduct qualitative and quantitative user research, usability tests, and design sprints",
-      "Collaborate with design system teams to maintain consistency with Atlassian Design Guidelines",
-      "Work closely with engineers during implementation to ensure design accuracy and polish",
-    ],
-    requiredSkills: [
-      "Figma",
-      "UI Design",
-      "User Research",
-      "Prototyping",
-      "Design Systems",
-    ],
-    preferredSkills: ["Design Tokens", "Accessibility", "Micro-interactions"],
-    experience: "2 – 4 years",
-  },
-  {
-    id: 5,
-    title: "Software Engineer II",
-    company: "Google",
-    location: "Bengaluru, IN",
-    fullLocation: "Bengaluru, Karnataka, IN",
-    type: "Full-time",
-    workMode: "On-site",
-    department: "Software Engineering",
-    posted: "Posted 2 days ago",
-    match: "96% match",
-    matchPercent: 96,
-    matchColor: "bg-[#ECFDF5] text-[#059669]",
-    logo: googleLogo,
-    description:
-      "As a Software Engineer, you will design, develop, test, deploy and maintain software solutions that solve complex problems at scale. You will work with cross-functional teams to build products and services used by millions of users worldwide.",
-    responsibilities: [
-      "Design and develop scalable, reliable and efficient software systems",
-      "Collaborate with product, design and engineering teams",
-      "Write clean, maintainable and well-tested code",
-      "Participate in code reviews and technical discussions",
-      "Contribute to system design and architecture decisions",
-      "Improve existing systems for performance, scalability and reliability",
-    ],
-    requiredSkills: [
-      "Java",
-      "Python",
-      "C++",
-      "Data Structures",
-      "Algorithms",
-      "Software Development",
-    ],
-    preferredSkills: ["Distributed Systems", "Cloud", "SQL"],
-    experience: "2 – 6 years",
-  },
-  {
-    id: 6,
-    title: "Frontend Engineer",
-    company: "Microsoft",
-    location: "Hyderabad, IN",
-    fullLocation: "Hyderabad, Telangana, IN",
-    type: "Full-time",
-    workMode: "Hybrid",
-    department: "Frontend Engineering",
-    posted: "Posted 2 days ago",
-    match: "92% match",
-    matchPercent: 92,
-    matchColor: "bg-[#ECFDF5] text-[#059669]",
-    logo: microsoftLogo,
-    description:
-      "As a Frontend Engineer at Microsoft, you will architect and build highly intuitive, accessible, and responsive user interfaces that delight millions of enterprise and consumer users daily.",
-    responsibilities: [
-      "Develop responsive and accessible web applications using React, TypeScript, and modern web APIs",
-      "Partner with UX designers and product managers to iterate on product specs and wireframes",
-      "Ensure high performance, accessibility (a11y), and cross-browser compatibility across devices",
-      "Write comprehensive automated unit and integration tests",
-      "Champion code quality, review pull requests, and mentor junior engineers",
-    ],
-    requiredSkills: [
-      "React",
-      "TypeScript",
-      "JavaScript",
-      "HTML5/CSS3",
-      "Redux",
-      "Web Performance",
-    ],
-    preferredSkills: ["GraphQL", "Next.js", "Jest/Cypress"],
-    experience: "3 – 5 years",
-  },
-  {
-    id: 7,
-    title: "Software Development Engineer",
-    company: "Amazon",
-    location: "Bengaluru, IN",
-    fullLocation: "Bengaluru, Karnataka, IN",
-    type: "Full-time",
-    workMode: "On-site",
-    department: "Backend Engineering",
-    posted: "Posted 2 days ago",
-    match: "89% match",
-    matchPercent: 89,
-    matchColor: "bg-[#FFFBEB] text-[#D97706]",
-    logo: amazonLogo,
-    description:
-      "Join Amazon as an SDE to build and scale distributed web services that handle millions of transactions per second with ultra-low latency and high reliability.",
-    responsibilities: [
-      "Design and implement high-scale backend services using Java and AWS technologies",
-      "Own end-to-end service architecture, deployment pipelines, and operational readiness",
-      "Participate in design reviews, threat modeling, and reliability engineering",
-      "Collaborate with principal engineers to solve complex architectural challenges",
-    ],
-    requiredSkills: [
-      "Java",
-      "AWS",
-      "Distributed Systems",
-      "Microservices",
-      "Data Structures",
-    ],
-    preferredSkills: ["DynamoDB", "Kafka", "Docker/K8s"],
-    experience: "2 – 5 years",
-  },
-  {
-    id: 8,
-    title: "UI/UX Designer",
-    company: "Atlassian",
-    location: "Remote",
-    fullLocation: "Remote, Global",
-    type: "Full-time",
-    workMode: "Remote",
-    department: "Product Design",
-    posted: "Posted 2 days ago",
-    match: "87% match",
-    matchPercent: 87,
-    matchColor: "bg-[#FFFBEB] text-[#D97706]",
-    logo: aiLogo,
-    description:
-      "As a UI/UX Designer at Atlassian, you will craft seamless and intuitive collaboration workflows for Jira and Confluence, empowering agile teams across the globe.",
-    responsibilities: [
-      "Create high-fidelity wireframes, user journeys, prototypes, and UI specifications in Figma",
-      "Conduct qualitative and quantitative user research, usability tests, and design sprints",
-      "Collaborate with design system teams to maintain consistency with Atlassian Design Guidelines",
-      "Work closely with engineers during implementation to ensure design accuracy and polish",
-    ],
-    requiredSkills: [
-      "Figma",
-      "UI Design",
-      "User Research",
-      "Prototyping",
-      "Design Systems",
-    ],
-    preferredSkills: ["Design Tokens", "Accessibility", "Micro-interactions"],
-    experience: "2 – 4 years",
-  },
-  {
-    id: 9,
-    title: "Software Engineer II",
-    company: "Google",
-    location: "Bengaluru, IN",
-    fullLocation: "Bengaluru, Karnataka, IN",
-    type: "Full-time",
-    workMode: "On-site",
-    department: "Software Engineering",
-    posted: "Posted 2 days ago",
-    match: "96% match",
-    matchPercent: 96,
-    matchColor: "bg-[#ECFDF5] text-[#059669]",
-    logo: googleLogo,
-    description:
-      "As a Software Engineer, you will design, develop, test, deploy and maintain software solutions that solve complex problems at scale. You will work with cross-functional teams to build products and services used by millions of users worldwide.",
-    responsibilities: [
-      "Design and develop scalable, reliable and efficient software systems",
-      "Collaborate with product, design and engineering teams",
-      "Write clean, maintainable and well-tested code",
-      "Participate in code reviews and technical discussions",
-      "Contribute to system design and architecture decisions",
-      "Improve existing systems for performance, scalability and reliability",
-    ],
-    requiredSkills: [
-      "Java",
-      "Python",
-      "C++",
-      "Data Structures",
-      "Algorithms",
-      "Software Development",
-    ],
-    preferredSkills: ["Distributed Systems", "Cloud", "SQL"],
-    experience: "2 – 6 years",
-  },
-  {
-    id: 10,
-    title: "Frontend Engineer",
-    company: "Microsoft",
-    location: "Hyderabad, IN",
-    fullLocation: "Hyderabad, Telangana, IN",
-    type: "Full-time",
-    workMode: "Hybrid",
-    department: "Frontend Engineering",
-    posted: "Posted 2 days ago",
-    match: "92% match",
-    matchPercent: 92,
-    matchColor: "bg-[#ECFDF5] text-[#059669]",
-    logo: microsoftLogo,
-    description:
-      "As a Frontend Engineer at Microsoft, you will architect and build highly intuitive, accessible, and responsive user interfaces that delight millions of enterprise and consumer users daily.",
-    responsibilities: [
-      "Develop responsive and accessible web applications using React, TypeScript, and modern web APIs",
-      "Partner with UX designers and product managers to iterate on product specs and wireframes",
-      "Ensure high performance, accessibility (a11y), and cross-browser compatibility across devices",
-      "Write comprehensive automated unit and integration tests",
-      "Champion code quality, review pull requests, and mentor junior engineers",
-    ],
-    requiredSkills: [
-      "React",
-      "TypeScript",
-      "JavaScript",
-      "HTML5/CSS3",
-      "Redux",
-      "Web Performance",
-    ],
-    preferredSkills: ["GraphQL", "Next.js", "Jest/Cypress"],
-    experience: "3 – 5 years",
-  },
-  {
-    id: 11,
-    title: "Software Development Engineer",
-    company: "Amazon",
-    location: "Bengaluru, IN",
-    fullLocation: "Bengaluru, Karnataka, IN",
-    type: "Full-time",
-    workMode: "On-site",
-    department: "Backend Engineering",
-    posted: "Posted 2 days ago",
-    match: "89% match",
-    matchPercent: 89,
-    matchColor: "bg-[#FFFBEB] text-[#D97706]",
-    logo: amazonLogo,
-    description:
-      "Join Amazon as an SDE to build and scale distributed web services that handle millions of transactions per second with ultra-low latency and high reliability.",
-    responsibilities: [
-      "Design and implement high-scale backend services using Java and AWS technologies",
-      "Own end-to-end service architecture, deployment pipelines, and operational readiness",
-      "Participate in design reviews, threat modeling, and reliability engineering",
-      "Collaborate with principal engineers to solve complex architectural challenges",
-    ],
-    requiredSkills: [
-      "Java",
-      "AWS",
-      "Distributed Systems",
-      "Microservices",
-      "Data Structures",
-    ],
-    preferredSkills: ["DynamoDB", "Kafka", "Docker/K8s"],
-    experience: "2 – 5 years",
-  },
-  {
-    id: 12,
-    title: "UI/UX Designer",
-    company: "Atlassian",
-    location: "Remote",
-    fullLocation: "Remote, Global",
-    type: "Full-time",
-    workMode: "Remote",
-    department: "Product Design",
-    posted: "Posted 2 days ago",
-    match: "87% match",
-    matchPercent: 87,
-    matchColor: "bg-[#FFFBEB] text-[#D97706]",
-    logo: aiLogo,
-    description:
-      "As a UI/UX Designer at Atlassian, you will craft seamless and intuitive collaboration workflows for Jira and Confluence, empowering agile teams across the globe.",
-    responsibilities: [
-      "Create high-fidelity wireframes, user journeys, prototypes, and UI specifications in Figma",
-      "Conduct qualitative and quantitative user research, usability tests, and design sprints",
-      "Collaborate with design system teams to maintain consistency with Atlassian Design Guidelines",
-      "Work closely with engineers during implementation to ensure design accuracy and polish",
-    ],
-    requiredSkills: [
-      "Figma",
-      "UI Design",
-      "User Research",
-      "Prototyping",
-      "Design Systems",
-    ],
-    preferredSkills: ["Design Tokens", "Accessibility", "Micro-interactions"],
-    experience: "2 – 4 years",
-  },
-];
 
 const cleanHtmlText = (text) => {
   if (!text) return "";
@@ -745,7 +344,7 @@ const BrowseJobs = () => {
   const [selectedJobModal, setSelectedJobModal] = useState(null);
   const [isJobSaved, setIsJobSaved] = useState(false);
 
-  // Dynamic Jobs State (loaded from storage if available, fallback to initialJobs)
+  // Dynamic Jobs State (loaded from storage if available, fallback to empty array)
   const [jobsList, setJobsList] = useState(() => {
     try {
       const stored = getStoredJobMatches();
@@ -756,9 +355,10 @@ const BrowseJobs = () => {
     } catch {
       // ignore
     }
-    return initialJobs;
+    return [];
   });
 
+  const [isLoadingJobs, setIsLoadingJobs] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState(null);
   const [hasMoreJobs, setHasMoreJobs] = useState(true);
@@ -789,7 +389,7 @@ const BrowseJobs = () => {
 
   const dropdownRef = useRef(null);
 
-  // Listen for jobMatches updates across the application
+  // Listen for jobMatches updates across the application & fetch dynamic jobs on mount if needed
   useEffect(() => {
     const handleJobMatchesUpdated = (e) => {
       if (e.detail && Array.isArray(e.detail) && e.detail.length > 0) {
@@ -801,6 +401,35 @@ const BrowseJobs = () => {
     };
 
     window.addEventListener("jobMatchesUpdated", handleJobMatchesUpdated);
+
+    // Initial fetch if list is empty and user has a resume uploaded
+    const resumeId = getStoredResumeId();
+    if (jobsList.length === 0 && resumeId) {
+      setIsLoadingJobs(true);
+      getMoreJobs({
+        N: 10,
+        LastJDid: '',
+        top_k: 1000,
+        ResumeID: resumeId,
+      })
+        .then((data) => {
+          if (data && Array.isArray(data.matches) && data.matches.length > 0) {
+            const transformed = data.matches
+              .map((m, idx) => transformMatchToJob(m, idx))
+              .filter(Boolean);
+            if (transformed.length > 0) {
+              setJobsList(transformed);
+            }
+          }
+        })
+        .catch((err) => {
+          console.error('[BrowseJobs] Error loading dynamic jobs on mount:', err);
+        })
+        .finally(() => {
+          setIsLoadingJobs(false);
+        });
+    }
+
     return () => {
       window.removeEventListener("jobMatchesUpdated", handleJobMatchesUpdated);
     };
@@ -1769,16 +1398,58 @@ const BrowseJobs = () => {
 
             return (
               <>
-                {filteredJobs.length === 0 ? (
+                {isLoadingJobs ? (
+                  <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-16 text-center flex flex-col items-center justify-center gap-3">
+                    <svg className="animate-spin h-8 w-8 text-[#4F46E5]" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                    </svg>
+                    <p className="text-[14px] font-medium text-slate-700">Finding matched jobs for your profile...</p>
+                  </div>
+                ) : filteredJobs.length === 0 ? (
                   <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-12 text-center flex flex-col items-center justify-center gap-3">
-                    <p className="text-[15px] font-semibold text-slate-700">No jobs match your filter criteria.</p>
-                    <button
-                      type="button"
-                      onClick={handleClear}
-                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-                    >
-                      Clear all filters
-                    </button>
+                    {jobsList.length === 0 ? (
+                      <>
+                        <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center text-[#4F46E5] mb-1">
+                          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                            <circle cx="11" cy="11" r="7" />
+                            <path d="m20 20-3.5-3.5" />
+                          </svg>
+                        </div>
+                        <p className="text-[15px] font-semibold text-slate-800">No matching jobs found yet</p>
+                        <p className="text-[13px] text-slate-500 max-w-sm">
+                          Upload your resume or click below to discover jobs matched specifically to your skills and experience.
+                        </p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <button
+                            type="button"
+                            onClick={handleLoadMoreJobs}
+                            disabled={isLoadingMore}
+                            className="px-4 py-2 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                          >
+                            Fetch Matched Jobs
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => navigate("/dashboard")}
+                            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                          >
+                            Go to Dashboard
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-[15px] font-semibold text-slate-700">No jobs match your filter criteria.</p>
+                        <button
+                          type="button"
+                          onClick={handleClear}
+                          className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                        >
+                          Clear all filters
+                        </button>
+                      </>
+                    )}
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4.5 w-full">
