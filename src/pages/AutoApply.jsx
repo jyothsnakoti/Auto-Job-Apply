@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
 
@@ -295,6 +296,7 @@ const VerifiedTick = () => (
 );
 
 const AutoApply = () => {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [selectedJobModal, setSelectedJobModal] = useState(null);
@@ -1462,8 +1464,8 @@ const AutoApply = () => {
           >
             {/* Modal Header */}
             <div className="p-6 pb-4 border-b border-slate-100 flex items-start justify-between gap-4">
-              <div className="flex items-start gap-3.5">
-                <div className="w-[46px] h-[46px] rounded-[12px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2.5 mt-0.5">
+              <div className="flex items-start gap-3.5 flex-1 min-w-0 pr-2">
+                <div className="w-[44px] h-[44px] rounded-[12px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2 mt-0.5">
                   <img
                     src={selectedJobModal.logo}
                     alt={selectedJobModal.company}
@@ -1471,38 +1473,49 @@ const AutoApply = () => {
                   />
                 </div>
 
-                <div className="flex flex-col">
-                  <h2 className="text-[19px] font-bold text-[#0F172A] tracking-tight leading-tight">
-                    {selectedJobModal.title}
+                <div className="flex flex-col flex-1 min-w-0">
+                  <h2 className="text-[17px] font-bold text-[#0F172A] tracking-tight leading-snug break-words">
+                    {typeof selectedJobModal.title === "string" ? selectedJobModal.title.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim() : selectedJobModal.title}
                   </h2>
 
-                  <div className="flex items-center gap-1.5 text-[14px] text-[#475569] font-medium mt-1">
-                    <span>{selectedJobModal.company}</span>
+                  <div className="flex items-center gap-1.5 text-[13.5px] text-[#475569] font-medium mt-1">
+                    <span className="truncate">{selectedJobModal.company}</span>
                     <VerifiedTick />
                   </div>
 
-                  <div className="flex items-center gap-2.5 text-[12.5px] text-[#64748B] mt-2 flex-wrap">
+                  <div className="flex items-center gap-2.5 text-[12px] text-[#64748B] mt-2 flex-wrap">
                     <span>{selectedJobModal.fullLocation || selectedJobModal.location}</span>
                     <span className="text-slate-300">•</span>
                     <span>{selectedJobModal.type || "Full-time"}</span>
                     <span className="text-slate-300">•</span>
                     <span>{selectedJobModal.workMode || "On-site"}</span>
-                    <span className="text-slate-300">•</span>
-                    <span>{selectedJobModal.department || "Software Engineering"}</span>
+                  </div>
+                  <div className="text-[12px] text-[#64748B] mt-1">
+                    {selectedJobModal.department || "Software Engineering"}
                   </div>
                 </div>
               </div>
 
-              {/* Close Button */}
-              <button
-                type="button"
-                onClick={() => setSelectedJobModal(null)}
-                className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+              {/* Right Actions (Close & Enhance Resume) */}
+              <div className="flex flex-col items-end justify-between self-stretch shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setSelectedJobModal(null)}
+                  className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => navigate("/resume-setup")}
+                  className="mt-2 bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-[13px] font-medium px-4 py-2 rounded-lg transition-colors cursor-pointer shadow-sm shrink-0 whitespace-nowrap"
+                >
+                  Enhance Resume
+                </button>
+              </div>
             </div>
 
             {/* Modal Scrollable Body */}

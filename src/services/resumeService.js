@@ -356,6 +356,18 @@ export const uploadResume = async (file, metadata = null, token = null, options 
 
   console.log('[resumeService] Normalized resume payload:', normalizedData);
 
+  // Persist resume_id to storage
+  if (normalizedData.resume_id) {
+    try {
+      localStorage.setItem('resume_id', normalizedData.resume_id);
+      sessionStorage.setItem('resume_id', normalizedData.resume_id);
+      localStorage.setItem('resumeId', normalizedData.resume_id);
+      sessionStorage.setItem('resumeId', normalizedData.resume_id);
+    } catch {
+      // ignore
+    }
+  }
+
   // Persist matched jobs to storage and notify subscribers
   if (Array.isArray(normalizedData.matches) && normalizedData.matches.length > 0) {
     try {

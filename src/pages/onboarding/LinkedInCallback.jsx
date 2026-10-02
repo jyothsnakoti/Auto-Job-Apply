@@ -3,7 +3,6 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import AuthLayout from './AuthLayout';
 import { loginWithLinkedIn, getLinkedInConfig } from '../../services/authService';
-import { getBillingStatus } from '../../services/billingService';
 
 const LinkedInCallback = () => {
   const navigate = useNavigate();
@@ -75,7 +74,7 @@ const LinkedInCallback = () => {
 
       try {
         // 4. Exchange authorization code with backend POST /api/auth/linkedin
-        const result = await loginWithLinkedIn({
+        await loginWithLinkedIn({
           code,
           redirectUri: redirectUriToUse,
           rememberMe: savedRememberMe,
@@ -84,30 +83,6 @@ const LinkedInCallback = () => {
         // 5. Navigate using standard post-login flow
         if (savedReturnTo) {
           navigate(savedReturnTo, { replace: true });
-          return;
-        }
-
-        // Check if user already has an active billing plan
-        let hasActivePlan = false;
-        try {
-          const billing = await getBillingStatus(result.accessToken);
-          hasActivePlan = Boolean(
-            billing?.hasPlan === true ||
-            billing?.hasActivePlan === true ||
-            (typeof billing?.plan === 'string' && billing.plan.trim() !== '' && billing.plan.toLowerCase() !== 'none') ||
-            (typeof billing?.plancode === 'string' && billing.plancode.trim() !== '' && billing.plancode.toLowerCase() !== 'none') ||
-            (typeof billing?.planName === 'string' && billing.planName.trim() !== '' && !billing.planName.toLowerCase().includes('no active plan') && billing.planName.toLowerCase() !== 'none') ||
-            billing?.status === 'active' ||
-            billing?.status === 'trialing' ||
-            billing?.subscription?.status === 'active' ||
-            billing?.subscription?.status === 'trialing'
-          );
-        } catch {
-          hasActivePlan = false;
-        }
-
-        if (!hasActivePlan) {
-          navigate('/plan', { replace: true });
           return;
         }
 

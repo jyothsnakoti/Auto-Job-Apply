@@ -175,43 +175,14 @@ export const RESUME_ENDPOINTS = {
     `${API_BASE_URL}/api/resumes/${id}/set-primary`,
 };
 
-/* =========================================================
-   ENHANCE RESUME ENDPOINTS
-   ========================================================= */
-
 export const ENHANCE_RESUME_ENDPOINTS = {
-  GET_ENHANCED_RESUME:
-    `${RESUME_API_BASE_URL}/api/v1/Get_EnhancedResume_for_PoorJDScore`,
-
-  GET_SCORE_FOR_ENHANCED_RESUME:
-    `${RESUME_API_BASE_URL}/api/v1/Get_Score_for_EnhancedResume`,
+  GET_ENHANCED_RESUME: `${RESUME_API_BASE_URL}/api/v1/Get_EnhancedResume_for_PoorJDScore`,
+  GET_SCORE_FOR_ENHANCED_RESUME: `${RESUME_API_BASE_URL}/api/v1/Get_Score_for_EnhancedResume`,
 };
-
-/* =========================================================
-   MORE JOBS ENDPOINTS
-   ========================================================= */
 
 export const MORE_JOBS_ENDPOINTS = {
-  GET_MORE_JDS:
-    `${RESUME_API_BASE_URL}/api/v1/Get_N_moreJDs_for_Res`,
+  GET_MORE_JDS: `${RESUME_API_BASE_URL}/api/v1/Get_N_moreJDs_for_Res`,
 };
-
-/* =========================================================
-   JOB ENDPOINTS
-   Alias kept for compatibility with existing code
-   ========================================================= */
-
-export const JOB_ENDPOINTS = {
-  GET_MORE_JOBS:
-    `${RESUME_API_BASE_URL}/api/v1/Get_N_moreJDs_for_Res`,
-
-  GET_N_JDS:
-    `${RESUME_API_BASE_URL}/api/v1/Get_N_JDs_for_Res`,
-};
-
-/* =========================================================
-   CENTRALIZED ENDPOINTS OBJECT
-   ========================================================= */
 
 export const ENDPOINTS = {
   BASE_URL: API_BASE_URL,
@@ -225,12 +196,9 @@ export const ENDPOINTS = {
   PROFILE: PROFILE_ENDPOINTS,
 
   RESUME: RESUME_ENDPOINTS,
-
   ENHANCE_RESUME: ENHANCE_RESUME_ENDPOINTS,
-
   MORE_JOBS: MORE_JOBS_ENDPOINTS,
-
-  JOB: JOB_ENDPOINTS,
 };
 
 export default ENDPOINTS;
+

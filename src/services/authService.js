@@ -371,6 +371,23 @@ export const loginUser = async ({ email, password, rememberMe = false }) => {
     storage.setItem('user', JSON.stringify(user));
     storage.setItem('userEmail', user.email || email.trim());
 
+    const candidateId =
+      data.candidate_id ||
+      data.candidateId ||
+      data.Candidateid ||
+      data.CandidateId ||
+      user?.candidate_id ||
+      user?.candidateId ||
+      user?.Candidateid ||
+      user?.id ||
+      user?.userId ||
+      user?.user_id;
+
+    if (candidateId) {
+      storage.setItem('candidateId', String(candidateId).trim());
+      storage.setItem('candidate_id', String(candidateId).trim());
+    }
+
     return { ...data, accessToken, refreshToken, user };
   } catch (error) {
     console.error('Login error:', error);

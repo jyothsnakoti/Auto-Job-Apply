@@ -1,178 +1,162 @@
-import axios from 'axios';
-import { JOB_ENDPOINTS } from './endpoints';
-import { getStoredTokens, apiClient } from './authService';
-import { getResumes } from './resumeService';
-import { getOnboardingState } from './onboardingService';
- 
+import { apiClient } from './authService';
+import { RESUME_API_BASE_URL } from './endpoints';
+import { getStoredResumeId } from './enhanceResumeService';
+import { getUserPlan, getNByPlan, getStoredJobMatches } from './resumeService';
+
 /**
- * Resolves the primary/default resume ID for the current authenticated user.
- * Tries:
- * 1. Onboarding state in sessionStorage (from recent upload)
- * 2. GET /api/resumes (inspecting isPrimary / primary / isDefault / default flags)
- * 3. Stored storage keys
- *
- * @param {string|null} [token] - Optional explicit access token
- * @returns {Promise<string|null>} Resolved resume ID string or null
+ * Endpoint for fetching additional matching Job Descriptions for a Resume
+ * POST https://fog-slacked-prankster.ngrok-free.dev/api/v1/Get_N_moreJDs_for_Res
  */
-export const getPrimaryResumeId = async (token = null) => {
-  // 1. Inspect onboarding state
-  try {
-    const onboarding = getOnboardingState();
-    if (onboarding?.resumeId) {
-      return String(onboarding.resumeId);
-    }
-  } catch {
-    // ignore
+export const GET_MORE_JOBS_URL = `${RESUME_API_BASE_URL || 'https://fog-slacked-prankster.ngrok-free.dev'}/api/v1/Get_N_moreJDs_for_Res`;
+
+/**
+ * Helper to extract the unique Job ID (LastJDid) from a job card or match object
+ * @param {Object|string} job
+ * @returns {string}
+ */
+export const getLastJobId = (job) => {
+  if (!job) return '';
+  if (typeof job === 'string') return job.trim();
+  return (
+    job.job_id ||
+    job.JDid ||
+    job.jd_id ||
+    job.rawMatch?.job_id ||
+    job.rawMatch?.JDid ||
+    job.id ||
+    ''
+  ).toString().trim();
+};
+
+/**
+ * Helper to get the last matched job ID from the provided list or stored matches
+ * @param {Array} [jobsList]
+ * @returns {string}
+ */
+export const getLastStoredJobId = (jobsList = null) => {
+  if (Array.isArray(jobsList) && jobsList.length > 0) {
+    return getLastJobId(jobsList[jobsList.length - 1]);
   }
- 
-  // 2. Fetch user's resumes from backend
-  try {
-    const data = await getResumes(token);
-    let list = [];
-    if (Array.isArray(data)) {
-      list = data;
-    } else if (data && Array.isArray(data.resumes)) {
-      list = data.resumes;
-    } else if (data && Array.isArray(data.data)) {
-      list = data.data;
-    } else if (data && (data.id || data.resumeId || data._id || data.resume_id)) {
-      list = [data];
-    }
- 
-    if (list.length > 0) {
-      // Find explicitly designated primary/default resume or fallback to the first
-      const primaryResume =
-        list.find(
-          (r) =>
-            r.isPrimary === true ||
-            r.primary === true ||
-            r.isDefault === true ||
-            r.default === true
-        ) || list[0];
- 
-      const id =
-        primaryResume?.id ??
-        primaryResume?.resumeId ??
-        primaryResume?.resume_id ??
-        primaryResume?._id ??
-        primaryResume?.fileId ??
-        primaryResume?.uuid;
- 
-      if (id !== undefined && id !== null && String(id).trim() !== '') {
-        return String(id).trim();
+  const stored = getStoredJobMatches();
+  if (Array.isArray(stored) && stored.length > 0) {
+    return getLastJobId(stored[stored.length - 1]);
+  }
+  return '';
+};
+
+/**
+ * Fetch more matching jobs for a given resume
+ * POST https://fog-slacked-prankster.ngrok-free.dev/api/v1/Get_N_moreJDs_for_Res
+ *
+ * @param {Object} [payload] - Optional payload overrides
+ * @param {number} [payload.N] - Number of jobs to fetch (default: 10 or based on user plan)
+ * @param {string} [payload.LastJDid] - ID of the last fetched job description
+ * @param {number} [payload.top_k] - Top K matches pool (default: 1000)
+ * @param {string} [payload.ResumeID] - Uploaded Resume ID
+ * @returns {Promise<Object>} Backend response { status: "success", matches: [...] }
+ */
+export const getMoreJobs = async (payload = {}) => {
+  // 1. Dynamically resolve ResumeID
+  const ResumeID =
+    payload?.ResumeID ||
+    payload?.resumeId ||
+    payload?.resume_id ||
+    getStoredResumeId();
+
+  if (!ResumeID) {
+    console.error('[jobService] ResumeID is missing. Make sure resume has been uploaded.');
+    throw new Error('Resume ID (ResumeID) is missing. Please upload a resume first.');
+  }
+
+  // 2. Dynamically resolve LastJDid from provided argument or storage
+  const LastJDid =
+    payload?.LastJDid ||
+    payload?.lastJDid ||
+    payload?.lastJobId ||
+    payload?.last_job_id ||
+    getLastStoredJobId();
+
+  // 3. Dynamically resolve batch size N (default 10 or plan limit)
+  const plan = getUserPlan();
+  const planN = getNByPlan(plan);
+  const N =
+    typeof payload?.N === 'number'
+      ? payload.N
+      : planN > 1
+      ? planN
+      : 10;
+
+  // 4. Resolve top_k (default 1000)
+  const top_k =
+    typeof payload?.top_k === 'number'
+      ? payload.top_k
+      : typeof payload?.topK === 'number'
+      ? payload.topK
+      : 1000;
+
+  const requestBody = {
+    N,
+    LastJDid: LastJDid || '',
+    top_k,
+    ResumeID,
+  };
+
+  console.log('[jobService] Calling Get_N_moreJDs_for_Res API:', {
+    endpoint: GET_MORE_JOBS_URL,
+    body: requestBody,
+  });
+
+  const response = await apiClient.post(GET_MORE_JOBS_URL, requestBody, {
+    headers: {
+      'ngrok-skip-browser-warning': 'true',
+      'Content-Type': 'application/json',
+    },
+  });
+
+  console.log('[jobService] Get_N_moreJDs_for_Res Response:', response.data);
+
+  const data = response.data || {};
+
+  // If response has new matches, sync/append to stored matches cache
+  if (Array.isArray(data.matches) && data.matches.length > 0) {
+    try {
+      const existing = getStoredJobMatches();
+      const existingIds = new Set(
+        existing.map((m) => m.job_id || m.JDid || m.id).filter(Boolean)
+      );
+      const newMatches = data.matches.filter(
+        (m) => !existingIds.has(m.job_id || m.JDid || m.id)
+      );
+      const updated = [...existing, ...newMatches];
+      localStorage.setItem('jobMatches', JSON.stringify(updated));
+      sessionStorage.setItem('jobMatches', JSON.stringify(updated));
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('jobMatchesUpdated', { detail: updated })
+        );
       }
+    } catch {
+      // ignore storage errors
     }
-  } catch (err) {
-    console.warn('[jobService] Could not resolve primary resume from API:', err);
   }
- 
-  // 3. Fallback to localStorage/sessionStorage
-  try {
-    const storedResumeId =
-      localStorage.getItem('resumeId') ||
-      sessionStorage.getItem('resumeId') ||
-      localStorage.getItem('primaryResumeId') ||
-      sessionStorage.getItem('primaryResumeId');
-    if (storedResumeId) return String(storedResumeId).trim();
-  } catch {
-    // ignore
-  }
- 
-  return null;
+
+  return data;
 };
- 
-/**
- * Fetch more job matches for a specific resume using dynamic pagination
- * Endpoint: POST https://fog-slacked-prankster.ngrok-free.dev/api/v1/Get_N_moreJDs_for_Res
- *
- * Request Body:
- * {
- *   "N": 10,
- *   "LastJDid": "<DYNAMIC_LAST_JOB_ID>",
- *   "top_k": 1000,
- *   "ResumeID": "<DYNAMIC_RESUME_ID>"
- * }
- *
- * @param {Object} params
- * @param {number} [params.N=10] - Number of jobs to fetch (default: 10)
- * @param {string|null} [params.LastJDid=null] - Dynamic cursor / last returned job ID
- * @param {number} [params.top_k=1000] - Matching pool size (default: 1000)
- * @param {string} params.ResumeID - Dynamic authenticated user's resume ID
- * @param {string|null} [token] - Optional explicit auth token
- * @returns {Promise<{ status: string, matches: Array }>}
- */
-export const getMoreJobsForResume = async ({
-  N = 10,
-  LastJDid = null,
-  top_k = 1000,
-  ResumeID,
-}, token = null) => {
-  if (!ResumeID && ResumeID !== 0) {
-    throw new Error('ResumeID is required to fetch job matches.');
-  }
- 
-  const payload = {
-    N: typeof N === 'number' ? N : parseInt(N, 10) || 10,
-    LastJDid: LastJDid ? String(LastJDid) : '',
-    top_k: typeof top_k === 'number' ? top_k : parseInt(top_k, 10) || 1000,
-    ResumeID: String(ResumeID),
-  };
- 
-  const { accessToken } = getStoredTokens();
-  const activeToken = token || accessToken;
- 
-  const headers = {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json, text/plain, */*',
-    'ngrok-skip-browser-warning': 'true',
-    ...(activeToken ? { Authorization: `Bearer ${activeToken}` } : {}),
-  };
- 
-  console.log(`[jobService] Fetching more jobs from: ${JOB_ENDPOINTS.GET_MORE_JOBS}`);
-  console.log('[jobService] Request payload:', payload);
- 
-  try {
-    const response = await axios.post(JOB_ENDPOINTS.GET_MORE_JOBS, payload, {
-      headers,
-    });
- 
-    console.log('[jobService] Response status:', response.status);
-    console.log('[jobService] Response data:', response.data);
- 
-    const data = response.data;
-    return {
-      status: data?.status || 'success',
-      matches: Array.isArray(data?.matches) ? data.matches : [],
-      data: data,
-    };
-  } catch (error) {
-    console.error('[jobService] Error fetching more jobs:', error);
- 
-    const backendMessage =
-      error.response?.data?.message ||
-      error.response?.data?.detail ||
-      error.response?.data?.error;
- 
-    let message = 'Unable to load more jobs. Please try again.';
- 
-    if (error.response?.status === 401) {
-      message = 'Your session has expired. Please log in again.';
-    } else if (error.response?.status === 403) {
-      message = backendMessage || 'Access denied. Please check your active subscription.';
-    } else if (error.response?.status === 404) {
-      message = backendMessage || 'No matching jobs found for this resume.';
-    } else if (backendMessage) {
-      message = backendMessage;
-    }
- 
-    const customErr = new Error(message);
-    customErr.status = error.response?.status || 0;
-    customErr.data = error.response?.data;
-    throw customErr;
-  }
-};
- 
+
+// Aliases for compatibility
+export const getNMoreJDsForResume = getMoreJobs;
+export const getMoreJDs = getMoreJobs;
+export const getMoreJobsForResume = getMoreJobs;
+export const getPrimaryResumeId = getStoredResumeId;
+
 export default {
-  getPrimaryResumeId,
+  getMoreJobs,
   getMoreJobsForResume,
+  getPrimaryResumeId,
+  getNMoreJDsForResume,
+  getMoreJDs,
+  getLastJobId,
+  getLastStoredJobId,
+  GET_MORE_JOBS_URL,
 };

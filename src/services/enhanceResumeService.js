@@ -2,26 +2,26 @@ import { apiClient } from './authService';
 import { RESUME_API_BASE_URL } from './endpoints';
 import { getStoredTokens, getStoredUser } from './authService';
 import { getOnboardingState } from './onboardingService';
- 
+
 /**
-* Endpoint for Resume Enhancement based on Job Description
-*/
+ * Endpoint for Resume Enhancement based on Job Description
+ */
 const ENHANCE_RESUME_URL = `${RESUME_API_BASE_URL || ''}/api/v1/Get_EnhancedResume_for_PoorJDScore`;
- 
+
 /**
-* Call the backend Enhance Resume API
-* POST /api/v1/Get_EnhancedResume_for_PoorJDScore
-*
-* @param {Object} payload - { JDid, Candidateid, ResumeID }
-* @returns {Promise<Object>} Enhanced resume response data
-*/
+ * Call the backend Enhance Resume API
+ * POST /api/v1/Get_EnhancedResume_for_PoorJDScore
+ *
+ * @param {Object} payload - { JDid, Candidateid, ResumeID }
+ * @returns {Promise<Object>} Enhanced resume response data
+ */
 export const getEnhancedResume = async (payload) => {
   if (!payload) {
     throw new Error('Payload is required for enhance resume request.');
   }
- 
+
   const { JDid, Candidateid, ResumeID } = payload;
- 
+
   if (!JDid) {
     throw new Error('Job ID (JDid) is missing.');
   }
@@ -31,7 +31,7 @@ export const getEnhancedResume = async (payload) => {
   if (!ResumeID) {
     throw new Error('Resume ID (ResumeID) is missing.');
   }
- 
+
   console.log('[enhanceResumeService] Calling Enhance Resume API:', {
     endpoint: ENHANCE_RESUME_URL,
     payload: {
@@ -40,7 +40,7 @@ export const getEnhancedResume = async (payload) => {
       ResumeID,
     },
   });
- 
+
   const response = await apiClient.post(
     ENHANCE_RESUME_URL,
     {
@@ -55,20 +55,20 @@ export const getEnhancedResume = async (payload) => {
       },
     }
   );
- 
+
   console.log('[enhanceResumeService] Enhance Resume API response:', response.data);
   return response.data;
 };
- 
+
 /**
-* Retrieve the logged-in candidate ID dynamically from existing authentication state.
-* Inspects:
-* 1. getStoredUser() object (candidateId, candidate_id, Candidateid, id, userId, user_id, sub)
-* 2. Decoded JWT access token
-* 3. Direct localStorage / sessionStorage keys
-*
-* @returns {string} Candidate ID
-*/
+ * Retrieve the logged-in candidate ID dynamically from existing authentication state.
+ * Inspects:
+ * 1. getStoredUser() object (candidateId, candidate_id, Candidateid, id, userId, user_id, sub)
+ * 2. Decoded JWT access token
+ * 3. Direct localStorage / sessionStorage keys
+ *
+ * @returns {string} Candidate ID
+ */
 export const getCandidateId = () => {
   // 1. Inspect getStoredUser()
   try {
@@ -90,7 +90,7 @@ export const getCandidateId = () => {
   } catch {
     // ignore
   }
- 
+
   // 2. Inspect direct candidateId storage keys
   try {
     const directCandidateId =
@@ -104,7 +104,7 @@ export const getCandidateId = () => {
   } catch {
     // ignore
   }
- 
+
   // 3. Decode JWT access token payload if available
   try {
     const { accessToken } = getStoredTokens();
@@ -137,7 +137,7 @@ export const getCandidateId = () => {
   } catch {
     // ignore
   }
- 
+
   // 4. Inspect direct general user ID keys
   try {
     const directUserId =
@@ -149,19 +149,19 @@ export const getCandidateId = () => {
   } catch {
     // ignore
   }
- 
+
   return '';
 };
- 
+
 /**
-* Retrieve the uploaded resume ID dynamically from onboarding Step 1 or existing resume state.
-* Inspects:
-* 1. Direct storage keys (resume_id, resumeId, ResumeID)
-* 2. Onboarding state
-* 3. Stored user object
-*
-* @returns {string} Resume ID
-*/
+ * Retrieve the uploaded resume ID dynamically from onboarding Step 1 or existing resume state.
+ * Inspects:
+ * 1. Direct storage keys (resume_id, resumeId, ResumeID)
+ * 2. Onboarding state
+ * 3. Stored user object
+ *
+ * @returns {string} Resume ID
+ */
 export const getStoredResumeId = () => {
   // 1. Direct storage keys
   try {
@@ -176,7 +176,7 @@ export const getStoredResumeId = () => {
   } catch {
     // ignore
   }
- 
+
   // 2. Onboarding state
   try {
     const onboarding = getOnboardingState();
@@ -191,7 +191,7 @@ export const getStoredResumeId = () => {
   } catch {
     // ignore
   }
- 
+
   // 3. Raw onboarding storage
   try {
     const raw =
@@ -209,7 +209,7 @@ export const getStoredResumeId = () => {
   } catch {
     // ignore
   }
- 
+
   // 4. Stored user object
   try {
     const user = getStoredUser();
@@ -225,15 +225,15 @@ export const getStoredResumeId = () => {
   } catch {
     // ignore
   }
- 
+
   return '';
 };
- 
+
 /**
-* Helper to extract the actual Job ID (JDid) from any job object
-* @param {Object} job
-* @returns {string}
-*/
+ * Helper to extract the actual Job ID (JDid) from any job object
+ * @param {Object} job
+ * @returns {string}
+ */
 export const getJobId = (job) => {
   if (!job) return '';
   const id =
@@ -245,7 +245,7 @@ export const getJobId = (job) => {
     job.id;
   return id ? String(id).trim() : '';
 };
- 
+
 export default {
   getEnhancedResume,
   getCandidateId,
