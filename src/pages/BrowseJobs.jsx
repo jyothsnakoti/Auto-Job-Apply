@@ -68,22 +68,35 @@ const employmentTypeOptions = [
   "Freelance",
 ];
 
-// Helper to clean raw HTML tags (&nbsp;, <br/>, <p>, etc.) and normalize whitespace
-const cleanHtmlText = (str) => {
-  if (!str || typeof str !== "string") return "";
-  return str
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/p>/gi, "\n\n")
-    .replace(/<\/?[^>]+(>|$)/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n\s*\n\s*\n+/g, "\n\n")
-    .trim();
+const degreeOptions = [
+  "Bachelor's Degree",
+  "Master's Degree",
+  "PhD",
+  "Associate Degree",
+  "No Degree Required",
+];
+
+const experienceOptions = [
+  "Entry Level (0-1 yrs)",
+  "Junior (1-3 yrs)",
+  "Mid-Level (3-5 yrs)",
+  "Senior (5-8 yrs)",
+  "Lead / Principal (8+ yrs)",
+];
+
+
+const cleanHtmlText = (text) => {
+  if (!text) return "";
+  let cleaned = String(text);
+  cleaned = cleaned.replace(/<[^>]*>/g, " ");
+  cleaned = cleaned.replace(/&nbsp;/gi, " ");
+  cleaned = cleaned.replace(/&amp;/gi, "&");
+  cleaned = cleaned.replace(/&lt;/gi, "<");
+  cleaned = cleaned.replace(/&gt;/gi, ">");
+  cleaned = cleaned.replace(/&quot;/gi, '"');
+  cleaned = cleaned.replace(/&#39;/gi, "'");
+  cleaned = cleaned.replace(/\s+/g, " ").trim();
+  return cleaned;
 };
 
 const extractCleanJobTitle = (rawTitle, rawText, index = 0) => {
@@ -354,9 +367,21 @@ const BrowseJobs = () => {
   const [selectedJobModal, setSelectedJobModal] = useState(null);
   const [isJobSaved, setIsJobSaved] = useState(false);
 
-  // Dynamic Jobs State (Loaded strictly from backend API / storage, zero static fallbacks)
-  const [jobsList, setJobsList] = useState([]);
-  const [isLoadingInitial, setIsLoadingInitial] = useState(true);
+  // Dynamic Jobs State (loaded from storage if available, fallback to empty array)
+  const [jobsList, setJobsList] = useState(() => {
+    try {
+      const stored = getStoredJobMatches();
+      if (Array.isArray(stored) && stored.length > 0) {
+        const transformed = stored.map((m, idx) => transformMatchToJob(m, idx)).filter(Boolean);
+        if (transformed.length > 0) return transformed;
+      }
+    } catch {
+      // ignore
+    }
+    return [];
+  });
+
+  const [isLoadingJobs, setIsLoadingJobs] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState(null);
   const [hasMoreJobs, setHasMoreJobs] = useState(true);
@@ -389,7 +414,7 @@ const BrowseJobs = () => {
 
   const dropdownRef = useRef(null);
 
-  // 1. Initial Load: Fetch matching jobs from API (POST /api/v1/Get_N_moreJDs_for_Res)
+  // Listen for jobMatches updates across the application & fetch dynamic jobs on mount if needed
   useEffect(() => {
     let isMounted = true;
 
@@ -530,7 +555,34 @@ const BrowseJobs = () => {
     };
 
     window.addEventListener("jobMatchesUpdated", handleJobMatchesUpdated);
-    window.addEventListener("storage", handleJobMatchesUpdated);
+
+    // Initial fetch if list is empty and user has a resume uploaded
+    const resumeId = getStoredResumeId();
+    if (jobsList.length === 0 && resumeId) {
+      setIsLoadingJobs(true);
+      getMoreJobs({
+        N: 10,
+        LastJDid: '',
+        top_k: 1000,
+        ResumeID: resumeId,
+      })
+        .then((data) => {
+          if (data && Array.isArray(data.matches) && data.matches.length > 0) {
+            const transformed = data.matches
+              .map((m, idx) => transformMatchToJob(m, idx))
+              .filter(Boolean);
+            if (transformed.length > 0) {
+              setJobsList(transformed);
+            }
+          }
+        })
+        .catch((err) => {
+          console.error('[BrowseJobs] Error loading dynamic jobs on mount:', err);
+        })
+        .finally(() => {
+          setIsLoadingJobs(false);
+        });
+    }
 
     return () => {
       isMounted = false;
@@ -1552,159 +1604,119 @@ const BrowseJobs = () => {
             </div>
           </div>
 
-          {/* Dynamic Job Cards Grid with Live API Loading, Empty and Error States */}
-          {isLoadingInitial ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4.5 w-full">
-              {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
-                <div
-                  key={n}
-                  className="bg-white rounded-[20px] border border-[#E2E8F0] p-5 flex flex-col justify-between min-h-[230px] animate-pulse"
-                >
-                  <div>
-                    <div className="flex items-center justify-between">
-                      <div className="w-[40px] h-[40px] rounded-[10px] bg-slate-100" />
-                      <div className="w-16 h-5 rounded-full bg-slate-100" />
-                    </div>
-                    <div className="mt-3.5 space-y-2">
-                      <div className="w-3/4 h-5 rounded bg-slate-100" />
-                      <div className="w-1/2 h-4 rounded bg-slate-100" />
-                    </div>
-                    <div className="mt-3 space-y-1">
-                      <div className="w-2/3 h-3.5 rounded bg-slate-100" />
-                      <div className="w-1/3 h-3 rounded bg-slate-100" />
-                    </div>
+          {/* Dynamic Job Cards Grid */}
+          {(() => {
+            const filteredJobs = jobsList.filter((job) => {
+              if (searchQuery) {
+                const q = searchQuery.toLowerCase();
+                const matchTitle = (job.title || "").toLowerCase().includes(q);
+                const matchComp = (job.company || "").toLowerCase().includes(q);
+                const matchDesc = (job.description || "").toLowerCase().includes(q);
+                const matchSkills = (job.requiredSkills || []).some((s) => s.toLowerCase().includes(q));
+                if (!matchTitle && !matchComp && !matchDesc && !matchSkills) return false;
+              }
+              if (selectedLocations.length > 0) {
+                const jobLoc = (job.location || job.fullLocation || "").toLowerCase();
+                const matchesLoc = selectedLocations.some((loc) => jobLoc.includes(loc.toLowerCase().split(",")[0]));
+                if (!matchesLoc) return false;
+              }
+              if (selectedCompanies.length > 0) {
+                const jobComp = (job.company || "").toLowerCase();
+                const matchesComp = selectedCompanies.some((comp) => jobComp.includes(comp.toLowerCase()));
+                if (!matchesComp) return false;
+              }
+              if (selectedWorkplace.length > 0) {
+                const jobMode = (job.workMode || "").toLowerCase();
+                const matchesWorkMode = selectedWorkplace.some((m) => jobMode.includes(m.toLowerCase()));
+                if (!matchesWorkMode) return false;
+              }
+              if (selectedJobTypes.length > 0) {
+                const jobType = (job.type || "").toLowerCase();
+                const matchesType = selectedJobTypes.some((t) => jobType.includes(t.toLowerCase()));
+                if (!matchesType) return false;
+              }
+              return true;
+            });
+
+            return (
+              <>
+                {isLoadingJobs ? (
+                  <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-16 text-center flex flex-col items-center justify-center gap-3">
+                    <svg className="animate-spin h-8 w-8 text-[#4F46E5]" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                    </svg>
+                    <p className="text-[14px] font-medium text-slate-700">Finding matched jobs for your profile...</p>
                   </div>
-                  <div className="flex gap-2 pt-4">
-                    <div className="flex-1 h-9 rounded-[10px] bg-slate-100" />
-                    <div className="flex-1 h-9 rounded-[10px] bg-slate-100" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : !hasResume ? (
-            <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-10 text-center flex flex-col items-center justify-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-[#EEF2FF] flex items-center justify-center text-[#4F46E5]">
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                  />
-                </svg>
-              </div>
-              <h3 className="text-base font-bold text-[#0F172A]">
-                Upload Resume to Browse Matched Jobs
-              </h3>
-              <p className="text-xs text-[#64748B] max-w-md">
-                Please upload your resume in Resume Setup so our matching engine can fetch live job opportunities tailored to your skillset.
-              </p>
-              <button
-                type="button"
-                onClick={() => navigate("/resume-setup")}
-                className="mt-2 px-5 py-2.5 text-xs font-semibold text-white bg-[#4F46E5] hover:bg-[#4338CA] rounded-[10px] shadow-xs transition-colors cursor-pointer"
-              >
-                Upload Resume
-              </button>
-            </div>
-          ) : jobsList.length === 0 ? (
-            <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-10 text-center flex flex-col items-center justify-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-400">
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                  />
-                </svg>
-              </div>
-              <h3 className="text-base font-bold text-[#0F172A]">
-                No Matching Jobs Found
-              </h3>
-              <p className="text-xs text-[#64748B] max-w-md">
-                We could not find matching jobs for your uploaded resume at this time. Click below to fetch new jobs from the matching service.
-              </p>
-              <button
-                type="button"
-                onClick={handleLoadMoreJobs}
-                disabled={isLoadingMore}
-                className="mt-2 px-5 py-2.5 text-xs font-semibold text-white bg-[#4F46E5] hover:bg-[#4338CA] rounded-[10px] shadow-xs transition-colors cursor-pointer"
-              >
-                {isLoadingMore ? "Fetching jobs..." : "Fetch Jobs from API"}
-              </button>
-            </div>
-          ) : filteredJobs.length === 0 ? (
-            <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-10 text-center flex flex-col items-center justify-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-400">
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                  />
-                </svg>
-              </div>
-              <h3 className="text-base font-bold text-[#0F172A]">
-                No Jobs Match Current Filters
-              </h3>
-              <p className="text-xs text-[#64748B] max-w-sm">
-                Try clearing or adjusting your search filters to view more matched jobs.
-              </p>
-              <button
-                type="button"
-                onClick={handleClear}
-                className="mt-1 px-4 py-2 text-xs font-semibold text-[#4F46E5] bg-[#EEF2FF] hover:bg-[#E0E7FF] rounded-[10px] transition-colors cursor-pointer"
-              >
-                Clear all filters
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4.5 w-full">
-                {filteredJobs.map((job, idx) => (
-                  <div
-                    key={job.id || job.job_id || `job-${idx}`}
-                    onClick={() => setSelectedJobModal(job)}
-                    className="bg-white rounded-[20px] border border-[#E2E8F0] p-5 flex flex-col justify-between shadow-[0_1px_3px_rgba(15,23,42,0.02)] hover:shadow-md hover:border-slate-300 transition-all duration-200 min-h-[230px] cursor-pointer group"
-                  >
-                    <div>
-                      {/* Top Header: Logo + Match Badge */}
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="w-[40px] h-[40px] rounded-[10px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2">
-                          <img
-                            src={job.logo || aiLogo}
-                            alt={job.company}
-                            className="w-full h-full object-contain"
-                          />
+                ) : filteredJobs.length === 0 ? (
+                  <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-12 text-center flex flex-col items-center justify-center gap-3">
+                    {jobsList.length === 0 ? (
+                      <>
+                        <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center text-[#4F46E5] mb-1">
+                          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                            <circle cx="11" cy="11" r="7" />
+                            <path d="m20 20-3.5-3.5" />
+                          </svg>
                         </div>
-                        <span
-                          className={`text-[12px] font-medium px-2.5 py-0.5 rounded-full ${
-                            job.matchColor || "bg-[#EEF2FF] text-[#4F46E5]"
-                          }`}
+                        <p className="text-[15px] font-semibold text-slate-800">No matching jobs found yet</p>
+                        <p className="text-[13px] text-slate-500 max-w-sm">
+                          Upload your resume or click below to discover jobs matched specifically to your skills and experience.
+                        </p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <button
+                            type="button"
+                            onClick={handleLoadMoreJobs}
+                            disabled={isLoadingMore}
+                            className="px-4 py-2 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                          >
+                            Fetch Matched Jobs
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => navigate("/dashboard")}
+                            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                          >
+                            Go to Dashboard
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-[15px] font-semibold text-slate-700">No jobs match your filter criteria.</p>
+                        <button
+                          type="button"
+                          onClick={handleClear}
+                          className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
                         >
-                          {job.match ||
-                            (job.matchPercent
-                              ? `${job.matchPercent}% match`
-                              : "ATS Match")}
-                        </span>
-                      </div>
+                          Clear all filters
+                        </button>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4.5 w-full">
+                    {filteredJobs.map((job, idx) => (
+                      <div
+                        key={job.id || job.job_id || `job-${idx}`}
+                        onClick={() => setSelectedJobModal(job)}
+                        className="bg-white rounded-[20px] border border-[#E2E8F0] p-5 flex flex-col justify-between shadow-[0_1px_3px_rgba(15,23,42,0.02)] hover:shadow-md hover:border-slate-300 transition-all duration-200 min-h-[230px] cursor-pointer group"
+                      >
+                        <div>
+                          {/* Top Header: Logo + Match Badge */}
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="w-[40px] h-[40px] rounded-[10px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2">
+                              <img
+                                src={job.logo || aiLogo}
+                                alt={job.company}
+                                className="w-full h-full object-contain"
+                              />
+                            </div>
+                            <span
+                              className={`text-[12px] font-medium px-2.5 py-0.5 rounded-full ${job.matchColor || "bg-[#EEF2FF] text-[#4F46E5]"}`}
+                            >
+                              {job.match || (job.matchPercent ? `${job.matchPercent}% match` : "ATS Match")}
+                            </span>
+                          </div>
 
                       {/* Job Title & Company */}
                       <div className="mt-3.5">
