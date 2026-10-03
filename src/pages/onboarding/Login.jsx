@@ -87,6 +87,7 @@ const Login = () => {
       // Existing user login successful -> navigate directly to Dashboard
       navigate('/dashboard');
     } catch (err) {
+      console.error('[Login] Submission error:', err);
       if (err.status === 401 || err.status === 403) {
         setError(err.message || 'Invalid email or password.');
       } else if (err.status === 404) {
