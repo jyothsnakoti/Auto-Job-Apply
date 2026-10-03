@@ -1,7 +1,118 @@
 import { apiClient } from './authService';
-import { RESUME_API_BASE_URL } from './endpoints';
+import { RESUME_API_BASE_URL, JOB_ENDPOINTS } from './endpoints';
 import { getStoredResumeId } from './enhanceResumeService';
 import { getUserPlan, getNByPlan, getStoredJobMatches } from './resumeService';
+
+export const JOBS_API_URL = JOB_ENDPOINTS?.LIST || '/api/jobs';
+
+/**
+ * GET /api/jobs
+ * List ONLY the authenticated user’s stored job matches at or above the configured minimum ATS score.
+ *
+ * Authorization: Bearer access JWT (Injected automatically by apiClient)
+ * Request: No body; optional URL query parameters.
+ *
+ * @param {Object} [params]
+ * @param {string} [params.q] - Keyword search
+ * @param {string} [params.location] - Location query
+ * @param {string} [params.role] - Role query
+ * @param {string} [params.workplace] - 'remote', 'on-site', 'hybrid'
+ * @param {string} [params.employmentType] - 'full-time', 'part-time', 'contract', 'internship', 'freelance'
+ * @param {number|string|Array} [params.companyId] - Company ID(s)
+ * @param {number} [params.postedWithinDays] - Positive integer (e.g. 7, 14, 30)
+ * @param {string} [params.sort='best_match'] - 'best_match' (highest ATS score first) or 'newest' (newest first)
+ * @param {number} [params.page=0] - 0-indexed page number
+ * @param {number} [params.size=20] - Page size (1 to 50, default 20)
+ * @returns {Promise<{ items: Array, page: number, size: number, totalItems: number, totalPages: number }>}
+ */
+export const getJobs = async (params = {}) => {
+  // Clean and prepare query parameters
+  const queryParams = {};
+
+  if (params.q && typeof params.q === 'string' && params.q.trim()) {
+    queryParams.q = params.q.trim();
+  }
+  if (params.location && typeof params.location === 'string' && params.location.trim()) {
+    queryParams.location = params.location.trim();
+  }
+  if (params.role && typeof params.role === 'string' && params.role.trim()) {
+    queryParams.role = params.role.trim();
+  }
+  if (params.workplace && typeof params.workplace === 'string' && params.workplace.trim()) {
+    queryParams.workplace = params.workplace.trim();
+  }
+  if (params.employmentType && typeof params.employmentType === 'string' && params.employmentType.trim()) {
+    queryParams.employmentType = params.employmentType.trim();
+  }
+  if (params.companyId !== undefined && params.companyId !== null && params.companyId !== '') {
+    queryParams.companyId = params.companyId;
+  }
+  if (typeof params.postedWithinDays === 'number' && params.postedWithinDays > 0) {
+    queryParams.postedWithinDays = params.postedWithinDays;
+  } else if (
+    typeof params.postedWithinDays === 'string' &&
+    !isNaN(parseInt(params.postedWithinDays, 10)) &&
+    parseInt(params.postedWithinDays, 10) > 0
+  ) {
+    queryParams.postedWithinDays = parseInt(params.postedWithinDays, 10);
+  }
+
+  // Sort: sort=newest orders by newest posting first; any other sort including default best_match orders by highest ATS score first
+  if (params.sort && typeof params.sort === 'string') {
+    queryParams.sort = params.sort.trim();
+  } else {
+    queryParams.sort = 'best_match';
+  }
+
+  // Page starts at 0
+  const page = typeof params.page === 'number' && params.page >= 0 ? params.page : 0;
+  queryParams.page = page;
+
+  // Size: default size=20, minimum 1, maximum 50
+  let size = 20;
+  if (typeof params.size === 'number' && !isNaN(params.size)) {
+    size = Math.min(50, Math.max(1, params.size));
+  }
+  queryParams.size = size;
+
+  console.log('[jobService] Calling GET /api/jobs with params:', queryParams);
+
+  const response = await apiClient.get(JOBS_API_URL, {
+    params: queryParams,
+  });
+
+  console.log('[jobService] GET /api/jobs Response:', response.data);
+
+  const data = response.data || {};
+  const items = Array.isArray(data.items)
+    ? data.items
+    : Array.isArray(data.matches)
+    ? data.matches
+    : Array.isArray(data)
+    ? data
+    : [];
+
+  const responsePage = typeof data.page === 'number' ? data.page : page;
+  const responseSize = typeof data.size === 'number' ? data.size : size;
+  const totalItems = typeof data.totalItems === 'number' ? data.totalItems : items.length;
+  const totalPages =
+    typeof data.totalPages === 'number'
+      ? data.totalPages
+      : Math.max(1, Math.ceil(totalItems / (responseSize || 20)));
+
+  return {
+    items,
+    page: responsePage,
+    size: responseSize,
+    totalItems,
+    totalPages,
+    raw: data,
+  };
+};
+
+export const fetchJobs = getJobs;
+export const fetchStoredJobs = getJobs;
+export const listJobs = getJobs;
 
 /**
  * Endpoint for fetching additional matching Job Descriptions for a Resume
@@ -151,6 +262,11 @@ export const getMoreJobsForResume = getMoreJobs;
 export const getPrimaryResumeId = getStoredResumeId;
 
 export default {
+  getJobs,
+  fetchJobs,
+  fetchStoredJobs,
+  listJobs,
+  JOBS_API_URL,
   getMoreJobs,
   getMoreJobsForResume,
   getPrimaryResumeId,

@@ -153,10 +153,9 @@ const extractCleanJobTitle = (rawTitle, rawText, index = 0) => {
   let title = cleanHtmlText(rawTitle || "");
   const text = cleanHtmlText(rawText || "");
 
-  // If title is already clean, concise (<= 55 chars) and doesn't look like a long unparsed sentence
   if (
     title &&
-    title.length <= 55 &&
+    title.length <= 90 &&
     !title.toLowerCase().startsWith("the ") &&
     !title.toLowerCase().includes("is looking for") &&
     !title.toLowerCase().includes("we are looking") &&
@@ -254,10 +253,15 @@ const extractCleanCompany = (rawCompany, rawText) => {
 const transformMatchToJob = (match, index = 0) => {
   if (!match) return null;
 
-  const rawText = match.full_jd_text || match.preview || match.description || "";
+  const rawText = match.full_jd_text || match.description || match.preview || "";
   const cleanedFullText = cleanHtmlText(rawText);
 
-  const title = extractCleanJobTitle(match.title || match.job_title || match.role, rawText, index);
+  // Field 'preview' from API payload contains the job title
+  const title = extractCleanJobTitle(
+    match.preview || match.title || match.job_title || match.role,
+    rawText,
+    index
+  );
   const company = extractCleanCompany(match.company || match.company_name, rawText);
 
   const rawScore =

@@ -327,17 +327,24 @@ export const uploadResume = async (file, metadata = null, token = null, options 
 
   // 5. Construct URL with dynamic query parameters
   const baseUrl = RESUME_ENDPOINTS.UPLOAD;
-  const url = new URL(baseUrl);
-  url.searchParams.set('N', String(N));
-  url.searchParams.set('top_k', String(top_k));
-  url.searchParams.set('user_id', String(userId));
-  const fullEndpoint = url.toString();
+  let fullEndpoint = baseUrl;
+  try {
+    const origin = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : 'http://localhost';
+    const url = new URL(baseUrl, origin);
+    if (N) url.searchParams.set('N', String(N));
+    if (top_k) url.searchParams.set('top_k', String(top_k));
+    if (userId) url.searchParams.set('user_id', String(userId));
+    fullEndpoint = baseUrl.startsWith('http') ? url.toString() : `${url.pathname}${url.search}`;
+  } catch {
+    fullEndpoint = baseUrl;
+  }
 
   console.log(`[resumeService] Uploading resume to: ${fullEndpoint}`);
   console.log(`[resumeService] Plan: "${plan}" -> N: ${N}, top_k: ${top_k}, user_id: "${userId}"`);
 
-  // 6. Build multipart/form-data with field name 'resume_file'
+  // 6. Build multipart/form-data
   const formData = new FormData();
+  formData.append('file', file);
   formData.append('resume_file', file);
 
   if (metadata) {

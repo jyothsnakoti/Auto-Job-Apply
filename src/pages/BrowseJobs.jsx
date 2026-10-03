@@ -1,17 +1,12 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
-import { getMoreJobsForResume, getPrimaryResumeId, getOnboardingState } from "../services/api";
-
-import googleLogo from "../assets/google.svg";
-import microsoftLogo from "../assets/microsoft.svg";
-import amazonLogo from "../assets/amazon.svg";
-import shopifyLogo from "../assets/shopify.svg";
-import aiLogo from "../assets/ai.svg";
-import mapIcon from "../assets/map.svg";
-import tickIcon from "../assets/tick.svg";
 import {
+  getJobs,
+  getMoreJobsForResume,
+  getPrimaryResumeId,
+  getOnboardingState,
   getMoreJobs,
   getNMoreJDsForResume,
   getStoredResumeId,
@@ -21,6 +16,14 @@ import {
   getJobId,
   getScoreForEnhancedResume,
 } from "../services/api";
+
+import googleLogo from "../assets/google.svg";
+import microsoftLogo from "../assets/microsoft.svg";
+import amazonLogo from "../assets/amazon.svg";
+import shopifyLogo from "../assets/shopify.svg";
+import aiLogo from "../assets/ai.svg";
+import mapIcon from "../assets/map.svg";
+import tickIcon from "../assets/tick.svg";
 
 const dateOptions = [
   "Last 6 hours",
@@ -42,6 +45,7 @@ const locationOptions = [
   "San Francisco, US",
   "New York, US",
   "London, UK",
+  "Austin, TX",
 ];
 
 const workplaceOptions = ["On-site", "Hybrid", "Remote"];
@@ -99,7 +103,6 @@ const experienceOptions = [
   "Lead / Principal (8+ yrs)",
 ];
 
-
 const cleanHtmlText = (text) => {
   if (!text) return "";
   let cleaned = String(text);
@@ -114,13 +117,35 @@ const cleanHtmlText = (text) => {
   return cleaned;
 };
 
+const formatPostedDate = (postedAt) => {
+  if (!postedAt) return "Recent match";
+  try {
+    const date = new Date(postedAt);
+    if (isNaN(date.getTime())) return String(postedAt);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    if (diffMs < 0) return "Just now";
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 0) {
+      if (diffHours <= 1) return "Just now";
+      return `${diffHours} hours ago`;
+    }
+    if (diffDays === 1) return "1 day ago";
+    if (diffDays < 7) return `${diffDays} days ago`;
+    return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  } catch {
+    return String(postedAt);
+  }
+};
+
 const extractCleanJobTitle = (rawTitle, rawText, index = 0) => {
   let title = cleanHtmlText(rawTitle || "");
   const text = cleanHtmlText(rawText || "");
 
   if (
     title &&
-    title.length <= 55 &&
+    title.length <= 90 &&
     !title.toLowerCase().startsWith("the ") &&
     !title.toLowerCase().includes("is looking for") &&
     !title.toLowerCase().includes("we are looking") &&
@@ -214,22 +239,29 @@ const extractCleanCompany = (rawCompany, rawText) => {
 const transformMatchToJob = (match, index = 0) => {
   if (!match) return null;
 
-  const rawText = match.full_jd_text || match.preview || match.description || "";
+  const rawText = match.full_jd_text || match.description || match.preview || "";
   const cleanedFullText = cleanHtmlText(rawText);
 
-  const title = extractCleanJobTitle(match.title || match.job_title || match.role, rawText, index);
-  const company = extractCleanCompany(match.company || match.company_name, rawText);
+  // Field 'title' from GET /api/jobs or 'preview' from legacy matching API
+  const rawTitle = match.title || match.preview || match.job_title || match.role || "";
+  const title = extractCleanJobTitle(rawTitle, rawText, index);
+
+  const rawCompany = match.companyName || match.company || match.company_name || "";
+  const company = extractCleanCompany(rawCompany, rawText);
+  const companyDomain = match.companyDomain || match.domain || "";
 
   const rawScore =
-    typeof match.overall_score === "number"
+    match.matchScore !== undefined && match.matchScore !== null
+      ? match.matchScore
+      : typeof match.overall_score === "number"
       ? match.overall_score
       : typeof match.score_data?.overall_score === "number"
-        ? match.score_data.overall_score
-        : typeof match.score === "number"
-          ? match.score
-          : (typeof match.overall_score === "string" && !isNaN(Number(match.overall_score)) && match.overall_score.trim() !== "")
-            ? Number(match.overall_score)
-            : null;
+      ? match.score_data.overall_score
+      : typeof match.score === "number"
+      ? match.score
+      : typeof match.overall_score === "string" && !isNaN(Number(match.overall_score)) && match.overall_score.trim() !== ""
+      ? Number(match.overall_score)
+      : null;
 
   const matchPercent =
     rawScore !== null && !isNaN(rawScore)
@@ -238,14 +270,15 @@ const transformMatchToJob = (match, index = 0) => {
 
   // Pick logo based on company
   let logo = aiLogo;
-  const compLower = company.toLowerCase();
+  const compLower = (company || "").toLowerCase();
   if (compLower.includes("google")) logo = googleLogo;
   else if (compLower.includes("microsoft")) logo = microsoftLogo;
   else if (compLower.includes("amazon") || compLower.includes("luna")) logo = amazonLogo;
   else if (compLower.includes("shopify")) logo = shopifyLogo;
 
-  // Location
+  // Location & Country
   let location = cleanHtmlText(match.location || match.city || "");
+  const country = cleanHtmlText(match.country || "");
   if (!location && cleanedFullText) {
     const locMatch = cleanedFullText.match(/(?:location|place|city)\s*[:-]\s*([^\n\r]+)/i);
     if (locMatch && locMatch[1] && locMatch[1].trim().length <= 40) {
@@ -253,25 +286,37 @@ const transformMatchToJob = (match, index = 0) => {
     }
   }
   if (!location) {
-    location = "Remote / Flexible";
+    location = country || "Remote / Flexible";
   }
+  const fullLocation = [location, country].filter(Boolean).join(", ");
+
+  // Workplace & Employment Type
+  const rawWorkplace = match.workplace || match.workMode || match.work_mode || (location.toLowerCase().includes("remote") ? "Remote" : "On-site");
+  const workplace = cleanHtmlText(rawWorkplace);
+
+  const rawEmploymentType = match.employmentType || match.type || match.employment_type || "Full-time";
+  const employmentType = cleanHtmlText(rawEmploymentType);
+
+  // Posted At
+  const posted = match.postedAt ? formatPostedDate(match.postedAt) : cleanHtmlText(match.posted || "Recent match");
 
   // Skills
   const requiredSkills =
     Array.isArray(match.requiredSkills) && match.requiredSkills.length > 0
       ? match.requiredSkills.map(cleanHtmlText)
       : Array.isArray(match.skills) && match.skills.length > 0
-        ? match.skills.map(cleanHtmlText)
-        : Array.isArray(match.extracted_skills) && match.extracted_skills.length > 0
-          ? match.extracted_skills.map(cleanHtmlText)
-          : [];
+      ? match.skills.map(cleanHtmlText)
+      : Array.isArray(match.extracted_skills) && match.extracted_skills.length > 0
+      ? match.extracted_skills.map(cleanHtmlText)
+      : [];
 
   const preferredSkills =
     Array.isArray(match.preferredSkills) && match.preferredSkills.length > 0
       ? match.preferredSkills.map(cleanHtmlText)
       : [];
 
-  let matchText = matchPercent !== null ? `${matchPercent}% match` : "ATS Match";
+  const displayScore = rawScore !== null && !Number.isInteger(rawScore) ? Number(rawScore).toFixed(1) : matchPercent;
+  let matchText = matchPercent !== null ? `${displayScore}% match` : "ATS Match";
   let matchColor = "bg-[#EEF2FF] text-[#4F46E5]";
   if (matchPercent !== null) {
     if (matchPercent < 70) {
@@ -283,7 +328,9 @@ const transformMatchToJob = (match, index = 0) => {
     }
   }
 
-  let description = cleanHtmlText(match.description || match.preview || (match.full_jd_text ? match.full_jd_text.slice(0, 400) + "..." : ""));
+  let description = cleanHtmlText(
+    match.description || match.preview || (match.full_jd_text ? match.full_jd_text.slice(0, 400) + "..." : "")
+  );
   if (!description) {
     description = "Job description available upon viewing details.";
   }
@@ -301,21 +348,30 @@ const transformMatchToJob = (match, index = 0) => {
     }
   }
 
+  const id = match.jobId || match.job_id || match.id || match.JDid || `job-${index + 1}`;
+
   return {
-    id: match.job_id || match.id || `match-${index + 1}`,
-    job_id: match.job_id || match.id || `match-${index + 1}`,
-    JDid: match.job_id || match.id || `match-${index + 1}`,
+    id,
+    jobId: id,
+    job_id: id,
+    JDid: id,
     title,
     company,
+    companyDomain,
     location,
-    fullLocation: cleanHtmlText(match.fullLocation || location),
-    type: cleanHtmlText(match.type || match.employment_type || "Full-time"),
-    workMode: cleanHtmlText(match.workMode || match.work_mode || (location.toLowerCase().includes("remote") ? "Remote" : "On-site")),
+    country,
+    fullLocation,
+    type: employmentType,
+    employmentType,
+    workMode: workplace,
+    workplace,
     department: cleanHtmlText(match.department || "Engineering"),
-    posted: cleanHtmlText(match.posted || "Recent match"),
+    posted,
+    postedAt: match.postedAt || null,
     match: matchText,
     matchPercent,
     rawScore,
+    matchScore: rawScore,
     matchColor,
     logo: match.logo || logo,
     description,
@@ -344,7 +400,7 @@ const BrowseJobs = () => {
   const [selectedJobModal, setSelectedJobModal] = useState(null);
   const [isJobSaved, setIsJobSaved] = useState(false);
 
-  // Dynamic Jobs State (loaded from storage if available, fallback to empty array)
+  // Dynamic Jobs State
   const [jobsList, setJobsList] = useState(() => {
     try {
       const stored = getStoredJobMatches();
@@ -358,10 +414,18 @@ const BrowseJobs = () => {
     return [];
   });
 
-  const [isLoadingJobs, setIsLoadingJobs] = useState(false);
+  const [isLoadingJobs, setIsLoadingJobs] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState(null);
+  const [fetchError, setFetchError] = useState(null);
   const [hasMoreJobs, setHasMoreJobs] = useState(true);
+
+  // Pagination & Sorting State for GET /api/jobs
+  const [currentPage, setCurrentPage] = useState(0);
+  const [pageSize] = useState(20);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [sortOption, setSortOption] = useState("best_match"); // 'best_match' or 'newest'
 
   // Enhance Resume States
   const [isEnhancing, setIsEnhancing] = useState(false);
@@ -389,103 +453,134 @@ const BrowseJobs = () => {
 
   const dropdownRef = useRef(null);
 
-  // Listen for jobMatches updates across the application & fetch dynamic jobs on mount if needed
-  useEffect(() => {
-    const handleJobMatchesUpdated = (e) => {
-      if (e.detail && Array.isArray(e.detail) && e.detail.length > 0) {
-        const transformed = e.detail.map((m, idx) => transformMatchToJob(m, idx)).filter(Boolean);
-        if (transformed.length > 0) {
-          setJobsList(transformed);
-        }
+  /**
+   * Main function to fetch stored job matches from GET /api/jobs
+   */
+  const fetchJobsData = useCallback(
+    async ({
+      page = 0,
+      resetList = true,
+      customQuery = null,
+      customSort = null,
+      overrideFilters = null,
+    } = {}) => {
+      if (resetList) {
+        setIsLoadingJobs(true);
+      } else {
+        setIsLoadingMore(true);
       }
+      setLoadMoreError(null);
+      setFetchError(null);
+
+      try {
+        const q = customQuery !== null ? customQuery : searchQuery;
+        const sort = customSort !== null ? customSort : sortOption;
+
+        const activeLocs = overrideFilters?.locations ?? selectedLocations;
+        const activeRoles = overrideFilters?.roles ?? selectedRoles;
+        const activeWorkplaces = overrideFilters?.workplace ?? selectedWorkplace;
+        const activeJobTypes = overrideFilters?.jobTypes ?? selectedJobTypes;
+        const activeEmpTypes = overrideFilters?.employmentTypes ?? selectedEmploymentTypes;
+        const activeDate = overrideFilters?.date ?? selectedDate;
+
+        // Convert activeDate to postedWithinDays
+        let postedWithinDays = undefined;
+        if (activeDate === "Last 6 hours" || activeDate === "Last 24 hours") {
+          postedWithinDays = 1;
+        } else if (activeDate === "Last 7 days") {
+          postedWithinDays = 7;
+        } else if (activeDate === "Last 14 days") {
+          postedWithinDays = 14;
+        } else if (activeDate === "Last 30 days") {
+          postedWithinDays = 30;
+        }
+
+        const params = {
+          q: q ? q.trim() : undefined,
+          location: activeLocs.length > 0 ? activeLocs[0] : undefined,
+          role: activeRoles.length > 0 ? activeRoles[0] : undefined,
+          workplace: activeWorkplaces.length > 0 ? activeWorkplaces[0].toLowerCase() : undefined,
+          employmentType: activeEmpTypes.length > 0
+            ? activeEmpTypes[0].toLowerCase()
+            : activeJobTypes.length > 0
+            ? activeJobTypes[0].toLowerCase()
+            : undefined,
+          postedWithinDays,
+          sort: sort || "best_match",
+          page,
+          size: pageSize || 20,
+        };
+
+        console.log("[BrowseJobs] Fetching jobs via GET /api/jobs with params:", params);
+        const res = await getJobs(params);
+
+        const items = res?.items || [];
+        const transformed = items.map((m, idx) => transformMatchToJob(m, page * pageSize + idx)).filter(Boolean);
+
+        const resPage = res?.page ?? page;
+        const resTotalItems = res?.totalItems ?? items.length;
+        const resTotalPages = res?.totalPages ?? Math.max(1, Math.ceil(resTotalItems / (pageSize || 20)));
+
+        setCurrentPage(resPage);
+        setTotalItems(resTotalItems);
+        setTotalPages(resTotalPages);
+
+        if (resetList) {
+          setJobsList(transformed);
+        } else {
+          setJobsList((prev) => {
+            const existingIds = new Set(prev.map((j) => j.job_id || j.jobId || j.id || j.JDid));
+            const fresh = transformed.filter((j) => !existingIds.has(j.job_id || j.jobId || j.id || j.JDid));
+            return [...prev, ...fresh];
+          });
+        }
+
+        const hasMore = resPage + 1 < resTotalPages && items.length > 0;
+        setHasMoreJobs(hasMore);
+      } catch (err) {
+        console.error("[BrowseJobs] Error fetching jobs from GET /api/jobs:", err);
+        const msg = err?.response?.data?.message || err?.message || "Unable to load jobs. Please try again.";
+        setFetchError(msg);
+        if (!resetList) {
+          setLoadMoreError(msg);
+        }
+      } finally {
+        setIsLoadingJobs(false);
+        setIsLoadingMore(false);
+      }
+    },
+    [
+      searchQuery,
+      sortOption,
+      selectedLocations,
+      selectedRoles,
+      selectedWorkplace,
+      selectedJobTypes,
+      selectedEmploymentTypes,
+      selectedDate,
+      pageSize,
+    ]
+  );
+
+  // Trigger GET /api/jobs immediately when component mounts
+  useEffect(() => {
+    fetchJobsData({ page: 0, resetList: true });
+
+    const handleJobMatchesUpdated = () => {
+      fetchJobsData({ page: 0, resetList: true });
     };
 
     window.addEventListener("jobMatchesUpdated", handleJobMatchesUpdated);
-
-    // Initial fetch if list is empty and user has a resume uploaded
-    const resumeId = getStoredResumeId();
-    if (jobsList.length === 0 && resumeId) {
-      setIsLoadingJobs(true);
-      getMoreJobs({
-        N: 10,
-        LastJDid: '',
-        top_k: 1000,
-        ResumeID: resumeId,
-      })
-        .then((data) => {
-          if (data && Array.isArray(data.matches) && data.matches.length > 0) {
-            const transformed = data.matches
-              .map((m, idx) => transformMatchToJob(m, idx))
-              .filter(Boolean);
-            if (transformed.length > 0) {
-              setJobsList(transformed);
-            }
-          }
-        })
-        .catch((err) => {
-          console.error('[BrowseJobs] Error loading dynamic jobs on mount:', err);
-        })
-        .finally(() => {
-          setIsLoadingJobs(false);
-        });
-    }
-
     return () => {
       window.removeEventListener("jobMatchesUpdated", handleJobMatchesUpdated);
     };
   }, []);
 
-  // Handle Load More Jobs from Backend API (POST /api/v1/Get_N_moreJDs_for_Res)
+  // Handle Load More Jobs (increments page for GET /api/jobs)
   const handleLoadMoreJobs = async () => {
     if (isLoadingMore || !hasMoreJobs) return;
-    setIsLoadingMore(true);
-    setLoadMoreError(null);
-    try {
-      // Find the last job ID from the current jobs list
-      const lastJob = jobsList[jobsList.length - 1];
-      const LastJDid = lastJob ? (lastJob.job_id || lastJob.JDid || lastJob.id || '') : '';
-      const ResumeID = getStoredResumeId();
-
-      console.log('[BrowseJobs] Calling Get_N_moreJDs_for_Res with payload:', {
-        N: 10,
-        LastJDid,
-        top_k: 1000,
-        ResumeID,
-      });
-
-      const data = await getMoreJobs({
-        N: 10,
-        LastJDid,
-        top_k: 1000,
-        ResumeID,
-      });
-
-      console.log('[BrowseJobs] Get_N_moreJDs_for_Res response:', data);
-
-      if (data && Array.isArray(data.matches) && data.matches.length > 0) {
-        const newJobs = data.matches
-          .map((m, idx) => transformMatchToJob(m, jobsList.length + idx))
-          .filter(Boolean);
-
-        setJobsList((prev) => {
-          const existingIds = new Set(prev.map((j) => j.job_id || j.JDid || j.id));
-          const fresh = newJobs.filter((j) => !existingIds.has(j.job_id || j.JDid || j.id));
-          return [...prev, ...fresh];
-        });
-
-        if (data.matches.length < 10) {
-          setHasMoreJobs(false);
-        }
-      } else {
-        setHasMoreJobs(false);
-        setLoadMoreError('No additional job matches found at this time.');
-      }
-    } catch (err) {
-      console.error('[BrowseJobs] Error loading more jobs:', err);
-      setLoadMoreError(err?.message || 'Unable to load more jobs. Please try again.');
-    } finally {
-      setIsLoadingMore(false);
-    }
+    const nextPage = currentPage + 1;
+    await fetchJobsData({ page: nextPage, resetList: false });
   };
 
   // Enhance Resume Action Handler
@@ -645,6 +740,21 @@ const BrowseJobs = () => {
     setSelectedJobTypes([]);
     setSponsorsVisa(false);
     setSelectedEmploymentTypes([]);
+    setSortOption("best_match");
+    fetchJobsData({
+      page: 0,
+      resetList: true,
+      customQuery: "",
+      customSort: "best_match",
+      overrideFilters: {
+        locations: [],
+        roles: [],
+        workplace: [],
+        jobTypes: [],
+        employmentTypes: [],
+        date: "Last 7 days",
+      },
+    });
   };
 
   const toggleDropdown = (name) => {
@@ -703,6 +813,11 @@ const BrowseJobs = () => {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      fetchJobsData({ page: 0, resetList: true });
+                    }
+                  }}
                   placeholder="Search by title or keyword..."
                   className="w-full bg-transparent border-none text-[13.5px] text-[#0F172A] placeholder:text-[#94A3B8] outline-none"
                 />
@@ -719,7 +834,8 @@ const BrowseJobs = () => {
 
               <button
                 type="button"
-                className="h-[40px] px-5 text-[13.5px] font-semibold text-[#1E293B] bg-[#F1F5F9] hover:bg-[#E2E8F0] rounded-[10px] active:scale-[0.99] transition-all cursor-pointer whitespace-nowrap"
+                onClick={() => fetchJobsData({ page: 0, resetList: true })}
+                className="h-[40px] px-5 text-[13.5px] font-semibold text-white bg-[#4F46E5] hover:bg-[#4338CA] rounded-[10px] active:scale-[0.99] transition-all cursor-pointer whitespace-nowrap shadow-2xs"
               >
                 Apply
               </button>
@@ -1359,43 +1475,96 @@ const BrowseJobs = () => {
                   </div>
                 )}
               </div>
+
+              {/* 11. Sort Dropdown (Best Match vs Newest) */}
+              <div className="relative sm:ml-auto">
+                <button
+                  type="button"
+                  onClick={() => toggleDropdown("sort")}
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+                    activeDropdown === "sort" || sortOption !== "best_match"
+                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                  }`}
+                >
+                  <span className="text-[#64748B]">Sort:</span>
+                  <span className="font-semibold text-[#0F172A]">
+                    {sortOption === "newest" ? "Newest First" : "Best ATS Match"}
+                  </span>
+                  <svg
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
+                      activeDropdown === "sort" ? "rotate-180" : ""
+                    }`}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                  >
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </button>
+
+                {activeDropdown === "sort" && (
+                  <div className="absolute top-full right-0 mt-2 w-[190px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2 z-50 flex flex-col gap-0.5">
+                    <div
+                      onClick={() => {
+                        setSortOption("best_match");
+                        setActiveDropdown(null);
+                        fetchJobsData({ page: 0, resetList: true, customSort: "best_match" });
+                      }}
+                      className={`flex items-center justify-between px-3 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] ${
+                        sortOption === "best_match"
+                          ? "font-semibold text-[#0F172A] bg-slate-50"
+                          : "text-slate-700"
+                      }`}
+                    >
+                      <span>Best ATS Match</span>
+                      {sortOption === "best_match" && (
+                        <span className="text-[#4F46E5] text-xs font-bold">✓</span>
+                      )}
+                    </div>
+                    <div
+                      onClick={() => {
+                        setSortOption("newest");
+                        setActiveDropdown(null);
+                        fetchJobsData({ page: 0, resetList: true, customSort: "newest" });
+                      }}
+                      className={`flex items-center justify-between px-3 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] ${
+                        sortOption === "newest"
+                          ? "font-semibold text-[#0F172A] bg-slate-50"
+                          : "text-slate-700"
+                      }`}
+                    >
+                      <span>Newest First</span>
+                      {sortOption === "newest" && (
+                        <span className="text-[#4F46E5] text-xs font-bold">✓</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
+          {/* Error Banner */}
+          {fetchError && (
+            <div className="p-4 rounded-[14px] bg-rose-50 border border-rose-200 text-rose-800 text-[13px] font-medium flex items-center justify-between gap-3 animate-in fade-in">
+              <div className="flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-rose-600 text-white flex items-center justify-center text-[11px] font-bold shrink-0">!</span>
+                <span>{fetchError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => fetchJobsData({ page: 0, resetList: true })}
+                className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold cursor-pointer shrink-0 transition-colors"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+
           {/* Dynamic Job Cards Grid */}
           {(() => {
-            const filteredJobs = jobsList.filter((job) => {
-              if (searchQuery) {
-                const q = searchQuery.toLowerCase();
-                const matchTitle = (job.title || "").toLowerCase().includes(q);
-                const matchComp = (job.company || "").toLowerCase().includes(q);
-                const matchDesc = (job.description || "").toLowerCase().includes(q);
-                const matchSkills = (job.requiredSkills || []).some((s) => s.toLowerCase().includes(q));
-                if (!matchTitle && !matchComp && !matchDesc && !matchSkills) return false;
-              }
-              if (selectedLocations.length > 0) {
-                const jobLoc = (job.location || job.fullLocation || "").toLowerCase();
-                const matchesLoc = selectedLocations.some((loc) => jobLoc.includes(loc.toLowerCase().split(",")[0]));
-                if (!matchesLoc) return false;
-              }
-              if (selectedCompanies.length > 0) {
-                const jobComp = (job.company || "").toLowerCase();
-                const matchesComp = selectedCompanies.some((comp) => jobComp.includes(comp.toLowerCase()));
-                if (!matchesComp) return false;
-              }
-              if (selectedWorkplace.length > 0) {
-                const jobMode = (job.workMode || "").toLowerCase();
-                const matchesWorkMode = selectedWorkplace.some((m) => jobMode.includes(m.toLowerCase()));
-                if (!matchesWorkMode) return false;
-              }
-              if (selectedJobTypes.length > 0) {
-                const jobType = (job.type || "").toLowerCase();
-                const matchesType = selectedJobTypes.some((t) => jobType.includes(t.toLowerCase()));
-                if (!matchesType) return false;
-              }
-              return true;
-            });
-
             return (
               <>
                 {isLoadingJobs ? (
@@ -1404,60 +1573,47 @@ const BrowseJobs = () => {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
                     </svg>
-                    <p className="text-[14px] font-medium text-slate-700">Finding matched jobs for your profile...</p>
+                    <p className="text-[14px] font-medium text-slate-700">Loading stored job matches from server...</p>
                   </div>
-                ) : filteredJobs.length === 0 ? (
+                ) : jobsList.length === 0 ? (
                   <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-12 text-center flex flex-col items-center justify-center gap-3">
-                    {jobsList.length === 0 ? (
-                      <>
-                        <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center text-[#4F46E5] mb-1">
-                          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                            <circle cx="11" cy="11" r="7" />
-                            <path d="m20 20-3.5-3.5" />
-                          </svg>
-                        </div>
-                        <p className="text-[15px] font-semibold text-slate-800">No matching jobs found yet</p>
-                        <p className="text-[13px] text-slate-500 max-w-sm">
-                          Upload your resume or click below to discover jobs matched specifically to your skills and experience.
-                        </p>
-                        <div className="flex items-center gap-2 mt-2">
-                          <button
-                            type="button"
-                            onClick={handleLoadMoreJobs}
-                            disabled={isLoadingMore}
-                            className="px-4 py-2 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-                          >
-                            Fetch Matched Jobs
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => navigate("/dashboard")}
-                            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-                          >
-                            Go to Dashboard
-                          </button>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <p className="text-[15px] font-semibold text-slate-700">No jobs match your filter criteria.</p>
-                        <button
-                          type="button"
-                          onClick={handleClear}
-                          className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-                        >
-                          Clear all filters
-                        </button>
-                      </>
-                    )}
+                    <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center text-[#4F46E5] mb-1">
+                      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <circle cx="11" cy="11" r="7" />
+                        <path d="m20 20-3.5-3.5" />
+                      </svg>
+                    </div>
+                    <p className="text-[16px] font-bold text-slate-800">No stored job matches found</p>
+                    <p className="text-[13px] text-slate-500 max-w-md leading-relaxed">
+                      Matches can be empty until asynchronous processing finishes or if no jobs meet the configured minimum ATS score.
+                    </p>
+                    <div className="flex items-center gap-2.5 mt-2">
+                      <button
+                        type="button"
+                        onClick={() => fetchJobsData({ page: 0, resetList: true })}
+                        className="px-4 py-2 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-semibold rounded-xl transition-colors cursor-pointer shadow-xs flex items-center gap-1.5"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        <span>Refresh Matches</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleClear}
+                        className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
+                      >
+                        Clear Filters
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4.5 w-full">
-                    {filteredJobs.map((job, idx) => (
+                    {jobsList.map((job, idx) => (
                       <div
-                        key={job.id || job.job_id || `job-${idx}`}
+                        key={job.id || job.job_id || job.jobId || `job-${idx}`}
                         onClick={() => setSelectedJobModal(job)}
-                        className="bg-white rounded-[20px] border border-[#E2E8F0] p-5 flex flex-col justify-between shadow-[0_1px_3px_rgba(15,23,42,0.02)] hover:shadow-md hover:border-slate-300 transition-all duration-200 min-h-[230px] cursor-pointer group"
+                        className="bg-white rounded-[20px] border border-[#E2E8F0] p-5 flex flex-col justify-between shadow-[0_1px_3px_rgba(15,23,42,0.02)] hover:shadow-md hover:border-slate-300 transition-all duration-200 min-h-[260px] cursor-pointer group"
                       >
                         <div>
                           {/* Top Header: Logo + Match Badge */}
@@ -1470,7 +1626,7 @@ const BrowseJobs = () => {
                               />
                             </div>
                             <span
-                              className={`text-[12px] font-medium px-2.5 py-0.5 rounded-full ${job.matchColor || "bg-[#EEF2FF] text-[#4F46E5]"}`}
+                              className={`text-[12px] font-semibold px-2.5 py-0.5 rounded-full ${job.matchColor || "bg-[#EEF2FF] text-[#4F46E5]"}`}
                             >
                               {job.match || (job.matchPercent ? `${job.matchPercent}% match` : "ATS Match")}
                             </span>
@@ -1478,26 +1634,45 @@ const BrowseJobs = () => {
 
                           {/* Job Title & Company */}
                           <div className="mt-3.5">
-                            <h3 className="text-[15px] font-bold text-[#0F172A] tracking-tight leading-snug group-hover:text-[#4F46E5] transition-colors">
+                            <h3 className="text-[15px] font-bold text-[#0F172A] tracking-tight leading-snug group-hover:text-[#4F46E5] transition-colors line-clamp-2">
                               {job.title}
                             </h3>
-                            <div className="flex items-center gap-1 text-[13px] text-[#64748B] font-normal mt-1">
-                              <span>{job.company}</span>
+                            <div className="flex items-center gap-1.5 text-[13px] text-[#64748B] font-normal mt-1 flex-wrap">
+                              <span className="font-medium text-slate-700">{job.company}</span>
+                              {job.companyDomain && (
+                                <span className="text-[11px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded font-mono">
+                                  {job.companyDomain}
+                                </span>
+                              )}
                               <VerifiedTick />
                             </div>
                           </div>
 
-                          {/* Location & Posted Date */}
-                          <div className="mt-3 flex flex-col gap-1">
+                          {/* Location, Workplace & Type Pills */}
+                          <div className="mt-3 flex flex-col gap-1.5">
                             <div className="flex items-center gap-1.5 text-[12.5px] text-[#64748B]">
                               <img
                                 src={mapIcon}
                                 alt=""
                                 className="w-[10px] h-[12px] object-contain shrink-0"
                               />
-                              <span>{job.location}</span>
+                              <span className="truncate">{job.fullLocation || job.location}</span>
                             </div>
-                            <div className="text-[12px] text-[#94A3B8]">
+
+                            <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                              {job.workMode && (
+                                <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 capitalize">
+                                  {job.workMode}
+                                </span>
+                              )}
+                              {job.type && (
+                                <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 capitalize">
+                                  {job.type}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="text-[11.5px] text-[#94A3B8] mt-0.5">
                               {job.posted}
                             </div>
                           </div>
@@ -1513,7 +1688,7 @@ const BrowseJobs = () => {
                             }}
                             className="flex-1 h-[36px] rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] font-medium text-[#334155] hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-center"
                           >
-                            ViewDetails
+                            View Details
                           </button>
                           <button
                             type="button"
@@ -1532,55 +1707,54 @@ const BrowseJobs = () => {
                 )}
 
                 {/* Load More Button & Status */}
-                <div className="flex flex-col items-center justify-center pt-4 pb-8 gap-2.5">
-                  {loadMoreError && (
-                    <div className="text-[13px] text-rose-600 bg-rose-50 border border-rose-200 px-4 py-2 rounded-lg flex items-center gap-2">
-                      <span>{loadMoreError}</span>
+                {jobsList.length > 0 && (
+                  <div className="flex flex-col items-center justify-center pt-4 pb-8 gap-2.5">
+                    {loadMoreError && (
+                      <div className="text-[13px] text-rose-600 bg-rose-50 border border-rose-200 px-4 py-2 rounded-lg flex items-center gap-2">
+                        <span>{loadMoreError}</span>
+                        <button
+                          type="button"
+                          onClick={handleLoadMoreJobs}
+                          className="underline text-rose-700 font-medium hover:text-rose-900 cursor-pointer ml-1"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    )}
+                    {hasMoreJobs ? (
                       <button
                         type="button"
-                        onClick={() => {
-                          setHasMoreJobs(true);
-                          handleLoadMoreJobs();
-                        }}
-                        className="underline text-rose-700 font-medium hover:text-rose-900 cursor-pointer ml-1"
+                        onClick={handleLoadMoreJobs}
+                        disabled={isLoadingMore}
+                        className="h-[44px] px-6 rounded-[12px] bg-[#4F46E5] hover:bg-[#4338CA] disabled:bg-[#818CF8] text-white text-[13.5px] font-semibold flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer active:scale-[0.99] disabled:cursor-not-allowed"
                       >
-                        Retry
+                        {isLoadingMore ? (
+                          <>
+                            <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                            </svg>
+                            <span>Loading more jobs...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>Load More Jobs</span>
+                            <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full font-mono">
+                              +{pageSize}
+                            </span>
+                          </>
+                        )}
                       </button>
-                    </div>
-                  )}
-                  {hasMoreJobs ? (
-                    <button
-                      type="button"
-                      onClick={handleLoadMoreJobs}
-                      disabled={isLoadingMore}
-                      className="h-[44px] px-6 rounded-[12px] bg-[#4F46E5] hover:bg-[#4338CA] disabled:bg-[#818CF8] text-white text-[13.5px] font-semibold flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer active:scale-[0.99] disabled:cursor-not-allowed"
-                    >
-                      {isLoadingMore ? (
-                        <>
-                          <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-                          </svg>
-                          <span>Fetching matching jobs...</span>
-                        </>
-                      ) : (
-                        <>
-                          <span>Load More Jobs</span>
-                          <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full font-mono">
-                            +10
-                          </span>
-                        </>
-                      )}
-                    </button>
-                  ) : (
-                    <div className="px-5 py-2.5 bg-slate-100 text-slate-500 rounded-xl text-xs font-medium border border-slate-200">
-                      All available matched jobs loaded
-                    </div>
-                  )}
-                  <p className="text-[12px] text-[#94A3B8]">
-                    Showing {filteredJobs.length} matched jobs based on your resume
-                  </p>
-                </div>
+                    ) : (
+                      <div className="px-5 py-2 bg-slate-100 text-slate-500 rounded-xl text-xs font-medium border border-slate-200">
+                        All matched jobs loaded ({jobsList.length} of {totalItems || jobsList.length})
+                      </div>
+                    )}
+                    <p className="text-[12px] text-[#94A3B8]">
+                      Showing {jobsList.length} stored job matches at or above ATS score threshold
+                    </p>
+                  </div>
+                )}
               </>
             );
           })()}
