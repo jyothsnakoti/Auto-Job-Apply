@@ -6,10 +6,6 @@ import {
   getStoredUser,
   getOnboardingProfile,
   getStoredJobMatches,
-import {
-  getStoredUser,
-  getOnboardingProfile,
-  getStoredJobMatches,
   getOnboardingState,
   getEnhancedResume,
   getScoreForEnhancedResume,
@@ -20,6 +16,8 @@ import {
   getPrimaryResumeId,
   getBillingStatus,
   checkUserHasResume,
+  getDashboardData,
+  getStoredDashboardData,
 } from "../services/api";
 
 import dashboard1Icon from "../assets/dashboard1.svg";
@@ -118,16 +116,22 @@ const extractCleanJobTitle = (rawTitle, rawText, index = 0) => {
   let title = cleanHtmlText(rawTitle || "");
   const text = cleanHtmlText(rawText || "");
 
+  // 1. If a title was explicitly provided and is a valid job title string
   if (
     title &&
-    title.length <= 55 &&
+    title.length <= 120 &&
     !title.toLowerCase().startsWith("the ") &&
     !title.toLowerCase().includes("is looking for") &&
     !title.toLowerCase().includes("we are looking") &&
-    !title.toLowerCase().includes("team is seeking") &&
-    !title.includes("\n")
+    !title.toLowerCase().includes("team is seeking")
   ) {
-    return title;
+    return title.split("\n")[0].trim();
+  }
+
+  // 2. If title exists even if slightly long, use the first line cleanly
+  if (title && title.length <= 160) {
+    const firstTitleLine = title.split("\n")[0].trim();
+    if (firstTitleLine) return firstTitleLine;
   }
 
   const candidateText = title || text;
@@ -139,7 +143,7 @@ const extractCleanJobTitle = (rawTitle, rawText, index = 0) => {
       lookingMatch &&
       lookingMatch[1] &&
       lookingMatch[1].trim().length >= 3 &&
-      lookingMatch[1].trim().length <= 60
+      lookingMatch[1].trim().length <= 100
     ) {
       return lookingMatch[1].trim();
     }
@@ -151,7 +155,7 @@ const extractCleanJobTitle = (rawTitle, rawText, index = 0) => {
       explicitMatch &&
       explicitMatch[1] &&
       explicitMatch[1].trim().length >= 3 &&
-      explicitMatch[1].trim().length <= 60
+      explicitMatch[1].trim().length <= 100
     ) {
       return explicitMatch[1].trim();
     }
@@ -174,6 +178,9 @@ const extractCleanJobTitle = (rawTitle, rawText, index = 0) => {
       /\b(Mobile\s+Developer(?:\s+[I|V|X\d]+)?)\b/i,
       /\b(iOS\s+Developer(?:\s+[I|V|X\d]+)?)\b/i,
       /\b(Android\s+Developer(?:\s+[I|V|X\d]+)?)\b/i,
+      /\b(Director[A-Za-z0-9\s\-/+(),&]+)\b/i,
+      /\b(Technician[A-Za-z0-9\s\-/+(),&]+)\b/i,
+      /\b(Manager[A-Za-z0-9\s\-/+(),&]+)\b/i,
     ];
 
     for (const pattern of knownRolePatterns) {
@@ -186,11 +193,15 @@ const extractCleanJobTitle = (rawTitle, rawText, index = 0) => {
     const firstLine = candidateText.split("\n")[0].replace(/^#+\s*/, "").trim();
     if (
       firstLine &&
-      firstLine.length <= 50 &&
+      firstLine.length <= 100 &&
       !firstLine.toLowerCase().includes("http")
     ) {
       return firstLine;
     }
+  }
+
+  if (rawTitle) {
+    return cleanHtmlText(rawTitle).slice(0, 100);
   }
 
   return `Position #${index + 1}`;
@@ -244,20 +255,26 @@ const transformMatchToJob = (match, index = 0) => {
     index
   );
   const company = extractCleanCompany(
-    match.company || match.company_name,
+    match.companyName || match.company || match.company_name,
     rawText
   );
 
   const rawScore =
-    typeof match.overall_score === "number"
+    typeof match.matchScore === "number"
+      ? match.matchScore
+      : typeof match.match_score === "number"
+      ? match.match_score
+      : typeof match.overall_score === "number"
       ? match.overall_score
       : typeof match.score_data?.overall_score === "number"
-        ? match.score_data.overall_score
-        : typeof match.score === "number"
-          ? match.score
-          : (typeof match.overall_score === "string" && !isNaN(Number(match.overall_score)) && match.overall_score.trim() !== "")
-            ? Number(match.overall_score)
-            : null;
+      ? match.score_data.overall_score
+      : typeof match.score === "number"
+      ? match.score
+      : (typeof match.overall_score === "string" && !isNaN(Number(match.overall_score)) && match.overall_score.trim() !== "")
+      ? Number(match.overall_score)
+      : (typeof match.matchScore === "string" && !isNaN(Number(match.matchScore)) && match.matchScore.trim() !== "")
+      ? Number(match.matchScore)
+      : null;
 
   const matchPercent =
     rawScore !== null && !isNaN(rawScore)
@@ -271,7 +288,7 @@ const transformMatchToJob = (match, index = 0) => {
   else if (compLower.includes("amazon") || compLower.includes("luna")) logo = amazonLogo;
   else if (compLower.includes("shopify")) logo = shopifyLogo;
 
-  let location = cleanHtmlText(match.location || match.city || "");
+  let location = cleanHtmlText(match.location || match.city || match.country || "");
   if (!location && cleanedFullText) {
     const locMatch = cleanedFullText.match(
       /(?:location|place|city)\s*[:-]\s*([^\n\r]+)/i
@@ -288,10 +305,10 @@ const transformMatchToJob = (match, index = 0) => {
     Array.isArray(match.requiredSkills) && match.requiredSkills.length > 0
       ? match.requiredSkills.map(cleanHtmlText)
       : Array.isArray(match.skills) && match.skills.length > 0
-        ? match.skills.map(cleanHtmlText)
-        : Array.isArray(match.extracted_skills) && match.extracted_skills.length > 0
-          ? match.extracted_skills.map(cleanHtmlText)
-          : [];
+      ? match.skills.map(cleanHtmlText)
+      : Array.isArray(match.extracted_skills) && match.extracted_skills.length > 0
+      ? match.extracted_skills.map(cleanHtmlText)
+      : [];
 
   const preferredSkills =
     Array.isArray(match.preferredSkills) && match.preferredSkills.length > 0
@@ -338,7 +355,7 @@ const transformMatchToJob = (match, index = 0) => {
     }
   }
 
-  const jobId = match.job_id || match.JDid || match.jd_id || match.id || `match-${index + 1}`;
+  const jobId = match.jobId || match.job_id || match.JDid || match.jd_id || match.id || `match-${index + 1}`;
 
   return {
     id: jobId,
@@ -346,16 +363,20 @@ const transformMatchToJob = (match, index = 0) => {
     JDid: jobId,
     title,
     company,
+    companyDomain: match.companyDomain || "",
     location,
+    country: match.country || "",
     fullLocation: cleanHtmlText(match.fullLocation || location),
-    type: cleanHtmlText(match.type || match.employment_type || "Full-time"),
+    type: cleanHtmlText(match.type || match.employmentType || match.employment_type || "Full-time"),
     workMode: cleanHtmlText(
-      match.workMode ||
+      match.workplace ||
+        match.workMode ||
         match.work_mode ||
         (location.toLowerCase().includes("remote") ? "Remote" : "On-site")
     ),
     department: cleanHtmlText(match.department || "Engineering"),
-    posted: cleanHtmlText(match.posted || "Recent match"),
+    posted: match.postedAt ? new Date(match.postedAt).toLocaleDateString() : cleanHtmlText(match.posted || "Recent match"),
+    postedAt: match.postedAt || null,
     match: matchText,
     matchPercent,
     rawScore,
@@ -373,26 +394,35 @@ const transformMatchToJob = (match, index = 0) => {
 };
 
 const getMatchPercent = (job) => {
+  if (job?.matchPercent !== undefined && job?.matchPercent !== null) {
+    const num = Number(job.matchPercent);
+    if (!isNaN(num)) return num;
+  }
+  if (job?.rawScore !== undefined && job?.rawScore !== null) {
+    const num = Number(job.rawScore);
+    if (!isNaN(num)) return num;
+  }
+  if (job?.matchScore !== undefined && job?.matchScore !== null) {
+    const num = Number(job.matchScore);
+    if (!isNaN(num)) return num;
+  }
   if (job?.overall_score !== undefined && job?.overall_score !== null) {
     const num = Number(job.overall_score);
-    return isNaN(num) ? 0 : num;
-  }
-  if (job?.matchPercent !== undefined && job?.matchPercent !== null) {
-    return Number(job.matchPercent);
+    if (!isNaN(num)) return num;
   }
   return 0;
 };
 
 const getMatchLabel = (job) => {
-  if (job?.overall_score !== undefined && job?.overall_score !== null) {
-    const num = Number(job.overall_score);
-    return `${Number.isInteger(num) ? num : num.toFixed(1)}% match`;
+  const percent = getMatchPercent(job);
+  if (percent > 0) {
+    return `${Number.isInteger(percent) ? percent : Math.round(percent)}% match`;
   }
-  return job?.match || `${getMatchPercent(job)}% match`;
+  return job?.match || "ATS Match";
 };
 
 const getMatchBadgeColor = (percent) => {
-  if (percent >= 90) return "bg-[#ECFDF5] text-[#059669]";
+  if (percent >= 85) return "bg-[#ECFDF5] text-[#059669]";
   if (percent >= 70) return "bg-[#EFF6FF] text-[#2563EB]";
   if (percent >= 50) return "bg-[#FFFBEB] text-[#D97706]";
   return "bg-[#FEF2F2] text-[#DC2626]";
@@ -433,12 +463,33 @@ const Dashboard = () => {
   const [isJobSaved, setIsJobSaved] = useState(false);
 
   // Dynamic Jobs & API Pagination State
-  const [jobs, setJobs] = useState([]);
+  const [jobs, setJobs] = useState(() => {
+    try {
+      const cachedDashboard = getStoredDashboardData();
+      if (Array.isArray(cachedDashboard?.topMatches) && cachedDashboard.topMatches.length > 0) {
+        return cachedDashboard.topMatches
+          .map((m, idx) => transformMatchToJob(m, idx))
+          .filter(Boolean);
+      }
+      const stored = getStoredJobMatches();
+      if (Array.isArray(stored) && stored.length > 0) {
+        return stored
+          .map((m, idx) => transformMatchToJob(m, idx))
+          .filter(Boolean);
+      }
+    } catch {
+      // ignore
+    }
+    return [];
+  });
   const [lastJobId, setLastJobId] = useState(null);
   const [isLoadingJobs, setIsLoadingJobs] = useState(true);
   const [jobError, setJobError] = useState(null);
   const [jobFeedbackMessage, setJobFeedbackMessage] = useState(null);
-  const [hasResume, setHasResume] = useState(false);
+  const [hasResume, setHasResume] = useState(() => {
+    const cachedDashboard = getStoredDashboardData();
+    return Boolean(cachedDashboard?.topMatches?.length > 0);
+  });
 
   // Dynamic Billing Information from API
   const [billingInfo, setBillingInfo] = useState(null);
@@ -487,7 +538,72 @@ const Dashboard = () => {
 
   const dropdownRef = useRef(null);
 
-  // 1. Fetch Dynamic Billing Status from API
+  // Dynamic Dashboard Metrics from GET /api/dashboard
+  const [dashboardMetrics, setDashboardMetrics] = useState(() => {
+    return getStoredDashboardData() || null;
+  });
+  const [isLoadingDashboard, setIsLoadingDashboard] = useState(!dashboardMetrics);
+
+  // 1. Fetch Dynamic Dashboard Metrics & Top Matches from GET /api/dashboard
+  useEffect(() => {
+    let isMounted = true;
+    const loadDashboardMetrics = async () => {
+      try {
+        const data = await getDashboardData();
+        if (isMounted && data) {
+          setDashboardMetrics(data);
+
+          // Populate Top Matches dynamically from /api/dashboard
+          if (Array.isArray(data.topMatches) && data.topMatches.length > 0) {
+            const transformed = data.topMatches
+              .map((m, idx) => transformMatchToJob(m, idx))
+              .filter(Boolean);
+
+            if (transformed.length > 0) {
+              setJobs(transformed);
+              setHasResume(true);
+              const last = transformed[transformed.length - 1];
+              if (last?.job_id || last?.id) {
+                setLastJobId(last.job_id || last.id);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("[Dashboard] Could not fetch dashboard metrics:", err);
+      } finally {
+        if (isMounted) {
+          setIsLoadingDashboard(false);
+          setIsLoadingJobs(false);
+        }
+      }
+    };
+
+    loadDashboardMetrics();
+
+    const handleDashboardUpdated = (e) => {
+      if (isMounted && e?.detail) {
+        setDashboardMetrics(e.detail);
+        if (Array.isArray(e.detail.topMatches) && e.detail.topMatches.length > 0) {
+          const transformed = e.detail.topMatches
+            .map((m, idx) => transformMatchToJob(m, idx))
+            .filter(Boolean);
+          if (transformed.length > 0) {
+            setJobs(transformed);
+            setHasResume(true);
+          }
+        }
+      }
+    };
+
+    window.addEventListener("dashboardDataUpdated", handleDashboardUpdated);
+    return () => {
+      isMounted = false;
+      window.removeEventListener("dashboardDataUpdated", handleDashboardUpdated);
+    };
+  }, []);
+
+  // 2. Fetch Dynamic Billing Status from API
   useEffect(() => {
     let isMounted = true;
     const loadBilling = async () => {
@@ -526,7 +642,7 @@ const Dashboard = () => {
     };
   }, []);
 
-  // 2. Fetch Dynamic User Info & Matched Jobs from API
+  // 3. Fetch Dynamic User Info & Matched Jobs from API
   useEffect(() => {
     let isMounted = true;
 
@@ -613,6 +729,14 @@ const Dashboard = () => {
           onboardingState.matches.length > 0
         ) {
           loadedMatches = onboardingState.matches;
+        } else {
+          const cachedDashboard = getStoredDashboardData();
+          if (
+            Array.isArray(cachedDashboard?.topMatches) &&
+            cachedDashboard.topMatches.length > 0
+          ) {
+            loadedMatches = cachedDashboard.topMatches;
+          }
         }
 
         if (loadedMatches.length > 0) {
@@ -906,78 +1030,85 @@ const Dashboard = () => {
     selectedJobTypes,
   ]);
 
-  // Dynamic Dashboard Statistics Cards (Calculated From API Data)
+  // Dynamic Dashboard Statistics Cards (From GET /api/dashboard endpoint with fallback)
   const statsCards = useMemo(() => {
-    const totalJobs = jobs.length;
-    const qualifiedCount = jobs.filter(
-      (j) => (j.matchPercent || 0) >= 80
-    ).length;
+    // 1. Jobs Found
+    const jobsFoundVal =
+      typeof dashboardMetrics?.jobsFound === "number"
+        ? dashboardMetrics.jobsFound
+        : jobs.length > 0
+        ? jobs.length
+        : 0;
 
-    const usedApps =
-      typeof billingInfo?.usedApplications === "number"
+    // 2. Qualified Matches
+    const qualifiedMatchesVal =
+      typeof dashboardMetrics?.qualifiedMatches === "number"
+        ? dashboardMetrics.qualifiedMatches
+        : jobs.filter((j) => (j.matchPercent || 0) >= 80).length;
+
+    // 3. Allowance (for supporting text & limits)
+    const allowanceVal =
+      typeof dashboardMetrics?.applicationAllowance === "number"
+        ? dashboardMetrics.applicationAllowance
+        : typeof billingInfo?.applicationAllowance === "number"
+        ? billingInfo.applicationAllowance
+        : typeof billingInfo?.applicationLimit === "number"
+        ? billingInfo.applicationLimit
+        : 100;
+
+    // 4. Applications Submitted
+    const submittedVal =
+      typeof dashboardMetrics?.applicationsSubmitted === "number"
+        ? dashboardMetrics.applicationsSubmitted
+        : typeof billingInfo?.usedApplications === "number"
         ? billingInfo.usedApplications
         : typeof billingInfo?.applicationsUsed === "number"
         ? billingInfo.applicationsUsed
         : applications.length;
 
-    const allowance =
-      typeof billingInfo?.applicationAllowance === "number"
-        ? billingInfo.applicationAllowance
-        : typeof billingInfo?.applicationLimit === "number"
-        ? billingInfo.applicationLimit
-        : null;
-
-    const remainingApps =
-      typeof billingInfo?.remainingApplications === "number"
+    // 5. Applications Remaining
+    const remainingVal =
+      typeof dashboardMetrics?.applicationsRemaining === "number"
+        ? dashboardMetrics.applicationsRemaining
+        : typeof billingInfo?.remainingApplications === "number"
         ? billingInfo.remainingApplications
-        : allowance !== null
-        ? Math.max(0, allowance - usedApps)
-        : 0;
+        : Math.max(0, allowanceVal - submittedVal);
 
     return [
       {
         id: "jobs-found",
         title: "Jobs Found",
-        value: totalJobs > 0 ? totalJobs.toLocaleString() : "0",
-        supportingText:
-          totalJobs > 0
-            ? `${totalJobs} matched jobs ready`
-            : hasResume
-            ? "No matches found"
-            : "Upload resume to find matches",
+        value: Number(jobsFoundVal).toLocaleString(),
+        supportingText: "New jobs in the last 7 days",
         iconBg: "#EFF6FF",
         icon: dashboard1Icon,
       },
       {
         id: "qualified-matches",
         title: "Qualified Matches",
-        value: qualifiedCount > 0 ? qualifiedCount.toLocaleString() : "0",
-        supportingText: "Jobs with ≥80% match",
+        value: Number(qualifiedMatchesVal).toLocaleString(),
+        supportingText: "Jobs with good ATS match",
         iconBg: "#ECFEFF",
         icon: dashboard2Icon,
       },
       {
         id: "applications-submitted",
         title: "Applications Submitted",
-        value: usedApps.toLocaleString(),
-        supportingText: allowance
-          ? `Out of ${allowance} monthly limit`
-          : "This billing cycle",
+        value: Number(submittedVal).toLocaleString(),
+        supportingText: `Out of ${allowanceVal} monthly limit`,
         iconBg: "#FAF5FF",
         icon: dashboard3Icon,
       },
       {
         id: "applications-remaining",
         title: "Applications Remaining",
-        value: remainingApps.toLocaleString(),
-        supportingText: allowance
-          ? `Out of ${allowance} monthly limit`
-          : "This billing cycle",
+        value: Number(remainingVal).toLocaleString(),
+        supportingText: "This month",
         iconBg: "#F0FDFA",
         icon: dashboard4Icon,
       },
     ];
-  }, [jobs, billingInfo, hasResume, applications]);
+  }, [dashboardMetrics, jobs, billingInfo, applications]);
 
   // Dynamic Application Tabs with Counts
   const applicationTabs = useMemo(() => {

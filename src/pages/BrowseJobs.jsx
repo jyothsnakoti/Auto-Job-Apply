@@ -47,30 +47,6 @@ const workplaceOptions = ["Remote", "On-site", "Hybrid"];
 const degreeOptions = [
   "Bachelor's Degree",
   "Master's Degree",
-  "Doctorate (PhD)",
-];
-
-const experienceOptions = [
-  "No experience required",
-  "Up to 1 year",
-  "Up to 2 years",
-  "Up to 3 years",
-  "Up to 5 years",
-  "Up to 7 years",
-];
-
-const jobTypeOptions = ["Full-time", "Part-time", "Contract", "Internship"];
-const employmentTypeOptions = [
-  "Full-time",
-  "Part-time",
-  "Contract",
-  "Internship",
-  "Freelance",
-];
-
-const degreeOptions = [
-  "Bachelor's Degree",
-  "Master's Degree",
   "PhD",
   "Associate Degree",
   "No Degree Required",
@@ -82,6 +58,15 @@ const experienceOptions = [
   "Mid-Level (3-5 yrs)",
   "Senior (5-8 yrs)",
   "Lead / Principal (8+ yrs)",
+];
+
+const jobTypeOptions = ["Full-time", "Part-time", "Contract", "Internship"];
+const employmentTypeOptions = [
+  "Full-time",
+  "Part-time",
+  "Contract",
+  "Internship",
+  "Freelance",
 ];
 
 
@@ -105,14 +90,18 @@ const extractCleanJobTitle = (rawTitle, rawText, index = 0) => {
 
   if (
     title &&
-    title.length <= 55 &&
+    title.length <= 120 &&
     !title.toLowerCase().startsWith("the ") &&
     !title.toLowerCase().includes("is looking for") &&
     !title.toLowerCase().includes("we are looking") &&
-    !title.toLowerCase().includes("team is seeking") &&
-    !title.includes("\n")
+    !title.toLowerCase().includes("team is seeking")
   ) {
-    return title;
+    return title.split("\n")[0].trim();
+  }
+
+  if (title && title.length <= 160) {
+    const firstTitleLine = title.split("\n")[0].trim();
+    if (firstTitleLine) return firstTitleLine;
   }
 
   const candidateText = title || text;
@@ -1694,7 +1683,8 @@ const BrowseJobs = () => {
                     )}
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4.5 w-full">
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4.5 w-full">
                     {filteredJobs.map((job, idx) => (
                       <div
                         key={job.id || job.job_id || `job-${idx}`}
@@ -1839,7 +1829,10 @@ const BrowseJobs = () => {
               </div>
             </>
           )}
-        </main>
+        </>
+      );
+    })()}
+  </main>
       </div>
 
       {/* Job Details Modal Popup */}

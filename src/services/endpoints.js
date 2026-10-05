@@ -184,6 +184,10 @@ export const MORE_JOBS_ENDPOINTS = {
   GET_MORE_JDS: `${RESUME_API_BASE_URL}/api/v1/Get_N_moreJDs_for_Res`,
 };
 
+export const DASHBOARD_ENDPOINTS = {
+  GET: `${API_BASE_URL}/api/dashboard`,
+};
+
 export const ENDPOINTS = {
   BASE_URL: API_BASE_URL,
 
@@ -198,7 +202,9 @@ export const ENDPOINTS = {
   RESUME: RESUME_ENDPOINTS,
   ENHANCE_RESUME: ENHANCE_RESUME_ENDPOINTS,
   MORE_JOBS: MORE_JOBS_ENDPOINTS,
+  DASHBOARD: DASHBOARD_ENDPOINTS,
 };
 
 export default ENDPOINTS;
+
 
