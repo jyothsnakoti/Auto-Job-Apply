@@ -81,7 +81,8 @@ export const getJobs = async (params = {}) => {
     params: queryParams,
   });
 
-  console.log('[jobService] GET /api/jobs Response:', response.data);
+  console.log('[jobService] GET /api/jobs Raw Response Data:', response.data);
+  console.log('[jobService] GET /api/jobs Formatted Response:', JSON.stringify(response.data, null, 2));
 
   const data = response.data || {};
   const items = Array.isArray(data.items)
@@ -118,6 +119,58 @@ export const getJobs = async (params = {}) => {
   };
 };
 
+/**
+ * GET /api/dashboard
+ * Fetch dashboard counters and top five matched jobs.
+ *
+ * Authorization: Bearer access JWT (Injected automatically by apiClient)
+ * Request: No body.
+ *
+ * Response shape:
+ * {
+ *   "jobsFound": 1200,
+ *   "qualifiedMatches": 85,
+ *   "applicationsSubmitted": 0,
+ *   "applicationsRemaining": 100,
+ *   "applicationAllowance": 250,
+ *   "topMatches": [
+ *     {
+ *       "jobId": 42,
+ *       "title": "Java Developer",
+ *       "companyName": "Example Inc",
+ *       "companyDomain": "example.com",
+ *       "location": "Austin, TX",
+ *       "country": "US",
+ *       "workplace": "remote",
+ *       "employmentType": "full-time",
+ *       "postedAt": "2026-10-02T12:30:00",
+ *       "matchScore": 82.5
+ *     }
+ *   ]
+ * }
+ *
+ * @returns {Promise<{ jobsFound: number, qualifiedMatches: number, applicationsSubmitted: number, applicationsRemaining: number, applicationAllowance: number, topMatches: Array, raw: Object }>}
+ */
+export const getDashboard = async () => {
+  console.log('[jobService] Calling GET /api/dashboard');
+  const response = await apiClient.get('/api/dashboard');
+  console.log('[jobService] GET /api/dashboard Raw Response Data:', response.data);
+  console.log('[jobService] GET /api/dashboard Formatted Response:', JSON.stringify(response.data, null, 2));
+
+  const data = response.data || {};
+  return {
+    jobsFound: typeof data.jobsFound === 'number' ? data.jobsFound : 0,
+    qualifiedMatches: typeof data.qualifiedMatches === 'number' ? data.qualifiedMatches : 0,
+    applicationsSubmitted: typeof data.applicationsSubmitted === 'number' ? data.applicationsSubmitted : 0,
+    applicationsRemaining: typeof data.applicationsRemaining === 'number' ? data.applicationsRemaining : 0,
+    applicationAllowance: typeof data.applicationAllowance === 'number' ? data.applicationAllowance : 0,
+    topMatches: Array.isArray(data.topMatches) ? data.topMatches : [],
+    raw: data,
+  };
+};
+
+export const getDashboardData = getDashboard;
+export const fetchDashboard = getDashboard;
 export const fetchJobs = getJobs;
 export const fetchStoredJobs = getJobs;
 export const listJobs = getJobs;
@@ -271,6 +324,9 @@ export const getPrimaryResumeId = getStoredResumeId;
 
 export default {
   getJobs,
+  getDashboard,
+  getDashboardData,
+  fetchDashboard,
   fetchJobs,
   fetchStoredJobs,
   listJobs,

@@ -187,6 +187,10 @@ export const JOB_ENDPOINTS = {
   GET: `${API_BASE_URL}/api/jobs`,
 };
 
+export const DASHBOARD_ENDPOINTS = {
+  GET: `${API_BASE_URL}/api/dashboard`,
+};
+
 export const ENDPOINTS = {
   BASE_URL: API_BASE_URL,
 
@@ -203,6 +207,7 @@ export const ENDPOINTS = {
   MORE_JOBS: MORE_JOBS_ENDPOINTS,
   JOBS: JOB_ENDPOINTS,
   JOB: JOB_ENDPOINTS,
+  DASHBOARD: DASHBOARD_ENDPOINTS,
 };
 
 export default ENDPOINTS;

@@ -416,7 +416,7 @@ const BrowseJobs = () => {
   const [updatedAtsScores, setUpdatedAtsScores] = useState({});
 
   // Filter States
-  const [selectedDate, setSelectedDate] = useState("Last 7 days");
+  const [selectedDate, setSelectedDate] = useState("All time");
   const [selectedLocations, setSelectedLocations] = useState([]);
   const [locationSearch, setLocationSearch] = useState("");
   const [selectedWorkplace, setSelectedWorkplace] = useState([]);
@@ -830,13 +830,13 @@ const BrowseJobs = () => {
         const q = searchQuery.toLowerCase().trim();
         const matchTitle = (job.title || "").toLowerCase().includes(q);
         const matchComp = (job.company || "").toLowerCase().includes(q);
+        const matchLoc = (job.location || "").toLowerCase().includes(q);
         const matchDesc = (job.description || "").toLowerCase().includes(q);
         const matchSkills =
           Array.isArray(job.requiredSkills) &&
           job.requiredSkills.some((s) => s.toLowerCase().includes(q));
         if (!matchTitle && !matchComp && !matchLoc && !matchDesc && !matchSkills) {
-          const matchLoc = (job.location || "").toLowerCase().includes(q);
-          if (!matchLoc) return false;
+          return false;
         }
       }
       if (selectedLocations.length > 0) {
@@ -1695,18 +1695,30 @@ const BrowseJobs = () => {
                         </svg>
                         <span>Refresh Matches</span>
                       </button>
-                      <button
-                        type="button"
-                        onClick={handleClear}
-                        className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
-                      >
-                        Clear Filters
-                      </button>
                     </div>
+                  </div>
+                ) : filteredJobs.length === 0 ? (
+                  <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-10 text-center flex flex-col items-center justify-center gap-3">
+                    <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                    </div>
+                    <p className="text-[15px] font-bold text-slate-800">No matching jobs found</p>
+                    <p className="text-[13px] text-slate-500 max-w-sm">
+                      No jobs match your current search or filter options. Try clearing or broadening your filters.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleClear}
+                      className="mt-1 px-4 py-2 bg-[#EEF2FF] hover:bg-[#E0E7FF] text-[#4F46E5] text-xs font-semibold rounded-xl transition-colors cursor-pointer"
+                    >
+                      Clear Filters
+                    </button>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4.5 w-full">
-                    {jobsList.map((job, idx) => (
+                    {filteredJobs.map((job, idx) => (
                       <div
                         key={job.id || job.job_id || job.jobId || `job-${idx}`}
                         onClick={() => setSelectedJobModal(job)}
