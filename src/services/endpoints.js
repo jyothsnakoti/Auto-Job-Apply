@@ -191,9 +191,7 @@ export const JOB_ENDPOINTS = {
   GET: `${API_BASE_URL}/api/jobs`,
 };
 
-export const DASHBOARD_ENDPOINTS = {
-  GET: `${API_BASE_URL}/api/dashboard`,
-};
+
 
 export const ENDPOINTS = {
   BASE_URL: API_BASE_URL,
