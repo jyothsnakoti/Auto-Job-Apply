@@ -113,15 +113,25 @@ export const getStoredTokens = () => {
     localStorage.getItem('authToken') ||
     localStorage.getItem('token') ||
     localStorage.getItem('accessToken') ||
+    localStorage.getItem('access_token') ||
+    localStorage.getItem('jwt') ||
+    localStorage.getItem('bearerToken') ||
+    localStorage.getItem('bearer_token') ||
+    localStorage.getItem('jwt_token') ||
     '';
   const sessionToken =
     sessionStorage.getItem('authToken') ||
     sessionStorage.getItem('token') ||
     sessionStorage.getItem('accessToken') ||
+    sessionStorage.getItem('access_token') ||
+    sessionStorage.getItem('jwt') ||
+    sessionStorage.getItem('bearerToken') ||
+    sessionStorage.getItem('bearer_token') ||
+    sessionStorage.getItem('jwt_token') ||
     '';
 
-  const localRefresh = localStorage.getItem('refreshToken') || '';
-  const sessionRefresh = sessionStorage.getItem('refreshToken') || '';
+  const localRefresh = localStorage.getItem('refreshToken') || localStorage.getItem('refresh_token') || '';
+  const sessionRefresh = sessionStorage.getItem('refreshToken') || sessionStorage.getItem('refresh_token') || '';
 
   const accessToken = localToken || sessionToken || '';
   const refreshToken = localRefresh || sessionRefresh || '';

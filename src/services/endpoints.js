@@ -157,12 +157,10 @@ export const RESUME_API_BASE_URL =
    ========================================================= */
 
 export const RESUME_ENDPOINTS = {
-  // OLD RESUME UPLOAD ENDPOINT
-  // UPLOAD: `${API_BASE_URL}/api/resumes`,
-
-  // NEW NGROK RESUME UPLOAD & JD MATCHING ENDPOINT
-  UPLOAD: `${RESUME_API_BASE_URL}/api/v1/Get_N_JDs_for_Res`,
-
+  // Standard Resume Upload Endpoint
+  UPLOAD: `${API_BASE_URL}/api/resumes`,
+  // Ngrok Endpoint Reference
+  UPLOAD_NGROK: `${RESUME_API_BASE_URL}/api/v1/Get_N_JDs_for_Res`,
   GET: `${API_BASE_URL}/api/resumes`,
 
   DOWNLOAD: (id) =>
@@ -184,6 +182,11 @@ export const MORE_JOBS_ENDPOINTS = {
   GET_MORE_JDS: `${RESUME_API_BASE_URL}/api/v1/Get_N_moreJDs_for_Res`,
 };
 
+export const JOB_ENDPOINTS = {
+  LIST: `${API_BASE_URL}/api/jobs`,
+  GET: `${API_BASE_URL}/api/jobs`,
+};
+
 export const ENDPOINTS = {
   BASE_URL: API_BASE_URL,
 
@@ -198,6 +201,8 @@ export const ENDPOINTS = {
   RESUME: RESUME_ENDPOINTS,
   ENHANCE_RESUME: ENHANCE_RESUME_ENDPOINTS,
   MORE_JOBS: MORE_JOBS_ENDPOINTS,
+  JOBS: JOB_ENDPOINTS,
+  JOB: JOB_ENDPOINTS,
 };
 
 export default ENDPOINTS;
