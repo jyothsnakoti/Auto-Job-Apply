@@ -284,12 +284,34 @@ const transformMatchToJob = (match, index = 0) => {
   }
   const fullLocation = [location, country].filter(Boolean).join(", ");
 
-  // Workplace & Employment Type
+  // Workplace & Employment Type normalization for backend responses
   const rawWorkplace = match.workplace || match.workMode || match.work_mode || "";
-  const workplace = cleanHtmlText(rawWorkplace);
+  let workplace = "";
+  if (rawWorkplace) {
+    const rawWp = String(rawWorkplace).toUpperCase();
+    if (rawWp.includes("REMOTE")) workplace = "Remote";
+    else if (rawWp.includes("ONSITE") || rawWp.includes("ON_SITE") || rawWp.includes("OFFICE")) workplace = "On-site";
+    else if (rawWp.includes("HYBRID")) workplace = "Hybrid";
+    else workplace = cleanHtmlText(rawWorkplace);
+  } else if (location.toLowerCase().includes("remote")) {
+    workplace = "Remote";
+  } else {
+    workplace = "On-site";
+  }
 
   const rawEmploymentType = match.employmentType || match.type || match.employment_type || "";
-  const employmentType = cleanHtmlText(rawEmploymentType);
+  let employmentType = "";
+  if (rawEmploymentType) {
+    const rawEmp = String(rawEmploymentType).toUpperCase().replace(/_/g, "-");
+    if (rawEmp.includes("FULL")) employmentType = "Full-time";
+    else if (rawEmp.includes("PART")) employmentType = "Part-time";
+    else if (rawEmp.includes("CONTRACT")) employmentType = "Contract";
+    else if (rawEmp.includes("INTERN")) employmentType = "Internship";
+    else if (rawEmp.includes("FREELANCE")) employmentType = "Freelance";
+    else employmentType = cleanHtmlText(rawEmploymentType);
+  } else {
+    employmentType = "Full-time";
+  }
 
   // Posted At
   const posted = match.postedAt ? formatPostedDate(match.postedAt) : cleanHtmlText(match.posted || "");

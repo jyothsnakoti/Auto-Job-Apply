@@ -356,6 +356,36 @@ const transformMatchToJob = (match, index = 0) => {
 
   const jobId = match.jobId || match.job_id || match.JDid || match.jd_id || match.id || `match-${index + 1}`;
 
+  // Handle backend employmentType like FULL_TIME, PART_TIME, CONTRACT
+  let rawEmployment = match.employmentType || match.employment_type || match.type || "";
+  let employmentType = "";
+  if (rawEmployment) {
+    const rawEmp = String(rawEmployment).toUpperCase().replace(/_/g, "-");
+    if (rawEmp.includes("FULL")) employmentType = "Full-time";
+    else if (rawEmp.includes("PART")) employmentType = "Part-time";
+    else if (rawEmp.includes("CONTRACT")) employmentType = "Contract";
+    else if (rawEmp.includes("INTERN")) employmentType = "Internship";
+    else if (rawEmp.includes("FREELANCE")) employmentType = "Freelance";
+    else employmentType = cleanHtmlText(rawEmployment);
+  } else {
+    employmentType = "Full-time";
+  }
+
+  // Handle backend workplace like REMOTE, ONSITE, HYBRID
+  let rawWorkplace = match.workplace || match.workMode || match.work_mode || "";
+  let workMode = "";
+  if (rawWorkplace) {
+    const rawWp = String(rawWorkplace).toUpperCase();
+    if (rawWp.includes("REMOTE")) workMode = "Remote";
+    else if (rawWp.includes("ONSITE") || rawWp.includes("ON_SITE") || rawWp.includes("OFFICE")) workMode = "On-site";
+    else if (rawWp.includes("HYBRID")) workMode = "Hybrid";
+    else workMode = cleanHtmlText(rawWorkplace);
+  } else if (location.toLowerCase().includes("remote")) {
+    workMode = "Remote";
+  } else {
+    workMode = "On-site";
+  }
+
   return {
     id: jobId,
     job_id: jobId,
@@ -366,12 +396,10 @@ const transformMatchToJob = (match, index = 0) => {
     location,
     country: match.country || "",
     fullLocation: cleanHtmlText(match.fullLocation || location),
-    type: cleanHtmlText(match.type || match.employmentType || match.employment_type || "Full-time"),
-    workMode: cleanHtmlText(
-      match.workMode ||
-      match.work_mode ||
-      (location.toLowerCase().includes("remote") ? "Remote" : "On-site")
-    ),
+    type: employmentType,
+    employmentType,
+    workMode,
+    workplace: workMode,
     department: cleanHtmlText(match.department || "Engineering"),
     posted: match.postedAt ? new Date(match.postedAt).toLocaleDateString() : cleanHtmlText(match.posted || "Recent match"),
     postedAt: match.postedAt || null,
@@ -1898,46 +1926,52 @@ const Dashboard = () => {
                     </div>
 
                     <div className="flex flex-col gap-1 max-h-[220px] overflow-y-auto">
-                      {companyOptions
-                        .filter((c) =>
-                          c.toLowerCase().includes(companySearch.toLowerCase())
-                        )
-                        .map((comp) => {
-                          const isChecked = selectedCompanies.includes(comp);
-                          return (
-                            <div
-                              key={comp}
-                              onClick={() =>
-                                toggleCheckbox(
-                                  selectedCompanies,
-                                  setSelectedCompanies,
-                                  comp
-                                )
-                              }
-                              className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
-                            >
+                      {dynamicCompanyOptions.length === 0 ? (
+                        <div className="text-xs text-slate-400 px-2 py-1">
+                          No companies available
+                        </div>
+                      ) : (
+                        dynamicCompanyOptions
+                          .filter((c) =>
+                            c.toLowerCase().includes(companySearch.toLowerCase())
+                          )
+                          .map((comp) => {
+                            const isChecked = selectedCompanies.includes(comp);
+                            return (
                               <div
-                                className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
-                                  ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                                  : "border-slate-300 bg-white"
-                                  }`}
+                                key={comp}
+                                onClick={() =>
+                                  toggleCheckbox(
+                                    selectedCompanies,
+                                    setSelectedCompanies,
+                                    comp
+                                  )
+                                }
+                                className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
                               >
-                                {isChecked && (
-                                  <svg
-                                    className="w-2.5 h-2.5"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="3.5"
-                                  >
-                                    <polyline points="20 6 9 17 4 12" />
-                                  </svg>
-                                )}
+                                <div
+                                  className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
+                                    ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
+                                    : "border-slate-300 bg-white"
+                                    }`}
+                                >
+                                  {isChecked && (
+                                    <svg
+                                      className="w-2.5 h-2.5"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="3.5"
+                                    >
+                                      <polyline points="20 6 9 17 4 12" />
+                                    </svg>
+                                  )}
+                                </div>
+                                <span className="truncate">{comp}</span>
                               </div>
-                              <span className="truncate">{comp}</span>
-                            </div>
-                          );
-                        })}
+                            );
+                          })
+                      )}
                     </div>
                   </div>
                 )}
@@ -2053,317 +2087,6 @@ const Dashboard = () => {
                             className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${isSelected
                               ? "bg-[#0F4C3A] text-white"
                               : "border border-slate-300"
-                              }`}
-                          >
-                            {isSelected && (
-                              <svg
-                                className="w-2.5 h-2.5"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="3.5"
-                              >
-                                <polyline points="20 6 9 17 4 12" />
-                              </svg>
-                            )}
-                          </div>
-                          <span>{exp}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Sponsors Visa Button */}
-              <button
-                type="button"
-                onClick={() => setSponsorsVisa(!sponsorsVisa)}
-                className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${sponsorsVisa
-                    ? "border-slate-400 bg-slate-100 text-[#0F172A] font-medium"
-                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
-              >
-                <span>Sponsors Visa</span>
-              </button>
-
-              {/* Employment Type Dropdown */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => toggleDropdown("employmentType")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "employmentType" ||
-                      selectedEmploymentTypes.length > 0
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                    }`}
-                >
-                  <span>Employment Type</span>
-                  <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "employmentType" ? "rotate-180" : ""
-                      }`}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                  >
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
-                </button>
-
-                {activeDropdown === "employmentType" && (
-                  <div className="absolute top-full left-0 mt-2 w-[170px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2.5 z-50 flex flex-col gap-1">
-                    {employmentTypeOptions.map((type) => {
-                      const isChecked = selectedEmploymentTypes.includes(type);
-                      return (
-                        <div
-                          key={type}
-                          onClick={() =>
-                            toggleCheckbox(
-                              selectedEmploymentTypes,
-                              setSelectedEmploymentTypes,
-                              type
-                            )
-                          }
-                          className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
-                        >
-                          <div
-                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
-                                ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                                : "border-slate-300 bg-white"
-                              }`}
-                          >
-                            {isChecked && (
-                              <svg
-                                className="w-2.5 h-2.5"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="3.5"
-                              >
-                                <polyline points="20 6 9 17 4 12" />
-                              </svg>
-                            )}
-                          </div>
-                          <span>{type}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* 4. Companies Dropdown */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => toggleDropdown("companies")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "companies" || selectedCompanies.length > 0
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                    }`}
-                >
-                  <span>Companies</span>
-                  <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "companies" ? "rotate-180" : ""
-                      }`}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                  >
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
-                </button>
-
-                {activeDropdown === "companies" && (
-                  <div className="absolute top-full left-0 mt-2 w-[270px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-3 z-50 flex flex-col gap-2">
-                    <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-[8px] border border-slate-200 bg-white">
-                      <svg
-                        className="w-3.5 h-3.5 text-slate-400 shrink-0"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      >
-                        <circle cx="11" cy="11" r="7" />
-                        <path d="m20 20-3.5-3.5" />
-                      </svg>
-                      <input
-                        type="text"
-                        value={companySearch}
-                        onChange={(e) => setCompanySearch(e.target.value)}
-                        placeholder="Search companies..."
-                        className="w-full text-xs text-slate-800 placeholder:text-slate-400 outline-none bg-transparent"
-                      />
-                    </div>
-
-                    <div className="text-[11px] font-semibold text-slate-400 tracking-wider px-1 pt-1">
-                      COMPANIES
-                    </div>
-
-                    <div className="flex flex-col gap-1 max-h-[220px] overflow-y-auto">
-                      {dynamicCompanyOptions.length === 0 ? (
-                        <div className="text-xs text-slate-400 px-2 py-1">
-                          No companies available
-                        </div>
-                      ) : (
-                        dynamicCompanyOptions
-                          .filter((c) =>
-                            c.toLowerCase().includes(companySearch.toLowerCase())
-                          )
-                          .map((comp) => {
-                            const isChecked = selectedCompanies.includes(comp);
-                            return (
-                              <div
-                                key={comp}
-                                onClick={() =>
-                                  toggleCheckbox(
-                                    selectedCompanies,
-                                    setSelectedCompanies,
-                                    comp
-                                  )
-                                }
-                                className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
-                              >
-                                <div
-                                  className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
-                                      ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                                      : "border-slate-300 bg-white"
-                                    }`}
-                                >
-                                  {isChecked && (
-                                    <svg
-                                      className="w-2.5 h-2.5"
-                                      viewBox="0 0 24 24"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="3.5"
-                                    >
-                                      <polyline points="20 6 9 17 4 12" />
-                                    </svg>
-                                  )}
-                                </div>
-                                <span className="truncate">{comp}</span>
-                              </div>
-                            );
-                          })
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Degree Level Dropdown */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => toggleDropdown("degree")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "degree" || selectedDegrees.length > 0
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                    }`}
-                >
-                  <span>Degree Level</span>
-                  <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "degree" ? "rotate-180" : ""
-                      }`}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                  >
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
-                </button>
-
-                {activeDropdown === "degree" && (
-                  <div className="absolute top-full left-0 mt-2 w-[210px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2.5 z-50 flex flex-col gap-1">
-                    {degreeOptions.map((deg) => {
-                      const isChecked = selectedDegrees.includes(deg);
-                      return (
-                        <div
-                          key={deg}
-                          onClick={() =>
-                            toggleCheckbox(
-                              selectedDegrees,
-                              setSelectedDegrees,
-                              deg
-                            )
-                          }
-                          className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
-                        >
-                          <div
-                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
-                                ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                                : "border-slate-300 bg-white"
-                              }`}
-                          >
-                            {isChecked && (
-                              <svg
-                                className="w-2.5 h-2.5"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="3.5"
-                              >
-                                <polyline points="20 6 9 17 4 12" />
-                              </svg>
-                            )}
-                          </div>
-                          <span>{deg}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Max Experience Dropdown */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => toggleDropdown("experience")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "experience" || selectedExperience !== ""
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                    }`}
-                >
-                  <span>Max Experience</span>
-                  <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "experience" ? "rotate-180" : ""
-                      }`}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                  >
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
-                </button>
-
-                {activeDropdown === "experience" && (
-                  <div className="absolute top-full left-0 mt-2 w-[210px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2.5 z-50 flex flex-col gap-0.5">
-                    {experienceOptions.map((exp) => {
-                      const isSelected = selectedExperience === exp;
-                      return (
-                        <div
-                          key={exp}
-                          onClick={() => {
-                            setSelectedExperience(
-                              exp === selectedExperience ? "" : exp
-                            );
-                            setActiveDropdown(null);
-                          }}
-                          className={`flex items-center gap-2.5 px-3 py-1.5 rounded-[6px] cursor-pointer text-[13px] transition-colors ${isSelected
-                              ? "bg-slate-50 text-[#0F172A] font-medium"
-                              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                            }`}
-                        >
-                          <div
-                            className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${isSelected
-                                ? "bg-[#0F4C3A] text-white"
-                                : "border border-slate-300"
                               }`}
                           >
                             {isSelected && (
