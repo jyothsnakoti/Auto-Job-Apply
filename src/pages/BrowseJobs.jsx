@@ -56,12 +56,11 @@ const degreeOptions = [
 ];
 
 const experienceOptions = [
-  "No experience required",
-  "Up to 1 year",
-  "Up to 2 years",
-  "Up to 3 years",
-  "Up to 5 years",
-  "Up to 7 years",
+  "Entry Level (0-1 yrs)",
+  "Junior (1-3 yrs)",
+  "Mid-Level (3-5 yrs)",
+  "Senior (5-8 yrs)",
+  "Lead / Principal (8+ yrs)",
 ];
 
 const jobTypeOptions = ["Full-time", "Part-time", "Contract", "Internship"];
@@ -119,10 +118,14 @@ const extractCleanJobTitle = (rawTitle, rawText, index = 0) => {
     !title.toLowerCase().startsWith("the ") &&
     !title.toLowerCase().includes("is looking for") &&
     !title.toLowerCase().includes("we are looking") &&
-    !title.toLowerCase().includes("team is seeking") &&
-    !title.includes("\n")
+    !title.toLowerCase().includes("team is seeking")
   ) {
-    return title;
+    return title.split("\n")[0].trim();
+  }
+
+  if (title && title.length <= 160) {
+    const firstTitleLine = title.split("\n")[0].trim();
+    if (firstTitleLine) return firstTitleLine;
   }
 
   const candidateText = title || text;
@@ -247,14 +250,14 @@ const transformMatchToJob = (match, index = 0) => {
       : typeof match.overall_score === "number"
       ? match.overall_score
       : typeof match.score_data?.overall_score === "number"
-      ? match.score_data.overall_score
-      : typeof match.score === "number"
-      ? match.score
-      : typeof match.overall_score === "string" &&
-        !isNaN(Number(match.overall_score)) &&
-        match.overall_score.trim() !== ""
-      ? Number(match.overall_score)
-      : null;
+        ? match.score_data.overall_score
+        : typeof match.score === "number"
+          ? match.score
+          : typeof match.overall_score === "string" &&
+            !isNaN(Number(match.overall_score)) &&
+            match.overall_score.trim() !== ""
+            ? Number(match.overall_score)
+            : null;
 
   const matchPercent =
     rawScore !== null && !isNaN(rawScore)
@@ -295,10 +298,10 @@ const transformMatchToJob = (match, index = 0) => {
     Array.isArray(match.requiredSkills) && match.requiredSkills.length > 0
       ? match.requiredSkills.map(cleanHtmlText)
       : Array.isArray(match.skills) && match.skills.length > 0
-      ? match.skills.map(cleanHtmlText)
-      : Array.isArray(match.extracted_skills) && match.extracted_skills.length > 0
-      ? match.extracted_skills.map(cleanHtmlText)
-      : [];
+        ? match.skills.map(cleanHtmlText)
+        : Array.isArray(match.extracted_skills) && match.extracted_skills.length > 0
+          ? match.extracted_skills.map(cleanHtmlText)
+          : [];
 
   const preferredSkills =
     Array.isArray(match.preferredSkills) && match.preferredSkills.length > 0
@@ -320,8 +323,8 @@ const transformMatchToJob = (match, index = 0) => {
 
   let description = cleanHtmlText(
     match.description ||
-      match.preview ||
-      (match.full_jd_text ? match.full_jd_text.slice(0, 400) + "..." : "")
+    match.preview ||
+    (match.full_jd_text ? match.full_jd_text.slice(0, 400) + "..." : "")
   );
 
   let responsibilities = [];
@@ -965,17 +968,15 @@ const BrowseJobs = () => {
                 <button
                   type="button"
                   onClick={() => toggleDropdown("date")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "date" || selectedDate !== "All time"
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "date" || selectedDate !== "All time"
                       ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
                       : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
+                    }`}
                 >
                   <span>Date</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "date" ? "rotate-180" : ""
-                    }`}
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "date" ? "rotate-180" : ""
+                      }`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -996,18 +997,16 @@ const BrowseJobs = () => {
                             setSelectedDate(opt);
                             setActiveDropdown(null);
                           }}
-                          className={`flex items-center gap-2.5 px-3 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] ${
-                            isSelected
+                          className={`flex items-center gap-2.5 px-3 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] ${isSelected
                               ? "font-semibold text-[#0F172A] bg-slate-50"
                               : "text-slate-700"
-                          }`}
+                            }`}
                         >
                           <div
-                            className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
-                              isSelected
+                            className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${isSelected
                                 ? "border-[#0F4C3A] bg-[#0F4C3A] text-white"
                                 : "border-slate-300"
-                            }`}
+                              }`}
                           >
                             {isSelected && (
                               <svg
@@ -1034,17 +1033,15 @@ const BrowseJobs = () => {
                 <button
                   type="button"
                   onClick={() => toggleDropdown("location")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "location" || selectedLocations.length > 0
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "location" || selectedLocations.length > 0
                       ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
                       : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
+                    }`}
                 >
                   <span>Location</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "location" ? "rotate-180" : ""
-                    }`}
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "location" ? "rotate-180" : ""
+                      }`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1101,11 +1098,10 @@ const BrowseJobs = () => {
                                 className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
                               >
                                 <div
-                                  className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${
-                                    isChecked
+                                  className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
                                       ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
                                       : "border-slate-300 bg-white"
-                                  }`}
+                                    }`}
                                 >
                                   {isChecked && (
                                     <svg
@@ -1134,17 +1130,15 @@ const BrowseJobs = () => {
                 <button
                   type="button"
                   onClick={() => toggleDropdown("role")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "role" || selectedRoles.length > 0
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "role" || selectedRoles.length > 0
                       ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
                       : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
+                    }`}
                 >
                   <span>Role</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "role" ? "rotate-180" : ""
-                    }`}
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "role" ? "rotate-180" : ""
+                      }`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1172,11 +1166,10 @@ const BrowseJobs = () => {
                             className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
                           >
                             <div
-                              className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${
-                                isChecked
+                              className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
                                   ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
                                   : "border-slate-300 bg-white"
-                              }`}
+                                }`}
                             >
                               {isChecked && (
                                 <svg
@@ -1204,17 +1197,15 @@ const BrowseJobs = () => {
                 <button
                   type="button"
                   onClick={() => toggleDropdown("jobType")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "jobType" || selectedJobTypes.length > 0
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "jobType" || selectedJobTypes.length > 0
                       ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
                       : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
+                    }`}
                 >
                   <span>Job Type</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "jobType" ? "rotate-180" : ""
-                    }`}
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "jobType" ? "rotate-180" : ""
+                      }`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1237,11 +1228,10 @@ const BrowseJobs = () => {
                           className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
                         >
                           <div
-                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${
-                              isChecked
+                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
                                 ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
                                 : "border-slate-300 bg-white"
-                            }`}
+                              }`}
                           >
                             {isChecked && (
                               <svg
@@ -1268,17 +1258,15 @@ const BrowseJobs = () => {
                 <button
                   type="button"
                   onClick={() => toggleDropdown("workplace")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "workplace" || selectedWorkplace.length > 0
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "workplace" || selectedWorkplace.length > 0
                       ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
                       : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
+                    }`}
                 >
                   <span>Workplace</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "workplace" ? "rotate-180" : ""
-                    }`}
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "workplace" ? "rotate-180" : ""
+                      }`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1301,11 +1289,10 @@ const BrowseJobs = () => {
                           className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
                         >
                           <div
-                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${
-                              isChecked
+                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
                                 ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
                                 : "border-slate-300 bg-white"
-                            }`}
+                              }`}
                           >
                             {isChecked && (
                               <svg
@@ -1331,11 +1318,10 @@ const BrowseJobs = () => {
               <button
                 type="button"
                 onClick={() => setSponsorsVisa(!sponsorsVisa)}
-                className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                  sponsorsVisa
+                className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${sponsorsVisa
                     ? "border-slate-400 bg-slate-100 text-[#0F172A] font-medium"
                     : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                }`}
+                  }`}
               >
                 <span>Sponsors Visa</span>
               </button>
@@ -1345,17 +1331,15 @@ const BrowseJobs = () => {
                 <button
                   type="button"
                   onClick={() => toggleDropdown("companies")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "companies" || selectedCompanies.length > 0
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "companies" || selectedCompanies.length > 0
                       ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
                       : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
+                    }`}
                 >
                   <span>Companies</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "companies" ? "rotate-180" : ""
-                    }`}
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "companies" ? "rotate-180" : ""
+                      }`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1412,11 +1396,10 @@ const BrowseJobs = () => {
                                 className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
                               >
                                 <div
-                                  className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${
-                                    isChecked
+                                  className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
                                       ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
                                       : "border-slate-300 bg-white"
-                                  }`}
+                                    }`}
                                 >
                                   {isChecked && (
                                     <svg
@@ -1445,17 +1428,15 @@ const BrowseJobs = () => {
                 <button
                   type="button"
                   onClick={() => toggleDropdown("degree")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "degree" || selectedDegrees.length > 0
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "degree" || selectedDegrees.length > 0
                       ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
                       : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
+                    }`}
                 >
                   <span>Degree Level</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "degree" ? "rotate-180" : ""
-                    }`}
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "degree" ? "rotate-180" : ""
+                      }`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1478,11 +1459,10 @@ const BrowseJobs = () => {
                           className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
                         >
                           <div
-                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${
-                              isChecked
+                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
                                 ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
                                 : "border-slate-300 bg-white"
-                            }`}
+                              }`}
                           >
                             {isChecked && (
                               <svg
@@ -1509,17 +1489,15 @@ const BrowseJobs = () => {
                 <button
                   type="button"
                   onClick={() => toggleDropdown("experience")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "experience" || selectedExperience !== ""
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "experience" || selectedExperience !== ""
                       ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
                       : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
+                    }`}
                 >
                   <span>Max Experience</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "experience" ? "rotate-180" : ""
-                    }`}
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "experience" ? "rotate-180" : ""
+                      }`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1540,18 +1518,16 @@ const BrowseJobs = () => {
                             setSelectedExperience(isSelected ? "" : exp);
                             setActiveDropdown(null);
                           }}
-                          className={`flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] ${
-                            isSelected
+                          className={`flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] ${isSelected
                               ? "font-semibold text-[#0F172A] bg-slate-50"
                               : "text-slate-700"
-                          }`}
+                            }`}
                         >
                           <div
-                            className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
-                              isSelected
+                            className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${isSelected
                                 ? "bg-[#0F4C3A] text-white"
                                 : "border border-slate-300"
-                            }`}
+                              }`}
                           >
                             {isSelected && (
                               <svg
@@ -1920,9 +1896,9 @@ const BrowseJobs = () => {
                     <h2 className="text-[17px] font-bold text-[#0F172A] tracking-tight leading-snug break-words">
                       {typeof selectedJobModal.title === "string"
                         ? selectedJobModal.title
-                            .replace(/<[^>]*>/g, " ")
-                            .replace(/\s+/g, " ")
-                            .trim()
+                          .replace(/<[^>]*>/g, " ")
+                          .replace(/\s+/g, " ")
+                          .trim()
                         : selectedJobModal.title}
                     </h2>
 
@@ -2101,8 +2077,8 @@ const BrowseJobs = () => {
                         {activeAtsScore >= 80
                           ? "Strong match based on your profile, skills, experience and preferences."
                           : activeAtsScore >= 60
-                          ? "Moderate match. Enhancing your resume can bridge key skill and keyword gaps."
-                          : "Lower match. Review identified gaps below or click Enhance Resume."}
+                            ? "Moderate match. Enhancing your resume can bridge key skill and keyword gaps."
+                            : "Lower match. Review identified gaps below or click Enhance Resume."}
                       </p>
                     </div>
                   </div>
@@ -2149,79 +2125,79 @@ const BrowseJobs = () => {
                 {(missingRequiredSkills.length > 0 ||
                   missingPreferredSkills.length > 0 ||
                   missingKeywords.length > 0) && (
-                  <div className="rounded-[16px] border border-amber-200/80 bg-gradient-to-br from-amber-50/60 to-orange-50/30 p-4 space-y-3 shadow-2xs">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="w-5 h-5 rounded-md bg-amber-100 text-amber-800 text-[11px] font-bold flex items-center justify-center">
-                          !
+                    <div className="rounded-[16px] border border-amber-200/80 bg-gradient-to-br from-amber-50/60 to-orange-50/30 p-4 space-y-3 shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-md bg-amber-100 text-amber-800 text-[11px] font-bold flex items-center justify-center">
+                            !
+                          </span>
+                          <h4 className="text-[13px] font-bold text-amber-950">
+                            ATS Identified Gaps
+                          </h4>
+                        </div>
+                        <span className="text-[10.5px] font-semibold text-amber-800 bg-amber-100/80 border border-amber-200 px-2 py-0.5 rounded-full">
+                          {missingRequiredSkills.length +
+                            missingPreferredSkills.length +
+                            missingKeywords.length}{" "}
+                          Gaps
                         </span>
-                        <h4 className="text-[13px] font-bold text-amber-950">
-                          ATS Identified Gaps
-                        </h4>
                       </div>
-                      <span className="text-[10.5px] font-semibold text-amber-800 bg-amber-100/80 border border-amber-200 px-2 py-0.5 rounded-full">
-                        {missingRequiredSkills.length +
-                          missingPreferredSkills.length +
-                          missingKeywords.length}{" "}
-                        Gaps
-                      </span>
+
+                      {missingRequiredSkills.length > 0 && (
+                        <div>
+                          <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">
+                            Missing Required Skills:
+                          </span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {missingRequiredSkills.map((skill, i) => (
+                              <span
+                                key={i}
+                                className="bg-white border border-amber-200 text-amber-900 text-[11.5px] font-medium px-2.5 py-0.5 rounded-md shadow-2xs"
+                              >
+                                • {skill}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {missingPreferredSkills.length > 0 && (
+                        <div>
+                          <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">
+                            Missing Preferred Skills:
+                          </span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {missingPreferredSkills.map((skill, i) => (
+                              <span
+                                key={i}
+                                className="bg-white border border-amber-200 text-amber-900 text-[11.5px] font-medium px-2.5 py-0.5 rounded-md shadow-2xs"
+                              >
+                                • {skill}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {missingKeywords.length > 0 && (
+                        <div>
+                          <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">
+                            Missing Keywords:
+                          </span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {missingKeywords.map((kw, i) => (
+                              <span
+                                key={i}
+                                className="bg-white border border-amber-200 text-slate-700 text-[11px] font-normal px-2 py-0.5 rounded-md"
+                              >
+                                {kw}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
-
-                    {missingRequiredSkills.length > 0 && (
-                      <div>
-                        <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">
-                          Missing Required Skills:
-                        </span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {missingRequiredSkills.map((skill, i) => (
-                            <span
-                              key={i}
-                              className="bg-white border border-amber-200 text-amber-900 text-[11.5px] font-medium px-2.5 py-0.5 rounded-md shadow-2xs"
-                            >
-                              • {skill}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {missingPreferredSkills.length > 0 && (
-                      <div>
-                        <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">
-                          Missing Preferred Skills:
-                        </span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {missingPreferredSkills.map((skill, i) => (
-                            <span
-                              key={i}
-                              className="bg-white border border-amber-200 text-amber-900 text-[11.5px] font-medium px-2.5 py-0.5 rounded-md shadow-2xs"
-                            >
-                              • {skill}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {missingKeywords.length > 0 && (
-                      <div>
-                        <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">
-                          Missing Keywords:
-                        </span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {missingKeywords.map((kw, i) => (
-                            <span
-                              key={i}
-                              className="bg-white border border-amber-200 text-slate-700 text-[11px] font-normal px-2 py-0.5 rounded-md"
-                            >
-                              {kw}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
+                  )}
 
                 {/* Job Description */}
                 <div>
@@ -2231,8 +2207,8 @@ const BrowseJobs = () => {
                   <p className="text-[12.5px] text-[#475569] leading-relaxed mt-1.5">
                     {cleanHtmlText(
                       selectedJobModal.description ||
-                        selectedJobModal.fullJdText ||
-                        selectedJobModal.preview
+                      selectedJobModal.fullJdText ||
+                      selectedJobModal.preview
                     )}
                   </p>
                 </div>
@@ -2339,11 +2315,10 @@ const BrowseJobs = () => {
                   <button
                     type="button"
                     onClick={() => setIsJobSaved(!isJobSaved)}
-                    className={`flex-1 h-[44px] rounded-[12px] border text-[13.5px] font-medium flex items-center justify-center gap-2 transition-colors cursor-pointer ${
-                      isJobSaved
+                    className={`flex-1 h-[44px] rounded-[12px] border text-[13.5px] font-medium flex items-center justify-center gap-2 transition-colors cursor-pointer ${isJobSaved
                         ? "border-indigo-300 bg-indigo-50 text-[#4F46E5]"
                         : "border-[#C7D2FE] bg-white text-[#4F46E5] hover:bg-indigo-50/50"
-                    }`}
+                      }`}
                   >
                     <svg
                       className="w-4 h-4"
@@ -2405,10 +2380,10 @@ const BrowseJobs = () => {
                       handleCopyEnhancedResume(
                         enhancedResultsMap[getJobId(selectedJobModal)]
                           ?.EnhResume ||
-                          enhancedResultsMap[getJobId(selectedJobModal)]
-                            ?.enhResume ||
-                          enhancedResultsMap[getJobId(selectedJobModal)]
-                            ?.enhanced_resume
+                        enhancedResultsMap[getJobId(selectedJobModal)]
+                          ?.enhResume ||
+                        enhancedResultsMap[getJobId(selectedJobModal)]
+                          ?.enhanced_resume
                       )
                     }
                     className="px-3.5 py-1.5 bg-[#EEF2FF] hover:bg-[#E0E7FF] text-[#4F46E5] text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
@@ -2456,129 +2431,128 @@ const BrowseJobs = () => {
                 {/* Bridged Gaps Summary */}
                 {enhancedResultsMap[getJobId(selectedJobModal)]
                   ?.bridgeable_gaps && (
-                  <div className="bg-[#EEF2FF]/70 border border-[#C7D2FE] rounded-xl p-4.5 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-xs font-bold text-[#312E81] uppercase tracking-wide">
-                        Bridged Skills & Qualifications
-                      </h4>
-                      {Array.isArray(
-                        enhancedResultsMap[getJobId(selectedJobModal)]
-                          .bridgeable_gaps
-                      ) && (
-                        <span className="text-[11px] font-semibold text-[#4F46E5] bg-white border border-[#C7D2FE] px-2 py-0.5 rounded-full">
-                          {
-                            enhancedResultsMap[getJobId(selectedJobModal)]
-                              .bridgeable_gaps.length
-                          }{" "}
-                          Tailored Improvements
-                        </span>
-                      )}
-                    </div>
-                    <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
-                      {Array.isArray(
-                        enhancedResultsMap[getJobId(selectedJobModal)]
-                          .bridgeable_gaps
-                      ) ? (
-                        enhancedResultsMap[
-                          getJobId(selectedJobModal)
-                        ].bridgeable_gaps.map((gap, i) => {
-                          if (typeof gap === "string") {
-                            return (
-                              <div
-                                key={i}
-                                className="flex items-center gap-2 bg-white text-slate-800 border border-[#E0E7FF] rounded-lg p-2.5 shadow-2xs"
-                              >
-                                <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">
-                                  ✓
-                                </span>
-                                <span className="text-xs font-semibold text-slate-900">
-                                  {gap}
-                                </span>
-                              </div>
-                            );
-                          }
-
-                          const skill =
-                            gap?.skill || gap?.name || gap?.title || "";
-                          const severity =
-                            gap?.severity ||
-                            (gap?.source ? String(gap.source).toUpperCase() : "");
-                          const rationale =
-                            gap?.rationale ||
-                            gap?.description ||
-                            gap?.reason ||
-                            "";
-
-                          return (
-                            <div
-                              key={i}
-                              className="bg-white text-slate-800 border border-[#E0E7FF] rounded-xl p-3 shadow-2xs space-y-1.5"
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2">
+                    <div className="bg-[#EEF2FF]/70 border border-[#C7D2FE] rounded-xl p-4.5 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-bold text-[#312E81] uppercase tracking-wide">
+                          Bridged Skills & Qualifications
+                        </h4>
+                        {Array.isArray(
+                          enhancedResultsMap[getJobId(selectedJobModal)]
+                            .bridgeable_gaps
+                        ) && (
+                            <span className="text-[11px] font-semibold text-[#4F46E5] bg-white border border-[#C7D2FE] px-2 py-0.5 rounded-full">
+                              {
+                                enhancedResultsMap[getJobId(selectedJobModal)]
+                                  .bridgeable_gaps.length
+                              }{" "}
+                              Tailored Improvements
+                            </span>
+                          )}
+                      </div>
+                      <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
+                        {Array.isArray(
+                          enhancedResultsMap[getJobId(selectedJobModal)]
+                            .bridgeable_gaps
+                        ) ? (
+                          enhancedResultsMap[
+                            getJobId(selectedJobModal)
+                          ].bridgeable_gaps.map((gap, i) => {
+                            if (typeof gap === "string") {
+                              return (
+                                <div
+                                  key={i}
+                                  className="flex items-center gap-2 bg-white text-slate-800 border border-[#E0E7FF] rounded-lg p-2.5 shadow-2xs"
+                                >
                                   <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">
                                     ✓
                                   </span>
-                                  <span className="text-xs font-bold text-slate-900">
-                                    {skill || "Optimized Skill"}
+                                  <span className="text-xs font-semibold text-slate-900">
+                                    {gap}
                                   </span>
                                 </div>
-                                {severity && (
-                                  <span
-                                    className={`text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
-                                      severity === "CRITICAL"
-                                        ? "bg-amber-50 text-amber-700 border-amber-200"
-                                        : severity === "PREFERRED"
-                                        ? "bg-blue-50 text-blue-700 border-blue-200"
-                                        : "bg-indigo-50 text-[#4F46E5] border-indigo-200"
-                                    }`}
-                                  >
-                                    {severity}
-                                  </span>
+                              );
+                            }
+
+                            const skill =
+                              gap?.skill || gap?.name || gap?.title || "";
+                            const severity =
+                              gap?.severity ||
+                              (gap?.source ? String(gap.source).toUpperCase() : "");
+                            const rationale =
+                              gap?.rationale ||
+                              gap?.description ||
+                              gap?.reason ||
+                              "";
+
+                            return (
+                              <div
+                                key={i}
+                                className="bg-white text-slate-800 border border-[#E0E7FF] rounded-xl p-3 shadow-2xs space-y-1.5"
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">
+                                      ✓
+                                    </span>
+                                    <span className="text-xs font-bold text-slate-900">
+                                      {skill || "Optimized Skill"}
+                                    </span>
+                                  </div>
+                                  {severity && (
+                                    <span
+                                      className={`text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${severity === "CRITICAL"
+                                          ? "bg-amber-50 text-amber-700 border-amber-200"
+                                          : severity === "PREFERRED"
+                                            ? "bg-blue-50 text-blue-700 border-blue-200"
+                                            : "bg-indigo-50 text-[#4F46E5] border-indigo-200"
+                                        }`}
+                                    >
+                                      {severity}
+                                    </span>
+                                  )}
+                                </div>
+                                {rationale && (
+                                  <p className="text-xs text-slate-600 leading-relaxed pl-6 font-normal">
+                                    {rationale}
+                                  </p>
                                 )}
                               </div>
-                              {rationale && (
-                                <p className="text-xs text-slate-600 leading-relaxed pl-6 font-normal">
-                                  {rationale}
-                                </p>
-                              )}
-                            </div>
-                          );
-                        })
-                      ) : typeof enhancedResultsMap[getJobId(selectedJobModal)]
+                            );
+                          })
+                        ) : typeof enhancedResultsMap[getJobId(selectedJobModal)]
                           .bridgeable_gaps === "object" ? (
-                        Object.entries(
-                          enhancedResultsMap[getJobId(selectedJobModal)]
-                            .bridgeable_gaps
-                        ).map(([k, v], i) => (
-                          <div
-                            key={i}
-                            className="bg-white text-slate-800 border border-[#E0E7FF] rounded-xl p-3 shadow-2xs space-y-1"
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">
-                                ✓
-                              </span>
-                              <span className="text-xs font-bold text-slate-900">
-                                {k}
-                              </span>
-                            </div>
-                            <p className="text-xs text-slate-600 leading-relaxed pl-6 font-normal">
-                              {String(v)}
-                            </p>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-xs text-[#4F46E5]">
-                          {String(
+                          Object.entries(
                             enhancedResultsMap[getJobId(selectedJobModal)]
                               .bridgeable_gaps
-                          )}
-                        </p>
-                      )}
+                          ).map(([k, v], i) => (
+                            <div
+                              key={i}
+                              className="bg-white text-slate-800 border border-[#E0E7FF] rounded-xl p-3 shadow-2xs space-y-1"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">
+                                  ✓
+                                </span>
+                                <span className="text-xs font-bold text-slate-900">
+                                  {k}
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-600 leading-relaxed pl-6 font-normal">
+                                {String(v)}
+                              </p>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-xs text-[#4F46E5]">
+                            {String(
+                              enhancedResultsMap[getJobId(selectedJobModal)]
+                                .bridgeable_gaps
+                            )}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
                 {/* Enhanced Resume Content */}
                 <div>

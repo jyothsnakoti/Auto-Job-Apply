@@ -116,16 +116,22 @@ const extractCleanJobTitle = (rawTitle, rawText, index = 0) => {
   let title = cleanHtmlText(rawTitle || "");
   const text = cleanHtmlText(rawText || "");
 
+  // 1. If a title was explicitly provided and is a valid job title string
   if (
     title &&
     title.length <= 90 &&
     !title.toLowerCase().startsWith("the ") &&
     !title.toLowerCase().includes("is looking for") &&
     !title.toLowerCase().includes("we are looking") &&
-    !title.toLowerCase().includes("team is seeking") &&
-    !title.includes("\n")
+    !title.toLowerCase().includes("team is seeking")
   ) {
-    return title;
+    return title.split("\n")[0].trim();
+  }
+
+  // 2. If title exists even if slightly long, use the first line cleanly
+  if (title && title.length <= 160) {
+    const firstTitleLine = title.split("\n")[0].trim();
+    if (firstTitleLine) return firstTitleLine;
   }
 
   const candidateText = title || text;
@@ -137,7 +143,7 @@ const extractCleanJobTitle = (rawTitle, rawText, index = 0) => {
       lookingMatch &&
       lookingMatch[1] &&
       lookingMatch[1].trim().length >= 3 &&
-      lookingMatch[1].trim().length <= 60
+      lookingMatch[1].trim().length <= 100
     ) {
       return lookingMatch[1].trim();
     }
@@ -149,7 +155,7 @@ const extractCleanJobTitle = (rawTitle, rawText, index = 0) => {
       explicitMatch &&
       explicitMatch[1] &&
       explicitMatch[1].trim().length >= 3 &&
-      explicitMatch[1].trim().length <= 60
+      explicitMatch[1].trim().length <= 100
     ) {
       return explicitMatch[1].trim();
     }
@@ -172,6 +178,9 @@ const extractCleanJobTitle = (rawTitle, rawText, index = 0) => {
       /\b(Mobile\s+Developer(?:\s+[I|V|X\d]+)?)\b/i,
       /\b(iOS\s+Developer(?:\s+[I|V|X\d]+)?)\b/i,
       /\b(Android\s+Developer(?:\s+[I|V|X\d]+)?)\b/i,
+      /\b(Director[A-Za-z0-9\s\-/+(),&]+)\b/i,
+      /\b(Technician[A-Za-z0-9\s\-/+(),&]+)\b/i,
+      /\b(Manager[A-Za-z0-9\s\-/+(),&]+)\b/i,
     ];
 
     for (const pattern of knownRolePatterns) {
@@ -184,11 +193,15 @@ const extractCleanJobTitle = (rawTitle, rawText, index = 0) => {
     const firstLine = candidateText.split("\n")[0].replace(/^#+\s*/, "").trim();
     if (
       firstLine &&
-      firstLine.length <= 50 &&
+      firstLine.length <= 100 &&
       !firstLine.toLowerCase().includes("http")
     ) {
       return firstLine;
     }
+  }
+
+  if (rawTitle) {
+    return cleanHtmlText(rawTitle).slice(0, 100);
   }
 
   return `Position #${index + 1}`;
@@ -272,7 +285,7 @@ const transformMatchToJob = (match, index = 0) => {
   else if (compLower.includes("amazon") || compLower.includes("luna")) logo = amazonLogo;
   else if (compLower.includes("shopify")) logo = shopifyLogo;
 
-  let location = cleanHtmlText(match.location || match.city || "");
+  let location = cleanHtmlText(match.location || match.city || match.country || "");
   if (!location && cleanedFullText) {
     const locMatch = cleanedFullText.match(
       /(?:location|place|city)\s*[:-]\s*([^\n\r]+)/i
@@ -289,10 +302,10 @@ const transformMatchToJob = (match, index = 0) => {
     Array.isArray(match.requiredSkills) && match.requiredSkills.length > 0
       ? match.requiredSkills.map(cleanHtmlText)
       : Array.isArray(match.skills) && match.skills.length > 0
-        ? match.skills.map(cleanHtmlText)
-        : Array.isArray(match.extracted_skills) && match.extracted_skills.length > 0
-          ? match.extracted_skills.map(cleanHtmlText)
-          : [];
+      ? match.skills.map(cleanHtmlText)
+      : Array.isArray(match.extracted_skills) && match.extracted_skills.length > 0
+      ? match.extracted_skills.map(cleanHtmlText)
+      : [];
 
   const preferredSkills =
     Array.isArray(match.preferredSkills) && match.preferredSkills.length > 0
@@ -313,8 +326,8 @@ const transformMatchToJob = (match, index = 0) => {
 
   let description = cleanHtmlText(
     match.description ||
-      match.preview ||
-      (match.full_jd_text ? match.full_jd_text.slice(0, 400) + "..." : "")
+    match.preview ||
+    (match.full_jd_text ? match.full_jd_text.slice(0, 400) + "..." : "")
   );
   if (!description) {
     description = "Job description available upon viewing details.";
@@ -339,7 +352,7 @@ const transformMatchToJob = (match, index = 0) => {
     }
   }
 
-  const jobId = match.job_id || match.JDid || match.jd_id || match.id || `match-${index + 1}`;
+  const jobId = match.jobId || match.job_id || match.JDid || match.jd_id || match.id || `match-${index + 1}`;
 
   return {
     id: jobId,
@@ -347,16 +360,19 @@ const transformMatchToJob = (match, index = 0) => {
     JDid: jobId,
     title,
     company,
+    companyDomain: match.companyDomain || "",
     location,
+    country: match.country || "",
     fullLocation: cleanHtmlText(match.fullLocation || location),
-    type: cleanHtmlText(match.type || match.employment_type || "Full-time"),
+    type: cleanHtmlText(match.type || match.employmentType || match.employment_type || "Full-time"),
     workMode: cleanHtmlText(
       match.workMode ||
-        match.work_mode ||
-        (location.toLowerCase().includes("remote") ? "Remote" : "On-site")
+      match.work_mode ||
+      (location.toLowerCase().includes("remote") ? "Remote" : "On-site")
     ),
     department: cleanHtmlText(match.department || "Engineering"),
-    posted: cleanHtmlText(match.posted || "Recent match"),
+    posted: match.postedAt ? new Date(match.postedAt).toLocaleDateString() : cleanHtmlText(match.posted || "Recent match"),
+    postedAt: match.postedAt || null,
     match: matchText,
     matchPercent,
     rawScore,
@@ -374,26 +390,35 @@ const transformMatchToJob = (match, index = 0) => {
 };
 
 const getMatchPercent = (job) => {
+  if (job?.matchPercent !== undefined && job?.matchPercent !== null) {
+    const num = Number(job.matchPercent);
+    if (!isNaN(num)) return num;
+  }
+  if (job?.rawScore !== undefined && job?.rawScore !== null) {
+    const num = Number(job.rawScore);
+    if (!isNaN(num)) return num;
+  }
+  if (job?.matchScore !== undefined && job?.matchScore !== null) {
+    const num = Number(job.matchScore);
+    if (!isNaN(num)) return num;
+  }
   if (job?.overall_score !== undefined && job?.overall_score !== null) {
     const num = Number(job.overall_score);
-    return isNaN(num) ? 0 : num;
-  }
-  if (job?.matchPercent !== undefined && job?.matchPercent !== null) {
-    return Number(job.matchPercent);
+    if (!isNaN(num)) return num;
   }
   return 0;
 };
 
 const getMatchLabel = (job) => {
-  if (job?.overall_score !== undefined && job?.overall_score !== null) {
-    const num = Number(job.overall_score);
-    return `${Number.isInteger(num) ? num : num.toFixed(1)}% match`;
+  const percent = getMatchPercent(job);
+  if (percent > 0) {
+    return `${Number.isInteger(percent) ? percent : Math.round(percent)}% match`;
   }
-  return job?.match || `${getMatchPercent(job)}% match`;
+  return job?.match || "ATS Match";
 };
 
 const getMatchBadgeColor = (percent) => {
-  if (percent >= 90) return "bg-[#ECFDF5] text-[#059669]";
+  if (percent >= 85) return "bg-[#ECFDF5] text-[#059669]";
   if (percent >= 70) return "bg-[#EFF6FF] text-[#2563EB]";
   if (percent >= 50) return "bg-[#FFFBEB] text-[#D97706]";
   return "bg-[#FEF2F2] text-[#DC2626]";
@@ -434,12 +459,33 @@ const Dashboard = () => {
   const [isJobSaved, setIsJobSaved] = useState(false);
 
   // Dynamic Jobs & API Pagination State
-  const [jobs, setJobs] = useState([]);
+  const [jobs, setJobs] = useState(() => {
+    try {
+      const cachedDashboard = getStoredDashboardData();
+      if (Array.isArray(cachedDashboard?.topMatches) && cachedDashboard.topMatches.length > 0) {
+        return cachedDashboard.topMatches
+          .map((m, idx) => transformMatchToJob(m, idx))
+          .filter(Boolean);
+      }
+      const stored = getStoredJobMatches();
+      if (Array.isArray(stored) && stored.length > 0) {
+        return stored
+          .map((m, idx) => transformMatchToJob(m, idx))
+          .filter(Boolean);
+      }
+    } catch {
+      // ignore
+    }
+    return [];
+  });
   const [lastJobId, setLastJobId] = useState(null);
   const [isLoadingJobs, setIsLoadingJobs] = useState(true);
   const [jobError, setJobError] = useState(null);
   const [jobFeedbackMessage, setJobFeedbackMessage] = useState(null);
-  const [hasResume, setHasResume] = useState(false);
+  const [hasResume, setHasResume] = useState(() => {
+    const cachedDashboard = getStoredDashboardData();
+    return Boolean(cachedDashboard?.topMatches?.length > 0);
+  });
 
   // Dynamic Billing Information from API
   const [billingInfo, setBillingInfo] = useState(null);
@@ -488,7 +534,72 @@ const Dashboard = () => {
 
   const dropdownRef = useRef(null);
 
-  // 1. Fetch Dynamic Billing Status from API
+  // Dynamic Dashboard Metrics from GET /api/dashboard
+  const [dashboardMetrics, setDashboardMetrics] = useState(() => {
+    return getStoredDashboardData() || null;
+  });
+  const [isLoadingDashboard, setIsLoadingDashboard] = useState(!dashboardMetrics);
+
+  // 1. Fetch Dynamic Dashboard Metrics & Top Matches from GET /api/dashboard
+  useEffect(() => {
+    let isMounted = true;
+    const loadDashboardMetrics = async () => {
+      try {
+        const data = await getDashboardData();
+        if (isMounted && data) {
+          setDashboardMetrics(data);
+
+          // Populate Top Matches dynamically from /api/dashboard
+          if (Array.isArray(data.topMatches) && data.topMatches.length > 0) {
+            const transformed = data.topMatches
+              .map((m, idx) => transformMatchToJob(m, idx))
+              .filter(Boolean);
+
+            if (transformed.length > 0) {
+              setJobs(transformed);
+              setHasResume(true);
+              const last = transformed[transformed.length - 1];
+              if (last?.job_id || last?.id) {
+                setLastJobId(last.job_id || last.id);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("[Dashboard] Could not fetch dashboard metrics:", err);
+      } finally {
+        if (isMounted) {
+          setIsLoadingDashboard(false);
+          setIsLoadingJobs(false);
+        }
+      }
+    };
+
+    loadDashboardMetrics();
+
+    const handleDashboardUpdated = (e) => {
+      if (isMounted && e?.detail) {
+        setDashboardMetrics(e.detail);
+        if (Array.isArray(e.detail.topMatches) && e.detail.topMatches.length > 0) {
+          const transformed = e.detail.topMatches
+            .map((m, idx) => transformMatchToJob(m, idx))
+            .filter(Boolean);
+          if (transformed.length > 0) {
+            setJobs(transformed);
+            setHasResume(true);
+          }
+        }
+      }
+    };
+
+    window.addEventListener("dashboardDataUpdated", handleDashboardUpdated);
+    return () => {
+      isMounted = false;
+      window.removeEventListener("dashboardDataUpdated", handleDashboardUpdated);
+    };
+  }, []);
+
+  // 2. Fetch Dynamic Billing Status from API
   useEffect(() => {
     let isMounted = true;
     const loadBilling = async () => {
@@ -527,7 +638,7 @@ const Dashboard = () => {
     };
   }, []);
 
-  // 2. Fetch Dynamic User Info & Matched Jobs from API
+  // 3. Fetch Dynamic User Info & Matched Jobs from API
   useEffect(() => {
     let isMounted = true;
 
@@ -576,7 +687,7 @@ const Dashboard = () => {
               sessionStorage.setItem("userFullName", resolvedName);
             }
           })
-          .catch(() => {});
+          .catch(() => { });
 
         // Check Resume Status
         let activeResumeId = null;
@@ -962,7 +1073,7 @@ const Dashboard = () => {
     sponsorsVisa,
   ]);
 
-  // Dynamic Dashboard Statistics Cards (Calculated From API Data)
+  // Dynamic Dashboard Statistics Cards (From GET /api/dashboard endpoint with fallback)
   const statsCards = useMemo(() => {
     const totalJobs = jobs.length;
     const qualifiedCount = jobs.filter(
@@ -973,22 +1084,22 @@ const Dashboard = () => {
       typeof billingInfo?.usedApplications === "number"
         ? billingInfo.usedApplications
         : typeof billingInfo?.applicationsUsed === "number"
-        ? billingInfo.applicationsUsed
-        : applications.length;
+          ? billingInfo.applicationsUsed
+          : applications.length;
 
     const allowance =
       typeof billingInfo?.applicationAllowance === "number"
         ? billingInfo.applicationAllowance
         : typeof billingInfo?.applicationLimit === "number"
-        ? billingInfo.applicationLimit
-        : null;
+          ? billingInfo.applicationLimit
+          : null;
 
     const remainingApps =
       typeof billingInfo?.remainingApplications === "number"
         ? billingInfo.remainingApplications
         : allowance !== null
-        ? Math.max(0, allowance - usedApps)
-        : 0;
+          ? Math.max(0, allowance - usedApps)
+          : 0;
 
     return [
       {
@@ -999,41 +1110,37 @@ const Dashboard = () => {
           totalJobs > 0
             ? `${totalJobs} matched jobs ready`
             : hasResume
-            ? "No matches found"
-            : "Upload resume to find matches",
+              ? "No matches found"
+              : "Upload resume to find matches",
         iconBg: "#EFF6FF",
         icon: dashboard1Icon,
       },
       {
         id: "qualified-matches",
         title: "Qualified Matches",
-        value: qualifiedCount > 0 ? qualifiedCount.toLocaleString() : "0",
-        supportingText: "Jobs with ≥80% match",
+        value: Number(qualifiedMatchesVal).toLocaleString(),
+        supportingText: "Jobs with good ATS match",
         iconBg: "#ECFEFF",
         icon: dashboard2Icon,
       },
       {
         id: "applications-submitted",
         title: "Applications Submitted",
-        value: usedApps.toLocaleString(),
-        supportingText: allowance
-          ? `Out of ${allowance} monthly limit`
-          : "This billing cycle",
+        value: Number(submittedVal).toLocaleString(),
+        supportingText: `Out of ${allowanceVal} monthly limit`,
         iconBg: "#FAF5FF",
         icon: dashboard3Icon,
       },
       {
         id: "applications-remaining",
         title: "Applications Remaining",
-        value: remainingApps.toLocaleString(),
-        supportingText: allowance
-          ? `Out of ${allowance} monthly limit`
-          : "This billing cycle",
+        value: Number(remainingVal).toLocaleString(),
+        supportingText: "This month",
         iconBg: "#F0FDFA",
         icon: dashboard4Icon,
       },
     ];
-  }, [jobs, billingInfo, hasResume, applications]);
+  }, [dashboardMetrics, jobs, billingInfo, applications]);
 
   // Dynamic Application Tabs with Counts
   const applicationTabs = useMemo(() => {
@@ -1296,8 +1403,8 @@ const Dashboard = () => {
                   type="button"
                   onClick={() => toggleDropdown("date")}
                   className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "date" || selectedDate !== "All time"
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
                     }`}
                 >
                   <span>Date</span>
@@ -1325,14 +1432,14 @@ const Dashboard = () => {
                             setActiveDropdown(null);
                           }}
                           className={`flex items-center gap-2.5 px-3 py-2 rounded-[8px] cursor-pointer text-[13px] transition-colors ${isSelected
-                              ? "bg-slate-50 text-[#0F172A] font-medium"
-                              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                            ? "bg-slate-50 text-[#0F172A] font-medium"
+                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                             }`}
                         >
                           <div
                             className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${isSelected
-                                ? "bg-[#0F4C3A] text-white"
-                                : "border border-slate-300"
+                              ? "bg-[#0F4C3A] text-white"
+                              : "border border-slate-300"
                               }`}
                           >
                             {isSelected && (
@@ -1361,8 +1468,8 @@ const Dashboard = () => {
                   type="button"
                   onClick={() => toggleDropdown("location")}
                   className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "location" || selectedLocations.length > 0
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
                     }`}
                 >
                   <span>Location</span>
@@ -1462,8 +1569,8 @@ const Dashboard = () => {
                   type="button"
                   onClick={() => toggleDropdown("role")}
                   className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "role" || selectedRoles.length > 0
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
                     }`}
                 >
                   <span>Role</span>
@@ -1529,8 +1636,8 @@ const Dashboard = () => {
                   type="button"
                   onClick={() => toggleDropdown("jobType")}
                   className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "jobType" || selectedJobTypes.length > 0
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
                     }`}
                 >
                   <span>Job Type</span>
@@ -1564,8 +1671,8 @@ const Dashboard = () => {
                         >
                           <div
                             className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
-                                ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                                : "border-slate-300 bg-white"
+                              ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
+                              : "border-slate-300 bg-white"
                               }`}
                           >
                             {isChecked && (
@@ -1594,8 +1701,8 @@ const Dashboard = () => {
                   type="button"
                   onClick={() => toggleDropdown("workplace")}
                   className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "workplace" || selectedWorkplace.length > 0
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
                     }`}
                 >
                   <span>Workplace</span>
@@ -1629,8 +1736,8 @@ const Dashboard = () => {
                         >
                           <div
                             className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
-                                ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                                : "border-slate-300 bg-white"
+                              ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
+                              : "border-slate-300 bg-white"
                               }`}
                           >
                             {isChecked && (
@@ -1646,6 +1753,311 @@ const Dashboard = () => {
                             )}
                           </div>
                           <span>{opt}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Sponsors Visa Button */}
+              <button
+                type="button"
+                onClick={() => setSponsorsVisa(!sponsorsVisa)}
+                className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${sponsorsVisa
+                  ? "border-slate-400 bg-slate-100 text-[#0F172A] font-medium"
+                  : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                  }`}
+              >
+                <span>Sponsors Visa</span>
+              </button>
+
+              {/* Employment Type Dropdown */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => toggleDropdown("employmentType")}
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "employmentType" ||
+                    selectedEmploymentTypes.length > 0
+                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                    }`}
+                >
+                  <span>Employment Type</span>
+                  <svg
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "employmentType" ? "rotate-180" : ""
+                      }`}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                  >
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </button>
+
+                {activeDropdown === "employmentType" && (
+                  <div className="absolute top-full left-0 mt-2 w-[170px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2.5 z-50 flex flex-col gap-1">
+                    {employmentTypeOptions.map((type) => {
+                      const isChecked = selectedEmploymentTypes.includes(type);
+                      return (
+                        <div
+                          key={type}
+                          onClick={() =>
+                            toggleCheckbox(
+                              selectedEmploymentTypes,
+                              setSelectedEmploymentTypes,
+                              type
+                            )
+                          }
+                          className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
+                        >
+                          <div
+                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
+                              ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
+                              : "border-slate-300 bg-white"
+                              }`}
+                          >
+                            {isChecked && (
+                              <svg
+                                className="w-2.5 h-2.5"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="3.5"
+                              >
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                            )}
+                          </div>
+                          <span>{type}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* 4. Companies Dropdown */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => toggleDropdown("companies")}
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "companies" || selectedCompanies.length > 0
+                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                    }`}
+                >
+                  <span>Companies</span>
+                  <svg
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "companies" ? "rotate-180" : ""
+                      }`}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                  >
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </button>
+
+                {activeDropdown === "companies" && (
+                  <div className="absolute top-full left-0 mt-2 w-[270px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-3 z-50 flex flex-col gap-2">
+                    <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-[8px] border border-slate-200 bg-white">
+                      <svg
+                        className="w-3.5 h-3.5 text-slate-400 shrink-0"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <circle cx="11" cy="11" r="7" />
+                        <path d="m20 20-3.5-3.5" />
+                      </svg>
+                      <input
+                        type="text"
+                        value={companySearch}
+                        onChange={(e) => setCompanySearch(e.target.value)}
+                        placeholder="Search companies..."
+                        className="w-full text-xs text-slate-800 placeholder:text-slate-400 outline-none bg-transparent"
+                      />
+                    </div>
+
+                    <div className="text-[11px] font-semibold text-slate-400 tracking-wider px-1 pt-1">
+                      COMPANIES
+                    </div>
+
+                    <div className="flex flex-col gap-1 max-h-[220px] overflow-y-auto">
+                      {companyOptions
+                        .filter((c) =>
+                          c.toLowerCase().includes(companySearch.toLowerCase())
+                        )
+                        .map((comp) => {
+                          const isChecked = selectedCompanies.includes(comp);
+                          return (
+                            <div
+                              key={comp}
+                              onClick={() =>
+                                toggleCheckbox(
+                                  selectedCompanies,
+                                  setSelectedCompanies,
+                                  comp
+                                )
+                              }
+                              className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
+                            >
+                              <div
+                                className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
+                                  ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
+                                  : "border-slate-300 bg-white"
+                                  }`}
+                              >
+                                {isChecked && (
+                                  <svg
+                                    className="w-2.5 h-2.5"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="3.5"
+                                  >
+                                    <polyline points="20 6 9 17 4 12" />
+                                  </svg>
+                                )}
+                              </div>
+                              <span className="truncate">{comp}</span>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Degree Level Dropdown */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => toggleDropdown("degree")}
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "degree" || selectedDegrees.length > 0
+                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                    }`}
+                >
+                  <span>Degree Level</span>
+                  <svg
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "degree" ? "rotate-180" : ""
+                      }`}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                  >
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </button>
+
+                {activeDropdown === "degree" && (
+                  <div className="absolute top-full left-0 mt-2 w-[210px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2.5 z-50 flex flex-col gap-1">
+                    {degreeOptions.map((deg) => {
+                      const isChecked = selectedDegrees.includes(deg);
+                      return (
+                        <div
+                          key={deg}
+                          onClick={() =>
+                            toggleCheckbox(
+                              selectedDegrees,
+                              setSelectedDegrees,
+                              deg
+                            )
+                          }
+                          className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
+                        >
+                          <div
+                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
+                              ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
+                              : "border-slate-300 bg-white"
+                              }`}
+                          >
+                            {isChecked && (
+                              <svg
+                                className="w-2.5 h-2.5"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="3.5"
+                              >
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                            )}
+                          </div>
+                          <span>{deg}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Max Experience Dropdown */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => toggleDropdown("experience")}
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "experience" || selectedExperience !== ""
+                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                    }`}
+                >
+                  <span>Max Experience</span>
+                  <svg
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "experience" ? "rotate-180" : ""
+                      }`}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                  >
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </button>
+
+                {activeDropdown === "experience" && (
+                  <div className="absolute top-full left-0 mt-2 w-[210px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2.5 z-50 flex flex-col gap-0.5">
+                    {experienceOptions.map((exp) => {
+                      const isSelected = selectedExperience === exp;
+                      return (
+                        <div
+                          key={exp}
+                          onClick={() => {
+                            setSelectedExperience(
+                              exp === selectedExperience ? "" : exp
+                            );
+                            setActiveDropdown(null);
+                          }}
+                          className={`flex items-center gap-2.5 px-3 py-1.5 rounded-[6px] cursor-pointer text-[13px] transition-colors ${isSelected
+                            ? "bg-slate-50 text-[#0F172A] font-medium"
+                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                            }`}
+                        >
+                          <div
+                            className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${isSelected
+                              ? "bg-[#0F4C3A] text-white"
+                              : "border border-slate-300"
+                              }`}
+                          >
+                            {isSelected && (
+                              <svg
+                                className="w-2.5 h-2.5"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="3.5"
+                              >
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                            )}
+                          </div>
+                          <span>{exp}</span>
                         </div>
                       );
                     })}
@@ -1986,8 +2398,8 @@ const Dashboard = () => {
                   onClick={() => filteredJobs.length > 0 && navigate("/auto-apply")}
                   disabled={filteredJobs.length === 0}
                   className={`h-[38px] px-4 rounded-[10px] text-[13px] font-medium flex items-center gap-1.5 shadow-xs transition-all whitespace-nowrap ${filteredJobs.length > 0
-                      ? "bg-[#4F46E5] hover:bg-[#4338CA] text-white active:scale-[0.99] cursor-pointer"
-                      : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                    ? "bg-[#4F46E5] hover:bg-[#4338CA] text-white active:scale-[0.99] cursor-pointer"
+                    : "bg-slate-200 text-slate-400 cursor-not-allowed"
                     }`}
                 >
                   <span>Auto Apply to all ({filteredJobs.length})</span>
@@ -2314,8 +2726,8 @@ const Dashboard = () => {
                     type="button"
                     onClick={() => setSelectedAppTab(tab.name)}
                     className={`h-[34px] px-3.5 rounded-full text-[12.5px] font-medium flex items-center gap-1.5 transition-all cursor-pointer ${isActive
-                        ? "bg-[#0F172A] text-white shadow-xs"
-                        : "bg-[#F1F5F9] text-[#64748B] hover:bg-slate-200"
+                      ? "bg-[#0F172A] text-white shadow-xs"
+                      : "bg-[#F1F5F9] text-[#64748B] hover:bg-slate-200"
                       }`}
                   >
                     <span>{tab.name}</span>
@@ -2422,13 +2834,12 @@ const Dashboard = () => {
                         {/* ATS Match */}
                         <td className="py-4 px-3">
                           <span
-                            className={`text-[13px] font-bold ${
-                              (app.matchPercent || 0) >= 80
+                            className={`text-[13px] font-bold ${(app.matchPercent || 0) >= 80
                                 ? "text-[#059669]"
                                 : (app.matchPercent || 0) >= 60
-                                ? "text-[#D97706]"
-                                : "text-[#4F46E5]"
-                            }`}
+                                  ? "text-[#D97706]"
+                                  : "text-[#4F46E5]"
+                              }`}
                           >
                             {app.atsMatch || `${app.matchPercent || 0}%`}
                           </span>
@@ -2448,26 +2859,24 @@ const Dashboard = () => {
                         <td className="py-4 px-3">
                           <div className="flex items-center gap-2">
                             <span
-                              className={`w-2 h-2 rounded-full ${
-                                app.status === "Submitted"
+                              className={`w-2 h-2 rounded-full ${app.status === "Submitted"
                                   ? "bg-[#059669]"
                                   : app.status === "In Progress"
-                                  ? "bg-[#2563EB]"
-                                  : app.status === "Failed"
-                                  ? "bg-[#DC2626]"
-                                  : "bg-[#D97706]"
-                              }`}
+                                    ? "bg-[#2563EB]"
+                                    : app.status === "Failed"
+                                      ? "bg-[#DC2626]"
+                                      : "bg-[#D97706]"
+                                }`}
                             />
                             <span
-                              className={`text-[13px] font-medium ${
-                                app.status === "Submitted"
+                              className={`text-[13px] font-medium ${app.status === "Submitted"
                                   ? "text-[#059669]"
                                   : app.status === "In Progress"
-                                  ? "text-[#2563EB]"
-                                  : app.status === "Failed"
-                                  ? "text-[#DC2626]"
-                                  : "text-[#D97706]"
-                              }`}
+                                    ? "text-[#2563EB]"
+                                    : app.status === "Failed"
+                                      ? "text-[#DC2626]"
+                                      : "text-[#D97706]"
+                                }`}
                             >
                               {app.status || "Submitted"}
                             </span>
@@ -2587,7 +2996,7 @@ const Dashboard = () => {
                           {extractCleanCompany(
                             selectedJobModal.company,
                             selectedJobModal.description ||
-                              selectedJobModal.fullJdText
+                            selectedJobModal.fullJdText
                           )}
                         </span>
                         <VerifiedTick />
@@ -2597,7 +3006,7 @@ const Dashboard = () => {
                         <span>
                           {cleanHtmlText(
                             selectedJobModal.fullLocation ||
-                              selectedJobModal.location
+                            selectedJobModal.location
                           )}
                         </span>
                         <span className="text-slate-300">•</span>
@@ -2651,8 +3060,8 @@ const Dashboard = () => {
                       onClick={handleEnhanceResume}
                       disabled={isEnhancing}
                       className={`mt-2 text-white text-[13px] font-medium px-4 py-2 rounded-lg transition-all cursor-pointer shadow-sm shrink-0 whitespace-nowrap flex items-center gap-1.5 ${isEnhancing
-                          ? "bg-indigo-300 cursor-not-allowed"
-                          : "bg-[#4F46E5] hover:bg-[#4338CA]"
+                        ? "bg-indigo-300 cursor-not-allowed"
+                        : "bg-[#4F46E5] hover:bg-[#4338CA]"
                         }`}
                     >
                       {isEnhancing ? (
@@ -2792,14 +3201,14 @@ const Dashboard = () => {
                             {Array.isArray(
                               enhancedResultsMap[selectedJobId].bridgeable_gaps
                             ) && (
-                              <span className="text-[11px] font-semibold text-[#4F46E5] bg-[#EEF2FF] border border-[#C7D2FE] px-2 py-0.5 rounded-full">
-                                {
-                                  enhancedResultsMap[selectedJobId]
-                                    .bridgeable_gaps.length
-                                }{" "}
-                                Skills Optimized
-                              </span>
-                            )}
+                                <span className="text-[11px] font-semibold text-[#4F46E5] bg-[#EEF2FF] border border-[#C7D2FE] px-2 py-0.5 rounded-full">
+                                  {
+                                    enhancedResultsMap[selectedJobId]
+                                      .bridgeable_gaps.length
+                                  }{" "}
+                                  Skills Optimized
+                                </span>
+                              )}
                           </div>
                           <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
                             {Array.isArray(
@@ -2854,10 +3263,10 @@ const Dashboard = () => {
                                       {severity && (
                                         <span
                                           className={`text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 border ${severity === "CRITICAL"
-                                              ? "bg-amber-50 text-amber-700 border-amber-200"
-                                              : severity === "PREFERRED"
-                                                ? "bg-blue-50 text-blue-700 border-blue-200"
-                                                : "bg-indigo-50 text-[#4F46E5] border-indigo-200"
+                                            ? "bg-amber-50 text-amber-700 border-amber-200"
+                                            : severity === "PREFERRED"
+                                              ? "bg-blue-50 text-blue-700 border-blue-200"
+                                              : "bg-indigo-50 text-[#4F46E5] border-indigo-200"
                                             }`}
                                         >
                                           {severity}
@@ -2873,7 +3282,7 @@ const Dashboard = () => {
                                 );
                               })
                             ) : typeof enhancedResultsMap[selectedJobId]
-                                .bridgeable_gaps === "object" ? (
+                              .bridgeable_gaps === "object" ? (
                               Object.entries(
                                 enhancedResultsMap[selectedJobId].bridgeable_gaps
                               ).map(([k, v], i) => (
@@ -3043,79 +3452,79 @@ const Dashboard = () => {
                   {(missingRequiredSkills.length > 0 ||
                     missingPreferredSkills.length > 0 ||
                     missingKeywords.length > 0) && (
-                    <div className="rounded-[16px] border border-amber-200/80 bg-gradient-to-br from-amber-50/60 to-orange-50/30 p-4 space-y-3 shadow-2xs">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="w-5 h-5 rounded-md bg-amber-100 text-amber-800 text-[11px] font-bold flex items-center justify-center">
-                            !
+                      <div className="rounded-[16px] border border-amber-200/80 bg-gradient-to-br from-amber-50/60 to-orange-50/30 p-4 space-y-3 shadow-2xs">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="w-5 h-5 rounded-md bg-amber-100 text-amber-800 text-[11px] font-bold flex items-center justify-center">
+                              !
+                            </span>
+                            <h4 className="text-[13px] font-bold text-amber-950">
+                              ATS Identified Gaps
+                            </h4>
+                          </div>
+                          <span className="text-[10.5px] font-semibold text-amber-800 bg-amber-100/80 border border-amber-200 px-2 py-0.5 rounded-full">
+                            {missingRequiredSkills.length +
+                              missingPreferredSkills.length +
+                              missingKeywords.length}{" "}
+                            Gaps
                           </span>
-                          <h4 className="text-[13px] font-bold text-amber-950">
-                            ATS Identified Gaps
-                          </h4>
                         </div>
-                        <span className="text-[10.5px] font-semibold text-amber-800 bg-amber-100/80 border border-amber-200 px-2 py-0.5 rounded-full">
-                          {missingRequiredSkills.length +
-                            missingPreferredSkills.length +
-                            missingKeywords.length}{" "}
-                          Gaps
-                        </span>
+
+                        {missingRequiredSkills.length > 0 && (
+                          <div>
+                            <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">
+                              Missing Required Skills:
+                            </span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {missingRequiredSkills.map((skill, i) => (
+                                <span
+                                  key={i}
+                                  className="bg-white border border-amber-200 text-amber-900 text-[11.5px] font-medium px-2.5 py-0.5 rounded-md shadow-2xs"
+                                >
+                                  • {skill}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {missingPreferredSkills.length > 0 && (
+                          <div>
+                            <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">
+                              Missing Preferred Skills:
+                            </span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {missingPreferredSkills.map((skill, i) => (
+                                <span
+                                  key={i}
+                                  className="bg-white border border-amber-200 text-amber-900 text-[11.5px] font-medium px-2.5 py-0.5 rounded-md shadow-2xs"
+                                >
+                                  • {skill}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {missingKeywords.length > 0 && (
+                          <div>
+                            <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">
+                              Missing Keywords:
+                            </span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {missingKeywords.map((kw, i) => (
+                                <span
+                                  key={i}
+                                  className="bg-white border border-amber-200 text-slate-700 text-[11px] font-normal px-2 py-0.5 rounded-md"
+                                >
+                                  {kw}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
-
-                      {missingRequiredSkills.length > 0 && (
-                        <div>
-                          <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">
-                            Missing Required Skills:
-                          </span>
-                          <div className="flex flex-wrap gap-1.5">
-                            {missingRequiredSkills.map((skill, i) => (
-                              <span
-                                key={i}
-                                className="bg-white border border-amber-200 text-amber-900 text-[11.5px] font-medium px-2.5 py-0.5 rounded-md shadow-2xs"
-                              >
-                                • {skill}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {missingPreferredSkills.length > 0 && (
-                        <div>
-                          <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">
-                            Missing Preferred Skills:
-                          </span>
-                          <div className="flex flex-wrap gap-1.5">
-                            {missingPreferredSkills.map((skill, i) => (
-                              <span
-                                key={i}
-                                className="bg-white border border-amber-200 text-amber-900 text-[11.5px] font-medium px-2.5 py-0.5 rounded-md shadow-2xs"
-                              >
-                                • {skill}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {missingKeywords.length > 0 && (
-                        <div>
-                          <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">
-                            Missing Keywords:
-                          </span>
-                          <div className="flex flex-wrap gap-1.5">
-                            {missingKeywords.map((kw, i) => (
-                              <span
-                                key={i}
-                                className="bg-white border border-amber-200 text-slate-700 text-[11px] font-normal px-2 py-0.5 rounded-md"
-                              >
-                                {kw}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                    )}
 
                   {/* Job Description */}
                   <div>
@@ -3125,8 +3534,8 @@ const Dashboard = () => {
                     <div className="text-[12.5px] text-[#475569] leading-relaxed mt-1.5 whitespace-pre-line">
                       {cleanHtmlText(
                         selectedJobModal.description ||
-                          selectedJobModal.fullJdText ||
-                          selectedJobModal.preview
+                        selectedJobModal.fullJdText ||
+                        selectedJobModal.preview
                       )}
                     </div>
                   </div>
@@ -3225,8 +3634,8 @@ const Dashboard = () => {
                     type="button"
                     onClick={() => setIsJobSaved(!isJobSaved)}
                     className={`flex-1 h-[42px] rounded-[10px] border text-[13px] font-medium flex items-center justify-center gap-2 transition-colors cursor-pointer ${isJobSaved
-                        ? "border-[#A5B4FC] bg-indigo-50 text-[#4F46E5]"
-                        : "border-[#C7D2FE] bg-white text-[#4F46E5] hover:bg-indigo-50/50"
+                      ? "border-[#A5B4FC] bg-indigo-50 text-[#4F46E5]"
+                      : "border-[#C7D2FE] bg-white text-[#4F46E5] hover:bg-indigo-50/50"
                       }`}
                   >
                     <svg
@@ -3278,23 +3687,23 @@ const Dashboard = () => {
                   </div>
                 </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleCopyEnhancedResume(
-                      enhancedResultsMap[getJobId(selectedJobModal)]?.EnhResume ||
-                      enhancedResultsMap[getJobId(selectedJobModal)]?.enhResume ||
-                      enhancedResultsMap[getJobId(selectedJobModal)]?.enhanced_resume
-                    )
-                  }
-                  className="px-3.5 py-1.5 bg-[#EEF2FF] hover:bg-[#E0E7FF] text-[#4F46E5] text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
-                  <span>{copiedResume ? "Copied!" : "Copy Resume"}</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleCopyEnhancedResume(
+                        enhancedResultsMap[getJobId(selectedJobModal)]?.EnhResume ||
+                        enhancedResultsMap[getJobId(selectedJobModal)]?.enhResume ||
+                        enhancedResultsMap[getJobId(selectedJobModal)]?.enhanced_resume
+                      )
+                    }
+                    className="px-3.5 py-1.5 bg-[#EEF2FF] hover:bg-[#E0E7FF] text-[#4F46E5] text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    <span>{copiedResume ? "Copied!" : "Copy Resume"}</span>
+                  </button>
 
                   <button
                     type="button"
@@ -3323,113 +3732,113 @@ const Dashboard = () => {
                 {/* Bridged Gaps Summary */}
                 {enhancedResultsMap[getJobId(selectedJobModal)]
                   ?.bridgeable_gaps && (
-                  <div className="bg-[#EEF2FF]/70 border border-[#C7D2FE] rounded-xl p-4.5 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-xs font-bold text-[#312E81] uppercase tracking-wide">
-                        Bridged Skills & Qualifications
-                      </h4>
-                      {Array.isArray(
-                        enhancedResultsMap[getJobId(selectedJobModal)]
-                          .bridgeable_gaps
-                      ) && (
-                        <span className="text-[11px] font-semibold text-[#4F46E5] bg-white border border-[#C7D2FE] px-2 py-0.5 rounded-full">
-                          {
-                            enhancedResultsMap[getJobId(selectedJobModal)]
-                              .bridgeable_gaps.length
-                          }{" "}
-                          Tailored Improvements
-                        </span>
-                      )}
-                    </div>
-                    <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
-                      {Array.isArray(
-                        enhancedResultsMap[getJobId(selectedJobModal)]
-                          .bridgeable_gaps
-                      ) ? (
-                        enhancedResultsMap[
-                          getJobId(selectedJobModal)
-                        ].bridgeable_gaps.map((gap, i) => {
-                          if (typeof gap === "string") {
+                    <div className="bg-[#EEF2FF]/70 border border-[#C7D2FE] rounded-xl p-4.5 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-bold text-[#312E81] uppercase tracking-wide">
+                          Bridged Skills & Qualifications
+                        </h4>
+                        {Array.isArray(
+                          enhancedResultsMap[getJobId(selectedJobModal)]
+                            .bridgeable_gaps
+                        ) && (
+                            <span className="text-[11px] font-semibold text-[#4F46E5] bg-white border border-[#C7D2FE] px-2 py-0.5 rounded-full">
+                              {
+                                enhancedResultsMap[getJobId(selectedJobModal)]
+                                  .bridgeable_gaps.length
+                              }{" "}
+                              Tailored Improvements
+                            </span>
+                          )}
+                      </div>
+                      <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
+                        {Array.isArray(
+                          enhancedResultsMap[getJobId(selectedJobModal)]
+                            .bridgeable_gaps
+                        ) ? (
+                          enhancedResultsMap[
+                            getJobId(selectedJobModal)
+                          ].bridgeable_gaps.map((gap, i) => {
+                            if (typeof gap === "string") {
+                              return (
+                                <div
+                                  key={i}
+                                  className="flex items-center gap-2 bg-white text-slate-800 border border-[#E0E7FF] rounded-lg p-2.5 shadow-2xs"
+                                >
+                                  <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">
+                                    ✓
+                                  </span>
+                                  <span className="text-xs font-semibold text-slate-900">
+                                    {gap}
+                                  </span>
+                                </div>
+                              );
+                            }
+
+                            const skill =
+                              gap?.skill || gap?.name || gap?.title || "";
+                            const severity =
+                              gap?.severity ||
+                              (gap?.source ? String(gap.source).toUpperCase() : "");
+                            const rationale =
+                              gap?.rationale ||
+                              gap?.description ||
+                              gap?.reason ||
+                              "";
+
                             return (
                               <div
                                 key={i}
-                                className="flex items-center gap-2 bg-white text-slate-800 border border-[#E0E7FF] rounded-lg p-2.5 shadow-2xs"
+                                className="bg-white text-slate-800 border border-[#E0E7FF] rounded-xl p-3 shadow-2xs space-y-1.5"
                               >
-                                <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">
-                                  ✓
-                                </span>
-                                <span className="text-xs font-semibold text-slate-900">
-                                  {gap}
-                                </span>
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">✓</span>
+                                    <span className="text-xs font-bold text-slate-900">
+                                      {skill || "Optimized Skill"}
+                                    </span>
+                                  </div>
+                                  {severity && (
+                                    <span
+                                      className={`text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${severity === "CRITICAL"
+                                        ? "bg-amber-50 text-amber-700 border-amber-200"
+                                        : severity === "PREFERRED"
+                                          ? "bg-blue-50 text-blue-700 border-blue-200"
+                                          : "bg-indigo-50 text-[#4F46E5] border-indigo-200"
+                                        }`}
+                                    >
+                                      {severity}
+                                    </span>
+                                  )}
+                                </div>
+                                {rationale && (
+                                  <p className="text-xs text-slate-600 leading-relaxed pl-6 font-normal">
+                                    {rationale}
+                                  </p>
+                                )}
                               </div>
                             );
-                          }
-
-                          const skill =
-                            gap?.skill || gap?.name || gap?.title || "";
-                          const severity =
-                            gap?.severity ||
-                            (gap?.source ? String(gap.source).toUpperCase() : "");
-                          const rationale =
-                            gap?.rationale ||
-                            gap?.description ||
-                            gap?.reason ||
-                            "";
-
-                        return (
-                          <div
-                            key={i}
-                            className="bg-white text-slate-800 border border-[#E0E7FF] rounded-xl p-3 shadow-2xs space-y-1.5"
-                          >
-                            <div className="flex items-center justify-between gap-2">
+                          })
+                        ) : typeof enhancedResultsMap[getJobId(selectedJobModal)].bridgeable_gaps === "object" ? (
+                          Object.entries(enhancedResultsMap[getJobId(selectedJobModal)].bridgeable_gaps).map(([k, v], i) => (
+                            <div
+                              key={i}
+                              className="bg-white text-slate-800 border border-[#E0E7FF] rounded-xl p-3 shadow-2xs space-y-1"
+                            >
                               <div className="flex items-center gap-2">
                                 <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">✓</span>
-                                <span className="text-xs font-bold text-slate-900">
-                                  {skill || "Optimized Skill"}
-                                </span>
+                                <span className="text-xs font-bold text-slate-900">{k}</span>
                               </div>
-                              {severity && (
-                                <span
-                                  className={`text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${severity === "CRITICAL"
-                                      ? "bg-amber-50 text-amber-700 border-amber-200"
-                                      : severity === "PREFERRED"
-                                        ? "bg-blue-50 text-blue-700 border-blue-200"
-                                        : "bg-indigo-50 text-[#4F46E5] border-indigo-200"
-                                    }`}
-                                >
-                                  {severity}
-                                </span>
-                              )}
-                            </div>
-                            {rationale && (
                               <p className="text-xs text-slate-600 leading-relaxed pl-6 font-normal">
-                                {rationale}
+                                {String(v)}
                               </p>
-                            )}
-                          </div>
-                        );
-                      })
-                    ) : typeof enhancedResultsMap[getJobId(selectedJobModal)].bridgeable_gaps === "object" ? (
-                      Object.entries(enhancedResultsMap[getJobId(selectedJobModal)].bridgeable_gaps).map(([k, v], i) => (
-                        <div
-                          key={i}
-                          className="bg-white text-slate-800 border border-[#E0E7FF] rounded-xl p-3 shadow-2xs space-y-1"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">✓</span>
-                            <span className="text-xs font-bold text-slate-900">{k}</span>
-                          </div>
-                          <p className="text-xs text-slate-600 leading-relaxed pl-6 font-normal">
-                            {String(v)}
-                          </p>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-xs text-[#4F46E5]">{String(enhancedResultsMap[getJobId(selectedJobModal)].bridgeable_gaps)}</p>
-                    )}
-                  </div>
-                </div>
-              )}
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-xs text-[#4F46E5]">{String(enhancedResultsMap[getJobId(selectedJobModal)].bridgeable_gaps)}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                 {/* Enhanced Resume Content */}
                 <div>
