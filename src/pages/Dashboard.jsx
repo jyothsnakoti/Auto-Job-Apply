@@ -6,6 +6,10 @@ import {
   getStoredUser,
   getOnboardingProfile,
   getStoredJobMatches,
+import {
+  getStoredUser,
+  getOnboardingProfile,
+  getStoredJobMatches,
   getOnboardingState,
   getEnhancedResume,
   getScoreForEnhancedResume,
@@ -249,14 +253,12 @@ const transformMatchToJob = (match, index = 0) => {
     typeof match.overall_score === "number"
       ? match.overall_score
       : typeof match.score_data?.overall_score === "number"
-      ? match.score_data.overall_score
-      : typeof match.score === "number"
-      ? match.score
-      : typeof match.overall_score === "string" &&
-        !isNaN(Number(match.overall_score)) &&
-        match.overall_score.trim() !== ""
-      ? Number(match.overall_score)
-      : null;
+        ? match.score_data.overall_score
+        : typeof match.score === "number"
+          ? match.score
+          : (typeof match.overall_score === "string" && !isNaN(Number(match.overall_score)) && match.overall_score.trim() !== "")
+            ? Number(match.overall_score)
+            : null;
 
   const matchPercent =
     rawScore !== null && !isNaN(rawScore)
@@ -287,10 +289,10 @@ const transformMatchToJob = (match, index = 0) => {
     Array.isArray(match.requiredSkills) && match.requiredSkills.length > 0
       ? match.requiredSkills.map(cleanHtmlText)
       : Array.isArray(match.skills) && match.skills.length > 0
-      ? match.skills.map(cleanHtmlText)
-      : Array.isArray(match.extracted_skills) && match.extracted_skills.length > 0
-      ? match.extracted_skills.map(cleanHtmlText)
-      : [];
+        ? match.skills.map(cleanHtmlText)
+        : Array.isArray(match.extracted_skills) && match.extracted_skills.length > 0
+          ? match.extracted_skills.map(cleanHtmlText)
+          : [];
 
   const preferredSkills =
     Array.isArray(match.preferredSkills) && match.preferredSkills.length > 0
@@ -1147,6 +1149,7 @@ const Dashboard = () => {
 
         {/* Dashboard Main Content */}
         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-7 flex flex-col gap-6 w-full bg-[#F8FAFC]">
+
           {/* Welcome Header */}
           <div className="flex flex-col gap-1">
             <h1 className="text-[20px] md:text-[22px] font-bold text-black tracking-tight">
@@ -1231,22 +1234,21 @@ const Dashboard = () => {
 
             {/* Second Row: Filter Buttons */}
             <div className="flex items-center gap-2 flex-wrap pt-0.5 relative">
-              {/* Date Dropdown */}
+
+              {/* 1. Date Dropdown */}
               <div className="relative">
                 <button
                   type="button"
                   onClick={() => toggleDropdown("date")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "date" || selectedDate !== "All time"
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "date" || selectedDate !== "All time"
                       ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
                       : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
+                    }`}
                 >
                   <span>Date</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "date" ? "rotate-180" : ""
-                    }`}
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "date" ? "rotate-180" : ""
+                      }`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1267,18 +1269,16 @@ const Dashboard = () => {
                             setSelectedDate(opt);
                             setActiveDropdown(null);
                           }}
-                          className={`flex items-center gap-2.5 px-3 py-2 rounded-[8px] cursor-pointer text-[13px] transition-colors ${
-                            isSelected
+                          className={`flex items-center gap-2.5 px-3 py-2 rounded-[8px] cursor-pointer text-[13px] transition-colors ${isSelected
                               ? "bg-slate-50 text-[#0F172A] font-medium"
                               : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                          }`}
+                            }`}
                         >
                           <div
-                            className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${
-                              isSelected
+                            className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${isSelected
                                 ? "bg-[#0F4C3A] text-white"
                                 : "border border-slate-300"
-                            }`}
+                              }`}
                           >
                             {isSelected && (
                               <svg
@@ -1305,17 +1305,15 @@ const Dashboard = () => {
                 <button
                   type="button"
                   onClick={() => toggleDropdown("location")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "location" || selectedLocations.length > 0
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "location" || selectedLocations.length > 0
                       ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
                       : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
+                    }`}
                 >
                   <span>Location</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "location" ? "rotate-180" : ""
-                    }`}
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "location" ? "rotate-180" : ""
+                      }`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1351,54 +1349,52 @@ const Dashboard = () => {
                       LOCATIONS
                     </div>
 
-                    <div className="flex flex-col gap-1 max-h-[200px] overflow-y-auto">
-                      {dynamicLocationOptions.length === 0 ? (
-                        <div className="text-xs text-slate-400 px-2 py-1">
-                          No locations available yet
-                        </div>
-                      ) : (
-                        dynamicLocationOptions
-                          .filter((loc) =>
-                            loc.toLowerCase().includes(locationSearch.toLowerCase())
-                          )
-                          .map((loc) => {
-                            const isChecked = selectedLocations.includes(loc);
-                            return (
+                    <div className="flex flex-col gap-1">
+                      {locationOptions
+                        .filter((loc) =>
+                          loc.name
+                            .toLowerCase()
+                            .includes(locationSearch.toLowerCase())
+                        )
+                        .map((loc) => {
+                          const isChecked = selectedLocations.includes(loc.name);
+                          return (
+                            <div
+                              key={loc.name}
+                              onClick={() =>
+                                toggleCheckbox(
+                                  selectedLocations,
+                                  setSelectedLocations,
+                                  loc.name
+                                )
+                              }
+                              className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
+                            >
                               <div
-                                key={loc}
-                                onClick={() =>
-                                  toggleCheckbox(
-                                    selectedLocations,
-                                    setSelectedLocations,
-                                    loc
-                                  )
-                                }
-                                className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
-                              >
-                                <div
-                                  className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${
-                                    isChecked
-                                      ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                                      : "border-slate-300 bg-white"
+                                className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
+                                    ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
+                                    : "border-slate-300 bg-white"
                                   }`}
-                                >
-                                  {isChecked && (
-                                    <svg
-                                      className="w-2.5 h-2.5"
-                                      viewBox="0 0 24 24"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="3.5"
-                                    >
-                                      <polyline points="20 6 9 17 4 12" />
-                                    </svg>
-                                  )}
-                                </div>
-                                <span className="truncate">{loc}</span>
+                              >
+                                {isChecked && (
+                                  <svg
+                                    className="w-2.5 h-2.5"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="3.5"
+                                  >
+                                    <polyline points="20 6 9 17 4 12" />
+                                  </svg>
+                                )}
                               </div>
-                            );
-                          })
-                      )}
+                              <span className="flex-1">{loc.name}</span>
+                              <span className="text-[11px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-[4px]">
+                                {loc.badge}
+                              </span>
+                            </div>
+                          );
+                        })}
                     </div>
                   </div>
                 )}
@@ -1409,17 +1405,15 @@ const Dashboard = () => {
                 <button
                   type="button"
                   onClick={() => toggleDropdown("role")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "role" || selectedRoles.length > 0
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "role" || selectedRoles.length > 0
                       ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
                       : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
+                    }`}
                 >
                   <span>Role</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "role" ? "rotate-180" : ""
-                    }`}
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "role" ? "rotate-180" : ""
+                      }`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1430,46 +1424,39 @@ const Dashboard = () => {
                 </button>
 
                 {activeDropdown === "role" && (
-                  <div className="absolute top-full left-0 mt-2 w-[220px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2.5 z-50 flex flex-col gap-1 max-h-[220px] overflow-y-auto">
-                    {dynamicRoleOptions.length === 0 ? (
-                      <div className="text-xs text-slate-400 px-2 py-1">
-                        No roles available yet
-                      </div>
-                    ) : (
-                      dynamicRoleOptions.map((role) => {
-                        const isChecked = selectedRoles.includes(role);
-                        return (
+                  <div className="absolute top-full left-0 mt-2 w-[210px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2.5 z-50 flex flex-col gap-1">
+                    {roleOptions.map((role) => {
+                      const isChecked = selectedRoles.includes(role);
+                      return (
+                        <div
+                          key={role}
+                          onClick={() =>
+                            toggleCheckbox(selectedRoles, setSelectedRoles, role)
+                          }
+                          className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
+                        >
                           <div
-                            key={role}
-                            onClick={() =>
-                              toggleCheckbox(selectedRoles, setSelectedRoles, role)
-                            }
-                            className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
-                          >
-                            <div
-                              className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${
-                                isChecked
-                                  ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                                  : "border-slate-300 bg-white"
+                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
+                                ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
+                                : "border-slate-300 bg-white"
                               }`}
-                            >
-                              {isChecked && (
-                                <svg
-                                  className="w-2.5 h-2.5"
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="3.5"
-                                >
-                                  <polyline points="20 6 9 17 4 12" />
-                                </svg>
-                              )}
-                            </div>
-                            <span className="truncate">{role}</span>
+                          >
+                            {isChecked && (
+                              <svg
+                                className="w-2.5 h-2.5"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="3.5"
+                              >
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                            )}
                           </div>
-                        );
-                      })
-                    )}
+                          <span>{role}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1479,17 +1466,15 @@ const Dashboard = () => {
                 <button
                   type="button"
                   onClick={() => toggleDropdown("jobType")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "jobType" || selectedJobTypes.length > 0
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "jobType" || selectedJobTypes.length > 0
                       ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
                       : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
+                    }`}
                 >
                   <span>Job Type</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "jobType" ? "rotate-180" : ""
-                    }`}
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "jobType" ? "rotate-180" : ""
+                      }`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1516,11 +1501,10 @@ const Dashboard = () => {
                           className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
                         >
                           <div
-                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${
-                              isChecked
+                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
                                 ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
                                 : "border-slate-300 bg-white"
-                            }`}
+                              }`}
                           >
                             {isChecked && (
                               <svg
@@ -1547,17 +1531,15 @@ const Dashboard = () => {
                 <button
                   type="button"
                   onClick={() => toggleDropdown("workplace")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "workplace" || selectedWorkplace.length > 0
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "workplace" || selectedWorkplace.length > 0
                       ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
                       : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
+                    }`}
                 >
                   <span>Workplace</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "workplace" ? "rotate-180" : ""
-                    }`}
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "workplace" ? "rotate-180" : ""
+                      }`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1584,11 +1566,10 @@ const Dashboard = () => {
                           className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
                         >
                           <div
-                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${
-                              isChecked
+                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
                                 ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
                                 : "border-slate-300 bg-white"
-                            }`}
+                              }`}
                           >
                             {isChecked && (
                               <svg
@@ -1610,22 +1591,98 @@ const Dashboard = () => {
                 )}
               </div>
 
-              {/* Companies Dropdown */}
+              {/* Sponsors Visa Button */}
+              <button
+                type="button"
+                onClick={() => setSponsorsVisa(!sponsorsVisa)}
+                className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${sponsorsVisa
+                    ? "border-slate-400 bg-slate-100 text-[#0F172A] font-medium"
+                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                  }`}
+              >
+                <span>Sponsors Visa</span>
+              </button>
+
+              {/* Employment Type Dropdown */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => toggleDropdown("employmentType")}
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "employmentType" ||
+                      selectedEmploymentTypes.length > 0
+                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                    }`}
+                >
+                  <span>Employment Type</span>
+                  <svg
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "employmentType" ? "rotate-180" : ""
+                      }`}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                  >
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </button>
+
+                {activeDropdown === "employmentType" && (
+                  <div className="absolute top-full left-0 mt-2 w-[170px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2.5 z-50 flex flex-col gap-1">
+                    {employmentTypeOptions.map((type) => {
+                      const isChecked = selectedEmploymentTypes.includes(type);
+                      return (
+                        <div
+                          key={type}
+                          onClick={() =>
+                            toggleCheckbox(
+                              selectedEmploymentTypes,
+                              setSelectedEmploymentTypes,
+                              type
+                            )
+                          }
+                          className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
+                        >
+                          <div
+                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
+                                ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
+                                : "border-slate-300 bg-white"
+                              }`}
+                          >
+                            {isChecked && (
+                              <svg
+                                className="w-2.5 h-2.5"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="3.5"
+                              >
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                            )}
+                          </div>
+                          <span>{type}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* 4. Companies Dropdown */}
               <div className="relative">
                 <button
                   type="button"
                   onClick={() => toggleDropdown("companies")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "companies" || selectedCompanies.length > 0
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "companies" || selectedCompanies.length > 0
                       ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
                       : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
+                    }`}
                 >
                   <span>Companies</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "companies" ? "rotate-180" : ""
-                    }`}
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "companies" ? "rotate-180" : ""
+                      }`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1661,54 +1718,47 @@ const Dashboard = () => {
                       COMPANIES
                     </div>
 
-                    <div className="flex flex-col gap-1 max-h-[200px] overflow-y-auto">
-                      {dynamicCompanyOptions.length === 0 ? (
-                        <div className="text-xs text-slate-400 px-2 py-1">
-                          No companies available yet
-                        </div>
-                      ) : (
-                        dynamicCompanyOptions
-                          .filter((c) =>
-                            c.toLowerCase().includes(companySearch.toLowerCase())
-                          )
-                          .map((comp) => {
-                            const isChecked = selectedCompanies.includes(comp);
-                            return (
+                    <div className="flex flex-col gap-1 max-h-[220px] overflow-y-auto">
+                      {companyOptions
+                        .filter((c) =>
+                          c.toLowerCase().includes(companySearch.toLowerCase())
+                        )
+                        .map((comp) => {
+                          const isChecked = selectedCompanies.includes(comp);
+                          return (
+                            <div
+                              key={comp}
+                              onClick={() =>
+                                toggleCheckbox(
+                                  selectedCompanies,
+                                  setSelectedCompanies,
+                                  comp
+                                )
+                              }
+                              className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
+                            >
                               <div
-                                key={comp}
-                                onClick={() =>
-                                  toggleCheckbox(
-                                    selectedCompanies,
-                                    setSelectedCompanies,
-                                    comp
-                                  )
-                                }
-                                className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
-                              >
-                                <div
-                                  className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${
-                                    isChecked
-                                      ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                                      : "border-slate-300 bg-white"
+                                className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
+                                    ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
+                                    : "border-slate-300 bg-white"
                                   }`}
-                                >
-                                  {isChecked && (
-                                    <svg
-                                      className="w-2.5 h-2.5"
-                                      viewBox="0 0 24 24"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="3.5"
-                                    >
-                                      <polyline points="20 6 9 17 4 12" />
-                                    </svg>
-                                  )}
-                                </div>
-                                <span className="truncate">{comp}</span>
+                              >
+                                {isChecked && (
+                                  <svg
+                                    className="w-2.5 h-2.5"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="3.5"
+                                  >
+                                    <polyline points="20 6 9 17 4 12" />
+                                  </svg>
+                                )}
                               </div>
-                            );
-                          })
-                      )}
+                              <span className="truncate">{comp}</span>
+                            </div>
+                          );
+                        })}
                     </div>
                   </div>
                 )}
@@ -1719,17 +1769,15 @@ const Dashboard = () => {
                 <button
                   type="button"
                   onClick={() => toggleDropdown("degree")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "degree" || selectedDegrees.length > 0
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "degree" || selectedDegrees.length > 0
                       ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
                       : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
+                    }`}
                 >
                   <span>Degree Level</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "degree" ? "rotate-180" : ""
-                    }`}
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "degree" ? "rotate-180" : ""
+                      }`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1756,11 +1804,10 @@ const Dashboard = () => {
                           className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
                         >
                           <div
-                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${
-                              isChecked
+                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
                                 ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
                                 : "border-slate-300 bg-white"
-                            }`}
+                              }`}
                           >
                             {isChecked && (
                               <svg
@@ -1787,17 +1834,15 @@ const Dashboard = () => {
                 <button
                   type="button"
                   onClick={() => toggleDropdown("experience")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "experience" || selectedExperience !== ""
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "experience" || selectedExperience !== ""
                       ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
                       : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
+                    }`}
                 >
                   <span>Max Experience</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "experience" ? "rotate-180" : ""
-                    }`}
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "experience" ? "rotate-180" : ""
+                      }`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1820,18 +1865,16 @@ const Dashboard = () => {
                             );
                             setActiveDropdown(null);
                           }}
-                          className={`flex items-center gap-2.5 px-3 py-1.5 rounded-[6px] cursor-pointer text-[13px] transition-colors ${
-                            isSelected
+                          className={`flex items-center gap-2.5 px-3 py-1.5 rounded-[6px] cursor-pointer text-[13px] transition-colors ${isSelected
                               ? "bg-slate-50 text-[#0F172A] font-medium"
                               : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                          }`}
+                            }`}
                         >
                           <div
-                            className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${
-                              isSelected
+                            className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${isSelected
                                 ? "bg-[#0F4C3A] text-white"
                                 : "border border-slate-300"
-                            }`}
+                              }`}
                           >
                             {isSelected && (
                               <svg
@@ -1955,11 +1998,10 @@ const Dashboard = () => {
                   type="button"
                   onClick={() => filteredJobs.length > 0 && navigate("/auto-apply")}
                   disabled={filteredJobs.length === 0}
-                  className={`h-[38px] px-4 rounded-[10px] text-[13px] font-medium flex items-center gap-1.5 shadow-xs transition-all whitespace-nowrap ${
-                    filteredJobs.length > 0
+                  className={`h-[38px] px-4 rounded-[10px] text-[13px] font-medium flex items-center gap-1.5 shadow-xs transition-all whitespace-nowrap ${filteredJobs.length > 0
                       ? "bg-[#4F46E5] hover:bg-[#4338CA] text-white active:scale-[0.99] cursor-pointer"
                       : "bg-slate-200 text-slate-400 cursor-not-allowed"
-                  }`}
+                    }`}
                 >
                   <span>Auto Apply to all ({filteredJobs.length})</span>
                   <span>→</span>
@@ -2242,6 +2284,7 @@ const Dashboard = () => {
 
           {/* 4. Recent Applications Section (Dynamic From API / Applications State) */}
           <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-6 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col gap-5 w-full mt-2">
+
             {/* Header: Title + View all applications */}
             <div className="flex items-center justify-between flex-wrap gap-2">
               <h2 className="text-[18px] md:text-[20px] font-bold text-[#0F172A] tracking-tight">
@@ -2267,11 +2310,10 @@ const Dashboard = () => {
                     key={tab.name}
                     type="button"
                     onClick={() => setSelectedAppTab(tab.name)}
-                    className={`h-[34px] px-3.5 rounded-full text-[12.5px] font-medium flex items-center gap-1.5 transition-all cursor-pointer ${
-                      isActive
+                    className={`h-[34px] px-3.5 rounded-full text-[12.5px] font-medium flex items-center gap-1.5 transition-all cursor-pointer ${isActive
                         ? "bg-[#0F172A] text-white shadow-xs"
                         : "bg-[#F1F5F9] text-[#64748B] hover:bg-slate-200"
-                    }`}
+                      }`}
                   >
                     <span>{tab.name}</span>
                     <span
@@ -2469,25 +2511,23 @@ const Dashboard = () => {
           typeof currentMatch?.overall_score === "number"
             ? currentMatch.overall_score
             : typeof currentMatch?.score_data?.overall_score === "number"
-            ? currentMatch.score_data.overall_score
-            : typeof currentMatch?.score === "number"
-            ? currentMatch.score
-            : typeof currentMatch?.overall_score === "string" &&
-              !isNaN(Number(currentMatch.overall_score)) &&
-              currentMatch.overall_score.trim() !== ""
-            ? Number(currentMatch.overall_score)
-            : typeof selectedJobModal.rawScore === "number"
-            ? selectedJobModal.rawScore
-            : typeof selectedJobModal.matchPercent === "number"
-            ? selectedJobModal.matchPercent
-            : null;
+              ? currentMatch.score_data.overall_score
+              : typeof currentMatch?.score === "number"
+                ? currentMatch.score
+                : (typeof currentMatch?.overall_score === "string" && !isNaN(Number(currentMatch.overall_score)) && currentMatch.overall_score.trim() !== "")
+                  ? Number(currentMatch.overall_score)
+                  : typeof selectedJobModal.rawScore === "number"
+                    ? selectedJobModal.rawScore
+                    : typeof selectedJobModal.matchPercent === "number"
+                      ? selectedJobModal.matchPercent
+                      : null;
 
         const activeAtsScore =
           selectedJobId && updatedAtsScores[selectedJobId] !== undefined
             ? updatedAtsScores[selectedJobId]
             : rawInitialScore !== null && !isNaN(rawInitialScore)
-            ? Math.min(100, Math.max(1, Math.round(Number(rawInitialScore))))
-            : null;
+              ? Math.min(100, Math.max(1, Math.round(Number(rawInitialScore))))
+              : null;
 
         const scoreData =
           currentMatch?.score_data || selectedJobModal.scoreData || null;
@@ -2516,6 +2556,7 @@ const Dashboard = () => {
             {/* Side Drawer Container */}
             <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
               <div className="w-screen max-w-[490px] bg-white shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-200">
+
                 {/* Drawer Header */}
                 <div className="p-6 pb-4 border-b border-slate-100 flex items-start justify-between gap-4 shrink-0 bg-white">
                   <div className="flex items-start gap-3.5 flex-1 min-w-0 pr-2">
@@ -2606,11 +2647,10 @@ const Dashboard = () => {
                       type="button"
                       onClick={handleEnhanceResume}
                       disabled={isEnhancing}
-                      className={`mt-2 text-white text-[13px] font-medium px-4 py-2 rounded-lg transition-all cursor-pointer shadow-sm shrink-0 whitespace-nowrap flex items-center gap-1.5 ${
-                        isEnhancing
+                      className={`mt-2 text-white text-[13px] font-medium px-4 py-2 rounded-lg transition-all cursor-pointer shadow-sm shrink-0 whitespace-nowrap flex items-center gap-1.5 ${isEnhancing
                           ? "bg-indigo-300 cursor-not-allowed"
                           : "bg-[#4F46E5] hover:bg-[#4338CA]"
-                      }`}
+                        }`}
                     >
                       {isEnhancing ? (
                         <>
@@ -2810,13 +2850,12 @@ const Dashboard = () => {
                                       </div>
                                       {severity && (
                                         <span
-                                          className={`text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 border ${
-                                            severity === "CRITICAL"
+                                          className={`text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 border ${severity === "CRITICAL"
                                               ? "bg-amber-50 text-amber-700 border-amber-200"
                                               : severity === "PREFERRED"
-                                              ? "bg-blue-50 text-blue-700 border-blue-200"
-                                              : "bg-indigo-50 text-[#4F46E5] border-indigo-200"
-                                          }`}
+                                                ? "bg-blue-50 text-blue-700 border-blue-200"
+                                                : "bg-indigo-50 text-[#4F46E5] border-indigo-200"
+                                            }`}
                                         >
                                           {severity}
                                         </span>
@@ -2868,33 +2907,30 @@ const Dashboard = () => {
                       {(enhancedResultsMap[selectedJobId]?.EnhResume ||
                         enhancedResultsMap[selectedJobId]?.enhResume ||
                         enhancedResultsMap[selectedJobId]?.enhanced_resume) && (
-                        <div>
-                          <div className="flex items-center justify-between mb-1.5">
-                            <span className="text-[12px] font-semibold text-slate-700">
-                              Enhanced Resume Preview:
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleCopyEnhancedResume(
-                                  enhancedResultsMap[selectedJobId]?.EnhResume ||
+                          <div>
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="text-[12px] font-semibold text-slate-700">Enhanced Resume Preview:</span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleCopyEnhancedResume(
+                                    enhancedResultsMap[selectedJobId]?.EnhResume ||
                                     enhancedResultsMap[selectedJobId]?.enhResume ||
-                                    enhancedResultsMap[selectedJobId]
-                                      ?.enhanced_resume
-                                )
-                              }
-                              className="text-[11.5px] font-medium text-[#4F46E5] hover:text-[#3730A3] flex items-center gap-1 cursor-pointer"
-                            >
-                              {copiedResume ? "✓ Copied" : "Copy Text"}
-                            </button>
+                                    enhancedResultsMap[selectedJobId]?.enhanced_resume
+                                  )
+                                }
+                                className="text-[11.5px] font-medium text-[#4F46E5] hover:text-[#3730A3] flex items-center gap-1 cursor-pointer"
+                              >
+                                {copiedResume ? "✓ Copied" : "Copy Text"}
+                              </button>
+                            </div>
+                            <div className="bg-white rounded-lg border border-slate-200 p-3 max-h-[160px] overflow-y-auto text-[11.5px] text-slate-700 whitespace-pre-wrap font-mono leading-relaxed">
+                              {enhancedResultsMap[selectedJobId]?.EnhResume ||
+                                enhancedResultsMap[selectedJobId]?.enhResume ||
+                                enhancedResultsMap[selectedJobId]?.enhanced_resume}
+                            </div>
                           </div>
-                          <div className="bg-white rounded-lg border border-slate-200 p-3 max-h-[160px] overflow-y-auto text-[11.5px] text-slate-700 whitespace-pre-wrap font-mono leading-relaxed">
-                            {enhancedResultsMap[selectedJobId]?.EnhResume ||
-                              enhancedResultsMap[selectedJobId]?.enhResume ||
-                              enhancedResultsMap[selectedJobId]?.enhanced_resume}
-                          </div>
-                        </div>
-                      )}
+                        )}
 
                       <button
                         type="button"
@@ -2905,6 +2941,7 @@ const Dashboard = () => {
                       </button>
                     </div>
                   )}
+
 
                   {/* ATS Match Box */}
                   <div className="rounded-[16px] border border-slate-200/80 bg-[#F8FAFC]/70 p-4.5 flex items-center justify-between gap-4">
@@ -2954,8 +2991,8 @@ const Dashboard = () => {
                             ? activeAtsScore >= 80
                               ? "Strong match based on your profile, skills, experience and preferences."
                               : activeAtsScore >= 60
-                              ? "Moderate match. Enhancing your resume can bridge key skill and keyword gaps."
-                              : "Lower match. Review identified gaps below or click Enhance Resume."
+                                ? "Moderate match. Enhancing your resume can bridge key skill and keyword gaps."
+                                : "Lower match. Review identified gaps below or click Enhance Resume."
                             : "ATS score unavailable for this job."}
                         </p>
                       </div>
@@ -3184,11 +3221,10 @@ const Dashboard = () => {
                   <button
                     type="button"
                     onClick={() => setIsJobSaved(!isJobSaved)}
-                    className={`flex-1 h-[42px] rounded-[10px] border text-[13px] font-medium flex items-center justify-center gap-2 transition-colors cursor-pointer ${
-                      isJobSaved
+                    className={`flex-1 h-[42px] rounded-[10px] border text-[13px] font-medium flex items-center justify-center gap-2 transition-colors cursor-pointer ${isJobSaved
                         ? "border-[#A5B4FC] bg-indigo-50 text-[#4F46E5]"
                         : "border-[#C7D2FE] bg-white text-[#4F46E5] hover:bg-indigo-50/50"
-                    }`}
+                      }`}
                   >
                     <svg
                       className="w-4 h-4"
@@ -3239,36 +3275,23 @@ const Dashboard = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      handleCopyEnhancedResume(
-                        enhancedResultsMap[getJobId(selectedJobModal)]
-                          ?.EnhResume ||
-                          enhancedResultsMap[getJobId(selectedJobModal)]
-                            ?.enhResume ||
-                          enhancedResultsMap[getJobId(selectedJobModal)]
-                            ?.enhanced_resume
-                      )
-                    }
-                    className="px-3.5 py-1.5 bg-[#EEF2FF] hover:bg-[#E0E7FF] text-[#4F46E5] text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                      />
-                    </svg>
-                    <span>{copiedResume ? "Copied!" : "Copy Resume"}</span>
-                  </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleCopyEnhancedResume(
+                      enhancedResultsMap[getJobId(selectedJobModal)]?.EnhResume ||
+                      enhancedResultsMap[getJobId(selectedJobModal)]?.enhResume ||
+                      enhancedResultsMap[getJobId(selectedJobModal)]?.enhanced_resume
+                    )
+                  }
+                  className="px-3.5 py-1.5 bg-[#EEF2FF] hover:bg-[#E0E7FF] text-[#4F46E5] text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  <span>{copiedResume ? "Copied!" : "Copy Resume"}</span>
+                </button>
 
                   <button
                     type="button"
@@ -3350,76 +3373,60 @@ const Dashboard = () => {
                             gap?.reason ||
                             "";
 
-                          return (
-                            <div
-                              key={i}
-                              className="bg-white text-slate-800 border border-[#E0E7FF] rounded-xl p-3 shadow-2xs space-y-1.5"
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2">
-                                  <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">
-                                    ✓
-                                  </span>
-                                  <span className="text-xs font-bold text-slate-900">
-                                    {skill || "Optimized Skill"}
-                                  </span>
-                                </div>
-                                {severity && (
-                                  <span
-                                    className={`text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
-                                      severity === "CRITICAL"
-                                        ? "bg-amber-50 text-amber-700 border-amber-200"
-                                        : severity === "PREFERRED"
+                        return (
+                          <div
+                            key={i}
+                            className="bg-white text-slate-800 border border-[#E0E7FF] rounded-xl p-3 shadow-2xs space-y-1.5"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">✓</span>
+                                <span className="text-xs font-bold text-slate-900">
+                                  {skill || "Optimized Skill"}
+                                </span>
+                              </div>
+                              {severity && (
+                                <span
+                                  className={`text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${severity === "CRITICAL"
+                                      ? "bg-amber-50 text-amber-700 border-amber-200"
+                                      : severity === "PREFERRED"
                                         ? "bg-blue-50 text-blue-700 border-blue-200"
                                         : "bg-indigo-50 text-[#4F46E5] border-indigo-200"
                                     }`}
-                                  >
-                                    {severity}
-                                  </span>
-                                )}
-                              </div>
-                              {rationale && (
-                                <p className="text-xs text-slate-600 leading-relaxed pl-6 font-normal">
-                                  {rationale}
-                                </p>
+                                >
+                                  {severity}
+                                </span>
                               )}
                             </div>
-                          );
-                        })
-                      ) : typeof enhancedResultsMap[getJobId(selectedJobModal)]
-                          .bridgeable_gaps === "object" ? (
-                        Object.entries(
-                          enhancedResultsMap[getJobId(selectedJobModal)]
-                            .bridgeable_gaps
-                        ).map(([k, v], i) => (
-                          <div
-                            key={i}
-                            className="bg-white text-slate-800 border border-[#E0E7FF] rounded-xl p-3 shadow-2xs space-y-1"
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">
-                                ✓
-                              </span>
-                              <span className="text-xs font-bold text-slate-900">
-                                {k}
-                              </span>
-                            </div>
-                            <p className="text-xs text-slate-600 leading-relaxed pl-6 font-normal">
-                              {String(v)}
-                            </p>
+                            {rationale && (
+                              <p className="text-xs text-slate-600 leading-relaxed pl-6 font-normal">
+                                {rationale}
+                              </p>
+                            )}
                           </div>
-                        ))
-                      ) : (
-                        <p className="text-xs text-[#4F46E5]">
-                          {String(
-                            enhancedResultsMap[getJobId(selectedJobModal)]
-                              .bridgeable_gaps
-                          )}
-                        </p>
-                      )}
-                    </div>
+                        );
+                      })
+                    ) : typeof enhancedResultsMap[getJobId(selectedJobModal)].bridgeable_gaps === "object" ? (
+                      Object.entries(enhancedResultsMap[getJobId(selectedJobModal)].bridgeable_gaps).map(([k, v], i) => (
+                        <div
+                          key={i}
+                          className="bg-white text-slate-800 border border-[#E0E7FF] rounded-xl p-3 shadow-2xs space-y-1"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">✓</span>
+                            <span className="text-xs font-bold text-slate-900">{k}</span>
+                          </div>
+                          <p className="text-xs text-slate-600 leading-relaxed pl-6 font-normal">
+                            {String(v)}
+                          </p>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-xs text-[#4F46E5]">{String(enhancedResultsMap[getJobId(selectedJobModal)].bridgeable_gaps)}</p>
+                    )}
                   </div>
-                )}
+                </div>
+              )}
 
                 {/* Enhanced Resume Content */}
                 <div>
