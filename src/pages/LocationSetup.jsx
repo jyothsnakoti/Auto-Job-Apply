@@ -12,7 +12,7 @@ const LocationSetup = () => {
     );
 
     // User email state
-    const [userEmail, setUserEmail] = useState('nareshpulluri79@gmail.com');
+    const [userEmail, setUserEmail] = useState('');
 
     // Form state
     const [address, setAddress] = useState('');
@@ -539,7 +539,7 @@ const LocationSetup = () => {
 
                 {/* Right: Email */}
                 <div style={styles.userArea}>
-                    <span style={styles.userEmail}>{userEmail || 'nareshpulluri79@gmail.com'}</span>
+                    <span style={styles.userEmail}>{userEmail}</span>
                 </div>
             </header>
 

@@ -963,11 +963,7 @@ const Payment = () => {
     }, [paymentState]);
 
     const handlePaymentSuccessContinue = () => {
-        if (!hasUserResume) {
-            navigate('/resume-setup', { state: { plan } });
-        } else {
-            navigate('/dashboard');
-        }
+        navigate('/dashboard');
     };
 
     // Fallback: If no plan in state, redirect to /plan

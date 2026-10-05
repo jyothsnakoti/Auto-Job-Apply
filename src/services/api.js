@@ -59,7 +59,7 @@ export { default as enhancedAtsService } from './enhancedAtsService';
 export { default as moreJobsService } from './moreJobsService';
 export { default as jobService } from './jobService';
 export { default as dashboardService } from './dashboardService';
-export { default as endpoints, ENDPOINTS, AUTH_ENDPOINTS, BILLING_ENDPOINTS, ONBOARDING_ENDPOINTS, PROFILE_ENDPOINTS, RESUME_ENDPOINTS, ENHANCE_RESUME_ENDPOINTS, MORE_JOBS_ENDPOINTS, DASHBOARD_ENDPOINTS, API_BASE_URL, RESUME_API_BASE_URL } from './endpoints';
+export { default as endpoints, ENDPOINTS, AUTH_ENDPOINTS, BILLING_ENDPOINTS, ONBOARDING_ENDPOINTS, PROFILE_ENDPOINTS, RESUME_ENDPOINTS, ENHANCE_RESUME_ENDPOINTS, MORE_JOBS_ENDPOINTS, JOB_ENDPOINTS, DASHBOARD_ENDPOINTS, API_BASE_URL, RESUME_API_BASE_URL } from './endpoints';
 
 export default apiClient;
 

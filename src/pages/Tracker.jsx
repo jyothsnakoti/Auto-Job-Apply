@@ -33,182 +33,58 @@ const VerifiedTick = () => (
   />
 );
 
-const applicationTabs = [
-  { name: "All", count: 48 },
-  { name: "Submitted", count: 32 },
-  { name: "In Progress", count: 8 },
-  { name: "Needs Action", count: 3 },
-  { name: "Failed", count: 4 },
-  { name: "Skipped", count: 1 },
-];
-
-const trackerApplications = [
-  {
-    id: 1,
-    company: "Google",
-    logo: googleLogo,
-    jobTitle: "Product Designer",
-    atsMatch: "96%",
-    matchPercent: 96,
-    atsColor: "text-[#059669]",
-    resume: "Tailored",
-    resumeColor: "text-[#6366F1]",
-    resumeIconColor: "#6366F1",
-    status: "Submitted",
-    statusCategory: "Submitted",
-    statusDotColor: "bg-[#059669]",
-    statusTextColor: "text-[#059669]",
-    applied: "2 hours ago",
-    location: "Bengaluru, IN",
-    fullLocation: "Bengaluru, Karnataka, IN",
-    type: "Full-time",
-    workMode: "On-site",
-    department: "Product Design",
-    description:
-      "As a Product Designer at Google, you will lead end-to-end design initiatives that make complex technology simple and accessible for billions of people.",
-    responsibilities: [
-      "Create holistic design systems, user journeys, prototypes, and specifications",
-      "Collaborate with engineering, product, and research teams to deliver intuitive interfaces",
-      "Conduct user interviews and translate research insights into actionable designs",
-      "Champion design quality and accessibility across multi-platform experiences",
-    ],
-    requiredSkills: ["Figma", "UI/UX Design", "Design Systems", "Prototyping", "User Research"],
-    preferredSkills: ["Motion Design", "Design Tokens", "Accessibility (a11y)"],
-    experience: "3 – 6 years",
-  },
-  {
-    id: 2,
-    company: "Microsoft",
-    logo: microsoftLogo,
-    jobTitle: "Frontend Engineer",
-    atsMatch: "92%",
-    matchPercent: 92,
-    atsColor: "text-[#059669]",
-    resume: "Tailored",
-    resumeColor: "text-[#6366F1]",
-    resumeIconColor: "#6366F1",
-    status: "In Progress",
-    statusCategory: "In Progress",
-    statusDotColor: "bg-[#2563EB]",
-    statusTextColor: "text-[#2563EB]",
-    applied: "5 hours ago",
-    location: "Hyderabad, IN",
-    fullLocation: "Hyderabad, Telangana, IN",
-    type: "Full-time",
-    workMode: "Hybrid",
-    department: "Frontend Engineering",
-    description:
-      "As a Frontend Engineer at Microsoft, you will architect and build highly responsive, accessible web applications that empower enterprise customers.",
-    responsibilities: [
-      "Develop scalable web apps using React, TypeScript, and modern browser APIs",
-      "Ensure web performance, accessibility, and cross-browser reliability",
-      "Write automated tests and collaborate in code reviews",
-    ],
-    requiredSkills: ["React", "TypeScript", "JavaScript", "HTML5/CSS3", "Redux"],
-    preferredSkills: ["GraphQL", "Next.js", "Jest/Cypress"],
-    experience: "3 – 5 years",
-  },
-  {
-    id: 3,
-    company: "Amazon",
-    logo: amazonLogo,
-    jobTitle: "Software Engineer",
-    atsMatch: "89%",
-    matchPercent: 89,
-    atsColor: "text-[#D97706]",
-    resume: "Original",
-    resumeColor: "text-[#475569]",
-    resumeIconColor: "#475569",
-    status: "Submitted",
-    statusCategory: "Submitted",
-    statusDotColor: "bg-[#059669]",
-    statusTextColor: "text-[#059669]",
-    applied: "1 day ago",
-    location: "Bengaluru, IN",
-    fullLocation: "Bengaluru, Karnataka, IN",
-    type: "Full-time",
-    workMode: "On-site",
-    department: "Backend Engineering",
-    description:
-      "Join Amazon to build and scale distributed backend services with ultra-low latency and five-nines availability.",
-    responsibilities: [
-      "Design and deploy high-throughput microservices on AWS infrastructure",
-      "Participate in operational readiness and system architecture reviews",
-      "Optimize performance and system reliability across services",
-    ],
-    requiredSkills: ["Java", "AWS", "Distributed Systems", "Microservices"],
-    preferredSkills: ["DynamoDB", "Kafka", "Docker/K8s"],
-    experience: "2 – 5 years",
-  },
-  {
-    id: 4,
-    company: "Atlassian",
-    logo: aiLogo,
-    jobTitle: "UI/UX Designer",
-    atsMatch: "87%",
-    matchPercent: 87,
-    atsColor: "text-[#D97706]",
-    resume: "Tailored",
-    resumeColor: "text-[#6366F1]",
-    resumeIconColor: "#6366F1",
-    status: "Needs Action",
-    statusCategory: "Needs Action",
-    statusDotColor: "bg-[#D97706]",
-    statusTextColor: "text-[#D97706]",
-    applied: "1 day ago",
-    location: "Remote",
-    fullLocation: "Remote, Global",
-    type: "Full-time",
-    workMode: "Remote",
-    department: "Product Design",
-    description:
-      "Craft seamless collaboration workflows for Jira and Confluence, empowering agile teams worldwide.",
-    responsibilities: [
-      "Create high-fidelity wireframes, interactive prototypes, and design specs",
-      "Partner with engineers to ensure design precision in product implementation",
-    ],
-    requiredSkills: ["Figma", "UI Design", "User Research", "Prototyping"],
-    preferredSkills: ["Design Systems", "Accessibility"],
-    experience: "2 – 4 years",
-  },
-  {
-    id: 5,
-    company: "Shopify",
-    logo: shopifyLogo,
-    jobTitle: "Backend Engineer",
-    atsMatch: "85%",
-    matchPercent: 85,
-    atsColor: "text-[#D97706]",
-    resume: "Tailored",
-    resumeColor: "text-[#6366F1]",
-    resumeIconColor: "#6366F1",
-    status: "Failed",
-    statusCategory: "Failed",
-    statusDotColor: "bg-[#DC2626]",
-    statusTextColor: "text-[#DC2626]",
-    applied: "2 days ago",
-    location: "Remote",
-    fullLocation: "Remote, Global",
-    type: "Full-time",
-    workMode: "Remote",
-    department: "Infrastructure Engineering",
-    description:
-      "Build merchant-facing backend services that handle millions of requests during peak commerce events like Black Friday.",
-    responsibilities: [
-      "Design robust APIs and scalable database models in Ruby and Go",
-      "Troubleshoot production incidents and optimize query performance",
-    ],
-    requiredSkills: ["Ruby", "Go", "PostgreSQL", "Kafka"],
-    preferredSkills: ["Kubernetes", "Redis", "Elasticsearch"],
-    experience: "3 – 5 years",
-  },
-];
+const tabCategories = ["All", "Submitted", "In Progress", "Needs Action", "Failed", "Skipped"];
 
 const Tracker = () => {
   const navigate = useNavigate();
   const [selectedAppTab, setSelectedAppTab] = useState("All");
   const [selectedJobModal, setSelectedJobModal] = useState(null);
   const [isJobSaved, setIsJobSaved] = useState(false);
+
+  // Dynamic User Applications State (Loaded from API / Storage)
+  const [applications, setApplications] = useState(() => {
+    try {
+      const stored =
+        localStorage.getItem("trackerApplications") ||
+        sessionStorage.getItem("trackerApplications") ||
+        localStorage.getItem("appliedJobs") ||
+        sessionStorage.getItem("appliedJobs");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    const handleApplicationsUpdated = () => {
+      try {
+        const stored =
+          localStorage.getItem("trackerApplications") ||
+          sessionStorage.getItem("trackerApplications") ||
+          localStorage.getItem("appliedJobs") ||
+          sessionStorage.getItem("appliedJobs");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) {
+            setApplications(parsed);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    window.addEventListener("applicationsUpdated", handleApplicationsUpdated);
+    window.addEventListener("storage", handleApplicationsUpdated);
+    return () => {
+      window.removeEventListener("applicationsUpdated", handleApplicationsUpdated);
+      window.removeEventListener("storage", handleApplicationsUpdated);
+    };
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -220,9 +96,20 @@ const Tracker = () => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  const filteredApplications = trackerApplications.filter((app) => {
+  // Compute application tab counts dynamically
+  const applicationTabs = tabCategories.map((cat) => {
+    const count =
+      cat === "All"
+        ? applications.length
+        : applications.filter(
+            (app) => (app.statusCategory || app.status) === cat
+          ).length;
+    return { name: cat, count };
+  });
+
+  const filteredApplications = applications.filter((app) => {
     if (selectedAppTab === "All") return true;
-    return app.statusCategory === selectedAppTab;
+    return (app.statusCategory || app.status) === selectedAppTab;
   });
 
   return (
@@ -302,80 +189,100 @@ const Tracker = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredApplications.map((app) => (
-                    <tr
-                      key={app.id}
-                      className="hover:bg-slate-50/60 transition-colors cursor-pointer group"
-                      onClick={() => setSelectedJobModal(app)}
-                    >
-                      {/* Company */}
-                      <td className="py-4.5 pr-3">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-[28px] h-[28px] rounded-[6px] bg-white flex items-center justify-center shrink-0">
-                            <img
-                              src={app.logo}
-                              alt={app.company}
-                              className="w-[20px] h-[20px] object-contain"
-                            />
+                  {filteredApplications.length === 0 ? (
+                    <tr>
+                      <td colSpan="7" className="py-12 text-center">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-1">
+                            <DocumentIcon color="#94A3B8" />
                           </div>
-                          <span className="text-[14px] font-bold text-[#0F172A] group-hover:text-[#2563EB] transition-colors">
-                            {app.company}
-                          </span>
+                          <p className="text-[14px] font-semibold text-[#0F172A]">
+                            No applications found
+                          </p>
+                          <p className="text-[12.5px] text-[#64748B] max-w-sm">
+                            {selectedAppTab === "All"
+                              ? "You haven't submitted any job applications yet. Applied jobs will automatically appear here."
+                              : `No applications with status "${selectedAppTab}".`}
+                          </p>
                         </div>
-                      </td>
-
-                      {/* Job Title */}
-                      <td className="py-4.5 px-3 text-[13.5px] font-medium text-[#334155]">
-                        {app.jobTitle}
-                      </td>
-
-                      {/* ATS Match */}
-                      <td className="py-4.5 px-3">
-                        <span className={`text-[13px] font-bold ${app.atsColor}`}>
-                          {app.atsMatch}
-                        </span>
-                      </td>
-
-                      {/* Resume */}
-                      <td className="py-4.5 px-3">
-                        <div className="flex items-center gap-1.5">
-                          <DocumentIcon color={app.resumeIconColor} />
-                          <span className={`text-[13px] font-medium ${app.resumeColor}`}>
-                            {app.resume}
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* Status */}
-                      <td className="py-4.5 px-3">
-                        <div className="flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full ${app.statusDotColor}`} />
-                          <span className={`text-[13px] font-medium ${app.statusTextColor}`}>
-                            {app.status}
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* Applied */}
-                      <td className="py-4.5 px-3 text-[13px] text-[#64748B]">
-                        {app.applied}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="py-4.5 pl-3 text-right pr-2">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedJobModal(app);
-                          }}
-                          className="h-[30px] px-3.5 rounded-[8px] border border-[#E2E8F0] bg-white text-[12.5px] font-medium text-[#334155] hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
-                        >
-                          View
-                        </button>
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    filteredApplications.map((app) => (
+                      <tr
+                        key={app.id || app.jobId || app.job_id}
+                        className="hover:bg-slate-50/60 transition-colors cursor-pointer group"
+                        onClick={() => setSelectedJobModal(app)}
+                      >
+                        {/* Company */}
+                        <td className="py-4.5 pr-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-[28px] h-[28px] rounded-[6px] bg-white flex items-center justify-center shrink-0">
+                              <img
+                                src={app.logo || aiLogo}
+                                alt={app.company || app.company_name}
+                                className="w-[20px] h-[20px] object-contain"
+                              />
+                            </div>
+                            <span className="text-[14px] font-bold text-[#0F172A] group-hover:text-[#2563EB] transition-colors">
+                              {app.company || app.company_name || "Hiring Organization"}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Job Title */}
+                        <td className="py-4.5 px-3 text-[13.5px] font-medium text-[#334155]">
+                          {app.jobTitle || app.title || "Job Position"}
+                        </td>
+
+                        {/* ATS Match */}
+                        <td className="py-4.5 px-3">
+                          <span className={`text-[13px] font-bold ${app.atsColor || "text-[#059669]"}`}>
+                            {app.atsMatch || (app.matchPercent ? `${app.matchPercent}%` : "ATS Match")}
+                          </span>
+                        </td>
+
+                        {/* Resume */}
+                        <td className="py-4.5 px-3">
+                          <div className="flex items-center gap-1.5">
+                            <DocumentIcon color={app.resumeIconColor || "#6366F1"} />
+                            <span className={`text-[13px] font-medium ${app.resumeColor || "text-[#6366F1]"}`}>
+                              {app.resume || "Tailored"}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Status */}
+                        <td className="py-4.5 px-3">
+                          <div className="flex items-center gap-2">
+                            <span className={`w-2 h-2 rounded-full ${app.statusDotColor || "bg-[#059669]"}`} />
+                            <span className={`text-[13px] font-medium ${app.statusTextColor || "text-[#059669]"}`}>
+                              {app.status || app.statusCategory || "Submitted"}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Applied */}
+                        <td className="py-4.5 px-3 text-[13px] text-[#64748B]">
+                          {app.applied || app.appliedAt || "Recently"}
+                        </td>
+
+                        {/* Actions */}
+                        <td className="py-4.5 pl-3 text-right pr-2">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedJobModal(app);
+                            }}
+                            className="h-[30px] px-3.5 rounded-[8px] border border-[#E2E8F0] bg-white text-[12.5px] font-medium text-[#334155] hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
+                          >
+                            View
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>

@@ -622,7 +622,7 @@ const FinalDetails = () => {
 
                 {/* Right: Email */}
                 <div style={styles.userArea}>
-                    <span style={styles.userEmail}>{userEmail || 'nareshpulluri79@gmail.com'}</span>
+                    <span style={styles.userEmail}>{userEmail}</span>
                 </div>
             </header>
 
