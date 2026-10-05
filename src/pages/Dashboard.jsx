@@ -4,21 +4,23 @@ import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
 import EnhancedResumeViewer from "../components/EnhancedResumeViewer";
 import {
-    getStoredUser,
-    getOnboardingProfile,
-    getStoredJobMatches,
-    getOnboardingState,
-    getEnhancedResume,
-    getScoreForEnhancedResume,
-    getCandidateId,
-    getStoredResumeId,
-    getJobId,
-    getMoreJobsForResume,
-    getPrimaryResumeId,
-    getBillingStatus,
-    checkUserHasResume,
-    getDashboardData,
+  getStoredUser,
+  getOnboardingProfile,
+  getStoredJobMatches,
+  getOnboardingState,
+  getEnhancedResume,
+  getScoreForEnhancedResume,
+  getCandidateId,
+  getStoredResumeId,
+  getJobId,
+  getMoreJobsForResume,
+  getPrimaryResumeId,
+  getBillingStatus,
+  checkUserHasResume,
+  getDashboard,
+  getDashboardData,
   getStoredDashboardData,
+  getJobs,
 } from "../services/api";
 
 import dashboard1Icon from "../assets/dashboard1.svg";
@@ -264,19 +266,15 @@ const transformMatchToJob = (match, index = 0) => {
   const rawScore =
     typeof match.matchScore === "number"
       ? match.matchScore
-      : typeof match.match_score === "number"
-      ? match.match_score
       : typeof match.overall_score === "number"
-      ? match.overall_score
-      : typeof match.score_data?.overall_score === "number"
-      ? match.score_data.overall_score
-      : typeof match.score === "number"
-      ? match.score
-      : (typeof match.overall_score === "string" && !isNaN(Number(match.overall_score)) && match.overall_score.trim() !== "")
-      ? Number(match.overall_score)
-      : (typeof match.matchScore === "string" && !isNaN(Number(match.matchScore)) && match.matchScore.trim() !== "")
-      ? Number(match.matchScore)
-      : null;
+        ? match.overall_score
+        : typeof match.score_data?.overall_score === "number"
+          ? match.score_data.overall_score
+          : typeof match.score === "number"
+            ? match.score
+            : (typeof match.overall_score === "string" && !isNaN(Number(match.overall_score)) && match.overall_score.trim() !== "")
+              ? Number(match.overall_score)
+              : null;
 
   const matchPercent =
     rawScore !== null && !isNaN(rawScore)
@@ -359,6 +357,36 @@ const transformMatchToJob = (match, index = 0) => {
 
   const jobId = match.jobId || match.job_id || match.JDid || match.jd_id || match.id || `match-${index + 1}`;
 
+  // Handle backend employmentType like FULL_TIME, PART_TIME, CONTRACT
+  let rawEmployment = match.employmentType || match.employment_type || match.type || "";
+  let employmentType = "";
+  if (rawEmployment) {
+    const rawEmp = String(rawEmployment).toUpperCase().replace(/_/g, "-");
+    if (rawEmp.includes("FULL")) employmentType = "Full-time";
+    else if (rawEmp.includes("PART")) employmentType = "Part-time";
+    else if (rawEmp.includes("CONTRACT")) employmentType = "Contract";
+    else if (rawEmp.includes("INTERN")) employmentType = "Internship";
+    else if (rawEmp.includes("FREELANCE")) employmentType = "Freelance";
+    else employmentType = cleanHtmlText(rawEmployment);
+  } else {
+    employmentType = "Full-time";
+  }
+
+  // Handle backend workplace like REMOTE, ONSITE, HYBRID
+  let rawWorkplace = match.workplace || match.workMode || match.work_mode || "";
+  let workMode = "";
+  if (rawWorkplace) {
+    const rawWp = String(rawWorkplace).toUpperCase();
+    if (rawWp.includes("REMOTE")) workMode = "Remote";
+    else if (rawWp.includes("ONSITE") || rawWp.includes("ON_SITE") || rawWp.includes("OFFICE")) workMode = "On-site";
+    else if (rawWp.includes("HYBRID")) workMode = "Hybrid";
+    else workMode = cleanHtmlText(rawWorkplace);
+  } else if (location.toLowerCase().includes("remote")) {
+    workMode = "Remote";
+  } else {
+    workMode = "On-site";
+  }
+
   return {
     id: jobId,
     job_id: jobId,
@@ -369,12 +397,10 @@ const transformMatchToJob = (match, index = 0) => {
     location,
     country: match.country || "",
     fullLocation: cleanHtmlText(match.fullLocation || location),
-    type: cleanHtmlText(match.type || match.employmentType || match.employment_type || "Full-time"),
-    workMode: cleanHtmlText(
-      match.workMode ||
-      match.work_mode ||
-      (location.toLowerCase().includes("remote") ? "Remote" : "On-site")
-    ),
+    type: employmentType,
+    employmentType,
+    workMode,
+    workplace: workMode,
     department: cleanHtmlText(match.department || "Engineering"),
     posted: match.postedAt ? new Date(match.postedAt).toLocaleDateString() : cleanHtmlText(match.posted || "Recent match"),
     postedAt: match.postedAt || null,
@@ -524,7 +550,7 @@ const Dashboard = () => {
   const [updatedAtsScores, setUpdatedAtsScores] = useState({});
 
   // Filter States
-  const [selectedDate, setSelectedDate] = useState("Last 7 days");
+  const [selectedDate, setSelectedDate] = useState("All time");
   const [selectedLocations, setSelectedLocations] = useState([]);
   const [locationSearch, setLocationSearch] = useState("");
   const [selectedWorkplace, setSelectedWorkplace] = useState([]);
@@ -719,81 +745,103 @@ const Dashboard = () => {
           return;
         }
 
-        // Load Matched Jobs from API / Storage
-        const storedMatches = getStoredJobMatches();
-        let loadedMatches = [];
+        // 1. Fetch backend dashboard counters and top matches from GET /api/dashboard
+        let fetchedJobsCount = 0;
 
-        if (Array.isArray(storedMatches) && storedMatches.length > 0) {
-          loadedMatches = storedMatches;
-        } else if (
-          Array.isArray(onboardingState?.matches) &&
-          onboardingState.matches.length > 0
-        ) {
-          loadedMatches = onboardingState.matches;
-        } else {
-          const cachedDashboard = getStoredDashboardData();
-          if (
-            Array.isArray(cachedDashboard?.topMatches) &&
-            cachedDashboard.topMatches.length > 0
-          ) {
-            loadedMatches = cachedDashboard.topMatches;
+        try {
+          const dashData = await getDashboard();
+          if (dashData && isMounted) {
+            if (Array.isArray(dashData.topMatches) && dashData.topMatches.length > 0) {
+              const topJobs = dashData.topMatches.map((m, idx) => transformMatchToJob(m, idx)).filter(Boolean);
+              setJobs(topJobs);
+              fetchedJobsCount = topJobs.length;
+            }
           }
+        } catch (dashErr) {
+          console.debug("[Dashboard] GET /api/dashboard fallback notice:", dashErr?.message);
         }
 
-        if (loadedMatches.length > 0) {
-          const transformed = loadedMatches
-            .map((m, idx) => transformMatchToJob(m, idx))
-            .filter(Boolean);
+        // 2. Fetch stored user jobs from GET /api/jobs
+        try {
+          const jobsRes = await getJobs({ sort: 'best_match', page: 0, size: 20 });
+          if (jobsRes && Array.isArray(jobsRes.items) && jobsRes.items.length > 0 && isMounted) {
+            const transformed = jobsRes.items.map((m, idx) => transformMatchToJob(m, idx)).filter(Boolean);
+            setJobs(transformed);
+            fetchedJobsCount = transformed.length;
+          }
+        } catch (jobsErr) {
+          console.debug("[Dashboard] GET /api/jobs fallback notice:", jobsErr?.message);
+        }
 
-          // Deduplicate jobs by unique ID
-          const uniqueJobs = [];
-          const seenIds = new Set();
-          for (const j of transformed) {
-            const jid = j.job_id || j.id;
-            if (jid && !seenIds.has(jid)) {
-              seenIds.add(jid);
-              uniqueJobs.push(j);
-            } else if (!jid) {
-              uniqueJobs.push(j);
-            }
+        // 3. Fallback to Local Storage or Ngrok API only if GET /api/jobs returned 0 items
+        if (fetchedJobsCount === 0) {
+          const storedMatches = getStoredJobMatches();
+          let loadedMatches = [];
+
+          if (Array.isArray(storedMatches) && storedMatches.length > 0) {
+            loadedMatches = storedMatches;
+          } else if (
+            Array.isArray(onboardingState?.matches) &&
+            onboardingState.matches.length > 0
+          ) {
+            loadedMatches = onboardingState.matches;
           }
 
-          if (isMounted) {
-            setJobs(uniqueJobs);
-            const last = uniqueJobs[uniqueJobs.length - 1];
-            if (last?.job_id || last?.id) {
-              setLastJobId(last.job_id || last.id);
+          if (loadedMatches.length > 0) {
+            const transformed = loadedMatches
+              .map((m, idx) => transformMatchToJob(m, idx))
+              .filter(Boolean);
+
+            // Deduplicate jobs by unique ID
+            const uniqueJobs = [];
+            const seenIds = new Set();
+            for (const j of transformed) {
+              const jid = j.job_id || j.id;
+              if (jid && !seenIds.has(jid)) {
+                seenIds.add(jid);
+                uniqueJobs.push(j);
+              } else if (!jid) {
+                uniqueJobs.push(j);
+              }
             }
-          }
-        } else {
-          // If user has a resume but no stored matches, fetch jobs dynamically from API
-          const resumeIdVal = activeResumeId || getStoredResumeId();
-          if (resumeIdVal) {
-            try {
-              const result = await getMoreJobsForResume({
-                N: 10,
-                LastJDid: "",
-                top_k: 1000,
-                ResumeID: resumeIdVal,
-              });
-              if (
-                result &&
-                Array.isArray(result.matches) &&
-                result.matches.length > 0
-              ) {
-                const transformed = result.matches
-                  .map((m, idx) => transformMatchToJob(m, idx))
-                  .filter(Boolean);
-                if (isMounted) {
-                  setJobs(transformed);
-                  const last = transformed[transformed.length - 1];
-                  if (last?.job_id || last?.id) {
-                    setLastJobId(last.job_id || last.id);
+
+            if (isMounted) {
+              setJobs(uniqueJobs);
+              const last = uniqueJobs[uniqueJobs.length - 1];
+              if (last?.job_id || last?.id) {
+                setLastJobId(last.job_id || last.id);
+              }
+            }
+          } else {
+            // If user has a resume but no stored matches, fetch jobs dynamically from Ngrok API
+            const resumeIdVal = activeResumeId || getStoredResumeId();
+            if (resumeIdVal) {
+              try {
+                const result = await getMoreJobsForResume({
+                  N: 10,
+                  LastJDid: "",
+                  top_k: 1000,
+                  ResumeID: resumeIdVal,
+                });
+                if (
+                  result &&
+                  Array.isArray(result.matches) &&
+                  result.matches.length > 0
+                ) {
+                  const transformed = result.matches
+                    .map((m, idx) => transformMatchToJob(m, idx))
+                    .filter(Boolean);
+                  if (isMounted) {
+                    setJobs(transformed);
+                    const last = transformed[transformed.length - 1];
+                    if (last?.job_id || last?.id) {
+                      setLastJobId(last.job_id || last.id);
+                    }
                   }
                 }
+              } catch (apiErr) {
+                console.warn("[Dashboard] Could not auto-fetch jobs:", apiErr);
               }
-            } catch (apiErr) {
-              console.warn("[Dashboard] Could not auto-fetch jobs:", apiErr);
             }
           }
         }
@@ -1012,10 +1060,33 @@ const Dashboard = () => {
       if (selectedJobTypes.length > 0) {
         if (
           !selectedJobTypes.some((t) =>
-            job.type?.toLowerCase().includes(t.toLowerCase())
+            (job.type || "").toLowerCase().includes(t.toLowerCase())
           )
         ) {
           return false;
+        }
+      }
+
+      if (selectedEmploymentTypes.length > 0) {
+        if (
+          !selectedEmploymentTypes.some((t) =>
+            (job.type || job.employmentType || job.employment_type || "")
+              .toLowerCase()
+              .includes(t.toLowerCase())
+          )
+        ) {
+          return false;
+        }
+      }
+
+      if (sponsorsVisa) {
+        const visa = job.sponsorsVisa || job.visa_sponsorship || job.rawMatch?.sponsorsVisa;
+        if (!visa) {
+          // If visa requirement is toggled, check if description mentions visa/sponsorship
+          const desc = (job.description || job.fullJdText || "").toLowerCase();
+          if (!desc.includes("visa") && !desc.includes("sponsor")) {
+            return false;
+          }
         }
       }
 
@@ -1029,10 +1100,13 @@ const Dashboard = () => {
     selectedLocations,
     selectedRoles,
     selectedJobTypes,
+    selectedEmploymentTypes,
+    sponsorsVisa,
   ]);
 
   // Dynamic Dashboard Statistics Cards (From GET /api/dashboard endpoint with fallback)
   const statsCards = useMemo(() => {
+<<<<<<< HEAD
     // 1. Jobs Found
     const jobsFoundVal =
       typeof dashboardMetrics?.jobsFound === "number"
@@ -1040,6 +1114,13 @@ const Dashboard = () => {
         : jobs.length > 0
         ? jobs.length
         : 0;
+=======
+    const totalJobs = dashboardMetrics?.jobsFound ?? jobs.length;
+
+    const qualifiedMatchesVal =
+      dashboardMetrics?.qualifiedMatches ??
+      jobs.filter((j) => (j.matchPercent || 0) >= 80).length;
+>>>>>>> 8f2adb9d1943e0b2a19a95b77434e108e1232382
 
     // 2. Qualified Matches
     const qualifiedMatchesVal =
@@ -1047,6 +1128,7 @@ const Dashboard = () => {
         ? dashboardMetrics.qualifiedMatches
         : jobs.filter((j) => (j.matchPercent || 0) >= 80).length;
 
+<<<<<<< HEAD
     // 3. Allowance (for supporting text & limits)
     const allowanceVal =
       typeof dashboardMetrics?.applicationAllowance === "number"
@@ -1056,6 +1138,18 @@ const Dashboard = () => {
         : typeof billingInfo?.applicationLimit === "number"
         ? billingInfo.applicationLimit
         : 100;
+=======
+    const submittedVal = dashboardMetrics?.applicationsSubmitted ?? usedApps;
+
+    const allowance =
+      typeof billingInfo?.applicationAllowance === "number"
+        ? billingInfo.applicationAllowance
+        : typeof billingInfo?.applicationLimit === "number"
+          ? billingInfo.applicationLimit
+          : (dashboardMetrics?.applicationAllowance ?? null);
+
+    const allowanceVal = allowance !== null ? allowance : "N/A";
+>>>>>>> 8f2adb9d1943e0b2a19a95b77434e108e1232382
 
     // 4. Applications Submitted
     const submittedVal =
@@ -1075,11 +1169,18 @@ const Dashboard = () => {
         ? billingInfo.remainingApplications
         : Math.max(0, allowanceVal - submittedVal);
 
+    const remainingVal =
+      dashboardMetrics?.applicationsRemaining ?? remainingApps;
+
     return [
       {
         id: "jobs-found",
         title: "Jobs Found",
+<<<<<<< HEAD
         value: Number(jobsFoundVal).toLocaleString(),
+=======
+        value: totalJobs > 0 ? Number(totalJobs).toLocaleString() : "0",
+>>>>>>> 8f2adb9d1943e0b2a19a95b77434e108e1232382
         supportingText:
           jobsFoundVal > 0
             ? "New jobs in the last 7 days"
@@ -1210,6 +1311,20 @@ const Dashboard = () => {
     navigator.clipboard.writeText(text);
     setCopiedResume(true);
     setTimeout(() => setCopiedResume(false), 2500);
+  };
+
+  const handleDownloadEnhancedResume = (text, job) => {
+    if (!text) return;
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const jobTitle = (job?.title || "Enhanced_Resume").replace(/[^a-zA-Z0-9_-]/g, "_");
+    link.href = url;
+    link.download = `${jobTitle}_Resume.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const handleGetUpdatedAts = async () => {
@@ -1482,52 +1597,53 @@ const Dashboard = () => {
                       LOCATIONS
                     </div>
 
-                    <div className="flex flex-col gap-1">
-                      {locationOptions
-                        .filter((loc) =>
-                          loc.name
-                            .toLowerCase()
-                            .includes(locationSearch.toLowerCase())
-                        )
-                        .map((loc) => {
-                          const isChecked = selectedLocations.includes(loc.name);
-                          return (
-                            <div
-                              key={loc.name}
-                              onClick={() =>
-                                toggleCheckbox(
-                                  selectedLocations,
-                                  setSelectedLocations,
-                                  loc.name
-                                )
-                              }
-                              className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
-                            >
+                    <div className="flex flex-col gap-1 max-h-[220px] overflow-y-auto">
+                      {dynamicLocationOptions.length === 0 ? (
+                        <div className="text-xs text-slate-400 px-2 py-1">
+                          No locations available
+                        </div>
+                      ) : (
+                        dynamicLocationOptions
+                          .filter((loc) =>
+                            loc.toLowerCase().includes(locationSearch.toLowerCase())
+                          )
+                          .map((loc) => {
+                            const isChecked = selectedLocations.includes(loc);
+                            return (
                               <div
-                                className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
-                                  ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                                  : "border-slate-300 bg-white"
-                                  }`}
+                                key={loc}
+                                onClick={() =>
+                                  toggleCheckbox(
+                                    selectedLocations,
+                                    setSelectedLocations,
+                                    loc
+                                  )
+                                }
+                                className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
                               >
-                                {isChecked && (
-                                  <svg
-                                    className="w-2.5 h-2.5"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="3.5"
-                                  >
-                                    <polyline points="20 6 9 17 4 12" />
-                                  </svg>
-                                )}
+                                <div
+                                  className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
+                                      ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
+                                      : "border-slate-300 bg-white"
+                                    }`}
+                                >
+                                  {isChecked && (
+                                    <svg
+                                      className="w-2.5 h-2.5"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="3.5"
+                                    >
+                                      <polyline points="20 6 9 17 4 12" />
+                                    </svg>
+                                  )}
+                                </div>
+                                <span className="flex-1 truncate">{loc}</span>
                               </div>
-                              <span className="flex-1">{loc.name}</span>
-                              <span className="text-[11px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-[4px]">
-                                {loc.badge}
-                              </span>
-                            </div>
-                          );
-                        })}
+                            );
+                          })
+                      )}
                     </div>
                   </div>
                 )}
@@ -1557,39 +1673,45 @@ const Dashboard = () => {
                 </button>
 
                 {activeDropdown === "role" && (
-                  <div className="absolute top-full left-0 mt-2 w-[210px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2.5 z-50 flex flex-col gap-1">
-                    {roleOptions.map((role) => {
-                      const isChecked = selectedRoles.includes(role);
-                      return (
-                        <div
-                          key={role}
-                          onClick={() =>
-                            toggleCheckbox(selectedRoles, setSelectedRoles, role)
-                          }
-                          className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
-                        >
+                  <div className="absolute top-full left-0 mt-2 w-[220px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2.5 z-50 flex flex-col gap-1 max-h-[220px] overflow-y-auto">
+                    {dynamicRoleOptions.length === 0 ? (
+                      <div className="text-xs text-slate-400 px-2 py-1">
+                        No roles available
+                      </div>
+                    ) : (
+                      dynamicRoleOptions.map((role) => {
+                        const isChecked = selectedRoles.includes(role);
+                        return (
                           <div
-                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
-                              ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                              : "border-slate-300 bg-white"
-                              }`}
+                            key={role}
+                            onClick={() =>
+                              toggleCheckbox(selectedRoles, setSelectedRoles, role)
+                            }
+                            className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
                           >
-                            {isChecked && (
-                              <svg
-                                className="w-2.5 h-2.5"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="3.5"
-                              >
-                                <polyline points="20 6 9 17 4 12" />
-                              </svg>
-                            )}
+                            <div
+                              className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
+                                  ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
+                                  : "border-slate-300 bg-white"
+                                }`}
+                            >
+                              {isChecked && (
+                                <svg
+                                  className="w-2.5 h-2.5"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="3.5"
+                                >
+                                  <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                              )}
+                            </div>
+                            <span className="truncate">{role}</span>
                           </div>
-                          <span>{role}</span>
-                        </div>
-                      );
-                    })}
+                        );
+                      })
+                    )}
                   </div>
                 )}
               </div>
@@ -1852,46 +1974,52 @@ const Dashboard = () => {
                     </div>
 
                     <div className="flex flex-col gap-1 max-h-[220px] overflow-y-auto">
-                      {companyOptions
-                        .filter((c) =>
-                          c.toLowerCase().includes(companySearch.toLowerCase())
-                        )
-                        .map((comp) => {
-                          const isChecked = selectedCompanies.includes(comp);
-                          return (
-                            <div
-                              key={comp}
-                              onClick={() =>
-                                toggleCheckbox(
-                                  selectedCompanies,
-                                  setSelectedCompanies,
-                                  comp
-                                )
-                              }
-                              className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
-                            >
+                      {dynamicCompanyOptions.length === 0 ? (
+                        <div className="text-xs text-slate-400 px-2 py-1">
+                          No companies available
+                        </div>
+                      ) : (
+                        dynamicCompanyOptions
+                          .filter((c) =>
+                            c.toLowerCase().includes(companySearch.toLowerCase())
+                          )
+                          .map((comp) => {
+                            const isChecked = selectedCompanies.includes(comp);
+                            return (
                               <div
-                                className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
-                                  ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                                  : "border-slate-300 bg-white"
-                                  }`}
+                                key={comp}
+                                onClick={() =>
+                                  toggleCheckbox(
+                                    selectedCompanies,
+                                    setSelectedCompanies,
+                                    comp
+                                  )
+                                }
+                                className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
                               >
-                                {isChecked && (
-                                  <svg
-                                    className="w-2.5 h-2.5"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="3.5"
-                                  >
-                                    <polyline points="20 6 9 17 4 12" />
-                                  </svg>
-                                )}
+                                <div
+                                  className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
+                                    ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
+                                    : "border-slate-300 bg-white"
+                                    }`}
+                                >
+                                  {isChecked && (
+                                    <svg
+                                      className="w-2.5 h-2.5"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="3.5"
+                                    >
+                                      <polyline points="20 6 9 17 4 12" />
+                                    </svg>
+                                  )}
+                                </div>
+                                <span className="truncate">{comp}</span>
                               </div>
-                              <span className="truncate">{comp}</span>
-                            </div>
-                          );
-                        })}
+                            );
+                          })
+                      )}
                     </div>
                   </div>
                 )}
@@ -2029,83 +2157,6 @@ const Dashboard = () => {
                 )}
               </div>
 
-              {/* Sponsors Visa Button */}
-              <button
-                type="button"
-                onClick={() => setSponsorsVisa(!sponsorsVisa)}
-                className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${sponsorsVisa
-                    ? "border-slate-400 bg-slate-100 text-[#0F172A] font-medium"
-                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
-              >
-                <span>Sponsors Visa</span>
-              </button>
-
-              {/* Employment Type Dropdown */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => toggleDropdown("employmentType")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "employmentType" ||
-                      selectedEmploymentTypes.length > 0
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                    }`}
-                >
-                  <span>Employment Type</span>
-                  <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "employmentType" ? "rotate-180" : ""
-                      }`}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                  >
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
-                </button>
-
-                {activeDropdown === "employmentType" && (
-                  <div className="absolute top-full left-0 mt-2 w-[170px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2.5 z-50 flex flex-col gap-1">
-                    {employmentTypeOptions.map((type) => {
-                      const isChecked = selectedEmploymentTypes.includes(type);
-                      return (
-                        <div
-                          key={type}
-                          onClick={() =>
-                            toggleCheckbox(
-                              selectedEmploymentTypes,
-                              setSelectedEmploymentTypes,
-                              type
-                            )
-                          }
-                          className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
-                        >
-                          <div
-                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
-                                ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                                : "border-slate-300 bg-white"
-                              }`}
-                          >
-                            {isChecked && (
-                              <svg
-                                className="w-2.5 h-2.5"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="3.5"
-                              >
-                                <polyline points="20 6 9 17 4 12" />
-                              </svg>
-                            )}
-                          </div>
-                          <span>{type}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
             </div>
           </div>
 
@@ -3427,18 +3478,30 @@ const Dashboard = () => {
                   <button
                     type="button"
                     onClick={() =>
-                      handleCopyEnhancedResume(
+                      handleDownloadEnhancedResume(
                         enhancedResultsMap[getJobId(selectedJobModal)]?.EnhResume ||
                         enhancedResultsMap[getJobId(selectedJobModal)]?.enhResume ||
-                        enhancedResultsMap[getJobId(selectedJobModal)]?.enhanced_resume
+                        enhancedResultsMap[getJobId(selectedJobModal)]?.enhanced_resume ||
+                        enhancedResultsMap[getJobId(selectedJobModal)]?.enhancedResume,
+                        selectedJobModal
                       )
                     }
                     className="px-3.5 py-1.5 bg-[#EEF2FF] hover:bg-[#E0E7FF] text-[#4F46E5] text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
                   >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                      />
                     </svg>
-                    <span>{copiedResume ? "Copied!" : "Copy Resume"}</span>
+                    <span>Download</span>
                   </button>
 
                   <button

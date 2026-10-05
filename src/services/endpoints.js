@@ -195,6 +195,8 @@ export const JOB_ENDPOINTS = {
   ENHANCE: (jobId) => `${API_BASE_URL}/api/jobs/${jobId}/enhance`,
 };
 
+
+
 export const ENDPOINTS = {
   BASE_URL: API_BASE_URL,
 
@@ -212,6 +214,7 @@ export const ENDPOINTS = {
   DASHBOARD: DASHBOARD_ENDPOINTS,
   JOBS: JOB_ENDPOINTS,
   JOB: JOB_ENDPOINTS,
+  DASHBOARD: DASHBOARD_ENDPOINTS,
 };
 
 export default ENDPOINTS;
