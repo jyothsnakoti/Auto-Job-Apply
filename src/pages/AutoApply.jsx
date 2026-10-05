@@ -10,6 +10,15 @@ import aiLogo from "../assets/ai.svg";
 import mapIcon from "../assets/map.svg";
 import tickIcon from "../assets/tick.svg";
 
+import shopifyLogo from "../assets/shopify.svg";
+import {
+  getStoredJobMatches,
+  getJobs,
+  getMoreJobsForResume,
+  getStoredResumeId,
+  getBillingStatus,
+} from "../services/api";
+
 const dateOptions = [
   "Last 6 hours",
   "Last 24 hours",
@@ -87,206 +96,6 @@ const experienceOptions = [
   "Lead / Principal (8+ yrs)",
 ];
 
-const autoApplyJobs = [
-  {
-    id: 1,
-    title: "Sr. Software Engineer II",
-    company: "Google",
-    location: "Bengaluru, IN",
-    fullLocation: "Bengaluru, Karnataka, IN",
-    type: "Full-time",
-    workMode: "On-site",
-    department: "Software Engineering",
-    posted: "Posted 2 days ago",
-    matchPercent: 96,
-    matchCircleColor: "#0D9488",
-    logo: googleLogo,
-    defaultSelected: true,
-    description:
-      "As a Senior Software Engineer, you will design, develop, test, deploy and maintain software solutions that solve complex problems at scale. You will work with cross-functional teams to build products and services used by millions of users worldwide.",
-    responsibilities: [
-      "Design and develop scalable, reliable and efficient software systems",
-      "Collaborate with product, design and engineering teams",
-      "Write clean, maintainable and well-tested code",
-      "Participate in code reviews and technical discussions",
-      "Contribute to system design and architecture decisions",
-      "Improve existing systems for performance, scalability and reliability",
-    ],
-    requiredSkills: [
-      "Java",
-      "Python",
-      "C++",
-      "Data Structures",
-      "Algorithms",
-      "Software Development",
-    ],
-    preferredSkills: ["Distributed Systems", "Cloud", "SQL"],
-    experience: "2 – 6 years",
-  },
-  {
-    id: 2,
-    title: "Frontend Engineer",
-    company: "Microsoft",
-    location: "Bengaluru, IN",
-    fullLocation: "Bengaluru, Karnataka, IN",
-    type: "Full-time",
-    workMode: "On-site",
-    department: "Frontend Engineering",
-    posted: "Posted 2 days ago",
-    matchPercent: 92,
-    matchCircleColor: "#0D9488",
-    logo: microsoftLogo,
-    defaultSelected: true,
-    description:
-      "As a Frontend Engineer at Microsoft, you will architect and build highly intuitive, accessible, and responsive user interfaces that delight millions of enterprise and consumer users daily.",
-    responsibilities: [
-      "Develop responsive and accessible web applications using React, TypeScript, and modern web APIs",
-      "Partner with UX designers and product managers to iterate on product specs and wireframes",
-      "Ensure high performance, accessibility (a11y), and cross-browser compatibility across devices",
-      "Write comprehensive automated unit and integration tests",
-      "Champion code quality, review pull requests, and mentor junior engineers",
-    ],
-    requiredSkills: [
-      "React",
-      "TypeScript",
-      "JavaScript",
-      "HTML5/CSS3",
-      "Redux",
-      "Web Performance",
-    ],
-    preferredSkills: ["GraphQL", "Next.js", "Jest/Cypress"],
-    experience: "3 – 5 years",
-  },
-  {
-    id: 3,
-    title: "Software Development Engineer",
-    company: "Amazon",
-    location: "Bengaluru, IN",
-    fullLocation: "Bengaluru, Karnataka, IN",
-    type: "Full-time",
-    workMode: "Remote",
-    department: "Backend Engineering",
-    posted: "Posted 1 day ago",
-    matchPercent: 89,
-    matchCircleColor: "#D97706",
-    logo: amazonLogo,
-    defaultSelected: true,
-    description:
-      "Join Amazon as an SDE to build and scale distributed web services that handle millions of transactions per second with ultra-low latency and high reliability.",
-    responsibilities: [
-      "Design and implement high-scale backend services using Java and AWS technologies",
-      "Own end-to-end service architecture, deployment pipelines, and operational readiness",
-      "Participate in design reviews, threat modeling, and reliability engineering",
-      "Collaborate with principal engineers to solve complex architectural challenges",
-    ],
-    requiredSkills: [
-      "Java",
-      "AWS",
-      "Distributed Systems",
-      "Microservices",
-      "Data Structures",
-    ],
-    preferredSkills: ["DynamoDB", "Kafka", "Docker/K8s"],
-    experience: "2 – 5 years",
-  },
-  {
-    id: 4,
-    title: "UI/UX Designer",
-    company: "Atlassian",
-    location: "Remote",
-    fullLocation: "Remote, Global",
-    type: "Full-time",
-    workMode: "Remote",
-    department: "Product Design",
-    posted: "Posted 1 day ago",
-    matchPercent: 87,
-    matchCircleColor: "#D97706",
-    logo: aiLogo,
-    defaultSelected: false,
-    description:
-      "As a UI/UX Designer at Atlassian, you will craft seamless and intuitive collaboration workflows for Jira and Confluence, empowering agile teams across the globe.",
-    responsibilities: [
-      "Create high-fidelity wireframes, user journeys, prototypes, and UI specifications in Figma",
-      "Conduct qualitative and quantitative user research, usability tests, and design sprints",
-      "Collaborate with design system teams to maintain consistency with Atlassian Design Guidelines",
-      "Work closely with engineers during implementation to ensure design accuracy and polish",
-    ],
-    requiredSkills: [
-      "Figma",
-      "UI Design",
-      "User Research",
-      "Prototyping",
-      "Design Systems",
-    ],
-    preferredSkills: ["Design Tokens", "Accessibility", "Micro-interactions"],
-    experience: "2 – 4 years",
-  },
-  {
-    id: 5,
-    title: "UI/UX Designer",
-    company: "Atlassian",
-    location: "Remote",
-    fullLocation: "Remote, Global",
-    type: "Full-time",
-    workMode: "Remote",
-    department: "Product Design",
-    posted: "Posted 1 day ago",
-    matchPercent: 87,
-    matchCircleColor: "#D97706",
-    logo: aiLogo,
-    defaultSelected: false,
-    description:
-      "As a UI/UX Designer at Atlassian, you will craft seamless and intuitive collaboration workflows for Jira and Confluence, empowering agile teams across the globe.",
-    responsibilities: [
-      "Create high-fidelity wireframes, user journeys, prototypes, and UI specifications in Figma",
-      "Conduct qualitative and quantitative user research, usability tests, and design sprints",
-      "Collaborate with design system teams to maintain consistency with Atlassian Design Guidelines",
-      "Work closely with engineers during implementation to ensure design accuracy and polish",
-    ],
-    requiredSkills: [
-      "Figma",
-      "UI Design",
-      "User Research",
-      "Prototyping",
-      "Design Systems",
-    ],
-    preferredSkills: ["Design Tokens", "Accessibility", "Micro-interactions"],
-    experience: "2 – 4 years",
-  },
-  {
-    id: 6,
-    title: "UI/UX Designer",
-    company: "Atlassian",
-    location: "Remote",
-    fullLocation: "Remote, Global",
-    type: "Full-time",
-    workMode: "Remote",
-    department: "Product Design",
-    posted: "Posted 1 day ago",
-    matchPercent: 87,
-    matchCircleColor: "#D97706",
-    logo: aiLogo,
-    defaultSelected: false,
-    description:
-      "As a UI/UX Designer at Atlassian, you will craft seamless and intuitive collaboration workflows for Jira and Confluence, empowering agile teams across the globe.",
-    responsibilities: [
-      "Create high-fidelity wireframes, user journeys, prototypes, and UI specifications in Figma",
-      "Conduct qualitative and quantitative user research, usability tests, and design sprints",
-      "Collaborate with design system teams to maintain consistency with Atlassian Design Guidelines",
-      "Work closely with engineers during implementation to ensure design accuracy and polish",
-    ],
-    requiredSkills: [
-      "Figma",
-      "UI Design",
-      "User Research",
-      "Prototyping",
-      "Design Systems",
-    ],
-    preferredSkills: ["Design Tokens", "Accessibility", "Micro-interactions"],
-    experience: "2 – 4 years",
-  },
-];
-
 const VerifiedTick = () => (
   <img
     src={tickIcon}
@@ -302,8 +111,102 @@ const AutoApply = () => {
   const [selectedJobModal, setSelectedJobModal] = useState(null);
   const [isJobSaved, setIsJobSaved] = useState(false);
 
-  // Selected Jobs for Auto Apply (Default: Google, Microsoft, Amazon => IDs 1, 2, 3)
-  const [selectedJobIds, setSelectedJobIds] = useState([1, 2, 3]);
+  // Jobs state & Selected Jobs for Auto Apply
+  const [jobs, setJobs] = useState([]);
+  const [isLoadingJobs, setIsLoadingJobs] = useState(true);
+  const [selectedJobIds, setSelectedJobIds] = useState([]);
+  const [billingInfo, setBillingInfo] = useState(null);
+
+  // Load jobs dynamically
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadJobsData = async () => {
+      try {
+        setIsLoadingJobs(true);
+        const storedMatches = getStoredJobMatches();
+        let loadedMatches = [];
+
+        if (Array.isArray(storedMatches) && storedMatches.length > 0) {
+          loadedMatches = storedMatches;
+        }
+
+        if (loadedMatches.length > 0) {
+          const formatted = loadedMatches.map((m, idx) => {
+            const rawScore = typeof m.overall_score === 'number' ? m.overall_score : m.score;
+            const matchPercent = rawScore ? Math.min(100, Math.max(1, Math.round(Number(rawScore)))) : 85;
+            const jobId = m.job_id || m.JDid || m.id || `job-${idx + 1}`;
+            return {
+              id: jobId,
+              title: m.title || m.preview || m.job_title || "Software Engineer",
+              company: m.company || m.company_name || "Hiring Organization",
+              location: m.location || m.city || "Remote",
+              type: m.type || m.employment_type || "Full-time",
+              workMode: m.workMode || m.work_mode || "Remote",
+              posted: m.posted || "Recent match",
+              matchPercent,
+              logo: m.logo || aiLogo,
+              description: m.description || m.preview || "Job description available.",
+              responsibilities: m.responsibilities || [],
+              requiredSkills: m.requiredSkills || m.skills || [],
+              preferredSkills: m.preferredSkills || [],
+              experience: m.experience || "2 – 5 years",
+            };
+          });
+          if (isMounted) {
+            setJobs(formatted);
+            setSelectedJobIds(formatted.map((j) => j.id));
+          }
+        } else {
+          // Fetch from GET /api/jobs if user has jobs
+          const res = await getJobs({ size: 20 }).catch(() => null);
+          if (res && Array.isArray(res.items) && res.items.length > 0) {
+            const formatted = res.items.map((m, idx) => {
+              const rawScore = typeof m.overall_score === 'number' ? m.overall_score : m.matchScore;
+              const matchPercent = rawScore ? Math.min(100, Math.max(1, Math.round(Number(rawScore)))) : 85;
+              const jobId = m.jobId || m.job_id || m.id || `job-${idx + 1}`;
+              return {
+                id: jobId,
+                title: m.title || m.jobTitle || "Software Engineer",
+                company: m.companyName || m.company || "Hiring Organization",
+                location: m.location || "Remote",
+                type: m.employmentType || m.type || "Full-time",
+                workMode: m.workplace || m.workMode || "Remote",
+                posted: m.postedAt || "Recent match",
+                matchPercent,
+                logo: m.logo || aiLogo,
+                description: m.description || "Job description available.",
+                responsibilities: m.responsibilities || [],
+                requiredSkills: m.requiredSkills || [],
+                preferredSkills: m.preferredSkills || [],
+                experience: m.experience || "2 – 5 years",
+              };
+            });
+            if (isMounted) {
+              setJobs(formatted);
+              setSelectedJobIds(formatted.map((j) => j.id));
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("[AutoApply] Error loading jobs:", err);
+      } finally {
+        if (isMounted) setIsLoadingJobs(false);
+      }
+    };
+
+    loadJobsData();
+
+    getBillingStatus()
+      .then((status) => {
+        if (isMounted && status) setBillingInfo(status);
+      })
+      .catch(() => {});
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Settings State
   const [resumeVersion, setResumeVersion] = useState("Use job-specific tailored resume (Recommended)");
@@ -1141,134 +1044,160 @@ const AutoApply = () => {
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
                 </div>
-                <span>{selectedJobIds.length} of 247 jobs selected</span>
+                <span>{selectedJobIds.length} of {jobs.length} jobs selected</span>
               </div>
 
               {/* Job List Container */}
               <div className="flex flex-col divide-y divide-slate-100 mt-1">
-                {autoApplyJobs.map((job) => {
-                  const isSelected = selectedJobIds.includes(job.id);
-                  return (
-                    <div
-                      key={job.id}
-                      className="py-4.5 flex items-center justify-between gap-4 hover:bg-slate-50/70 -mx-6 px-6 transition-colors group cursor-pointer"
-                      onClick={() => toggleJobSelection(job.id)}
+                {isLoadingJobs ? (
+                  <div className="py-12 text-center">
+                    <p className="text-[13.5px] font-medium text-[#64748B]">Loading job matches...</p>
+                  </div>
+                ) : jobs.length === 0 ? (
+                  <div className="py-12 text-center flex flex-col items-center gap-2">
+                    <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <circle cx="11" cy="11" r="7" />
+                        <path d="m20 20-3.5-3.5" />
+                      </svg>
+                    </div>
+                    <p className="text-[14px] font-semibold text-[#0F172A]">No job matches available</p>
+                    <p className="text-[12.5px] text-[#64748B] max-w-sm">
+                      Upload your resume in Profile to view and select job matches for Auto Apply.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => navigate("/profile")}
+                      className="mt-2 text-[13px] font-semibold text-white bg-[#2563EB] hover:bg-[#1D4ED8] px-4 py-2 rounded-xl transition-colors cursor-pointer"
                     >
-                      {/* Left: Checkbox + Logo + Title & Info */}
-                      <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                        {/* Circle Checkbox */}
-                        <div
-                          className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-all ${
-                            isSelected
-                              ? "bg-[#2563EB] text-white"
-                              : "border-2 border-slate-300 bg-white group-hover:border-slate-400"
-                          }`}
-                        >
-                          {isSelected && (
-                            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5">
-                              <polyline points="20 6 9 17 4 12" />
+                      Go to Profile
+                    </button>
+                  </div>
+                ) : (
+                  jobs.map((job) => {
+                    const isSelected = selectedJobIds.includes(job.id);
+                    return (
+                      <div
+                        key={job.id}
+                        className="py-4.5 flex items-center justify-between gap-4 hover:bg-slate-50/70 -mx-6 px-6 transition-colors group cursor-pointer"
+                        onClick={() => toggleJobSelection(job.id)}
+                      >
+                        {/* Left: Checkbox + Logo + Title & Info */}
+                        <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                          {/* Circle Checkbox */}
+                          <div
+                            className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-all ${
+                              isSelected
+                                ? "bg-[#2563EB] text-white"
+                                : "border-2 border-slate-300 bg-white group-hover:border-slate-400"
+                            }`}
+                          >
+                            {isSelected && (
+                              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5">
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                            )}
+                          </div>
+
+                          {/* Company Logo */}
+                          <div className="w-[38px] h-[38px] rounded-[10px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2">
+                            <img
+                              src={job.logo || aiLogo}
+                              alt={job.company}
+                              className="w-full h-full object-contain"
+                            />
+                          </div>
+
+                          {/* Job Title & Subline */}
+                          <div className="flex flex-col min-w-0">
+                            <div className="flex items-center gap-2">
+                              <h3
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedJobModal(job);
+                                }}
+                                className="text-[14.5px] font-bold text-[#0F172A] tracking-tight truncate hover:text-[#2563EB] transition-colors"
+                              >
+                                {job.title}
+                              </h3>
+                            </div>
+
+                            <div className="flex items-center gap-2 text-[12.5px] text-[#64748B] mt-0.5 flex-wrap">
+                              <span className="flex items-center gap-1 font-medium text-slate-700">
+                                <span>{job.company}</span>
+                                <VerifiedTick />
+                              </span>
+                              <span className="text-slate-300">•</span>
+                              <span className="flex items-center gap-1">
+                                <img src={mapIcon} alt="" className="w-2.5 h-3 object-contain shrink-0" />
+                                <span>{job.location}</span>
+                              </span>
+                              <span className="text-slate-300">•</span>
+                              <span className="flex items-center gap-1">
+                                <svg className="w-3 h-3 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                  <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+                                  <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+                                </svg>
+                                <span>{job.type}</span>
+                              </span>
+                              <span className="text-slate-300">•</span>
+                              <span className="flex items-center gap-1">
+                                <svg className="w-3 h-3 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                                </svg>
+                                <span>{job.workMode}</span>
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Right: ATS Match Donut + Bookmark + Posted Date */}
+                        <div className="flex items-center gap-4 shrink-0">
+                          {/* Circular Donut Match Score */}
+                          <div className="relative w-[38px] h-[38px] shrink-0 flex items-center justify-center">
+                            <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                              <path
+                                className="text-slate-100"
+                                strokeWidth="3.2"
+                                stroke="currentColor"
+                                fill="none"
+                                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                              />
+                              <path
+                                className={job.matchPercent >= 90 ? "text-[#0D9488]" : "text-[#D97706]"}
+                                strokeDasharray={`${job.matchPercent || 85}, 100`}
+                                strokeWidth="3.2"
+                                strokeLinecap="round"
+                                stroke="currentColor"
+                                fill="none"
+                                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                              />
                             </svg>
-                          )}
-                        </div>
-
-                        {/* Company Logo */}
-                        <div className="w-[38px] h-[38px] rounded-[10px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2">
-                          <img
-                            src={job.logo}
-                            alt={job.company}
-                            className="w-full h-full object-contain"
-                          />
-                        </div>
-
-                        {/* Job Title & Subline */}
-                        <div className="flex flex-col min-w-0">
-                          <div className="flex items-center gap-2">
-                            <h3
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedJobModal(job);
-                              }}
-                              className="text-[14.5px] font-bold text-[#0F172A] tracking-tight truncate hover:text-[#2563EB] transition-colors"
-                            >
-                              {job.title}
-                            </h3>
-                          </div>
-
-                          <div className="flex items-center gap-2 text-[12.5px] text-[#64748B] mt-0.5 flex-wrap">
-                            <span className="flex items-center gap-1 font-medium text-slate-700">
-                              <span>{job.company}</span>
-                              <VerifiedTick />
-                            </span>
-                            <span className="text-slate-300">•</span>
-                            <span className="flex items-center gap-1">
-                              <img src={mapIcon} alt="" className="w-2.5 h-3 object-contain shrink-0" />
-                              <span>{job.location}</span>
-                            </span>
-                            <span className="text-slate-300">•</span>
-                            <span className="flex items-center gap-1">
-                              <svg className="w-3 h-3 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-                                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-                              </svg>
-                              <span>{job.type}</span>
-                            </span>
-                            <span className="text-slate-300">•</span>
-                            <span className="flex items-center gap-1">
-                              <svg className="w-3 h-3 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                              </svg>
-                              <span>{job.workMode}</span>
+                            <span className="absolute text-[10.5px] font-bold text-[#0F172A]">
+                              {job.matchPercent}%
                             </span>
                           </div>
-                        </div>
-                      </div>
 
-                      {/* Right: ATS Match Donut + Bookmark + Posted Date */}
-                      <div className="flex items-center gap-4 shrink-0">
-                        {/* Circular Donut Match Score */}
-                        <div className="relative w-[38px] h-[38px] shrink-0 flex items-center justify-center">
-                          <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                            <path
-                              className="text-slate-100"
-                              strokeWidth="3.2"
-                              stroke="currentColor"
-                              fill="none"
-                              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                            />
-                            <path
-                              className={job.matchPercent >= 90 ? "text-[#0D9488]" : "text-[#D97706]"}
-                              strokeDasharray={`${job.matchPercent}, 100`}
-                              strokeWidth="3.2"
-                              strokeLinecap="round"
-                              stroke="currentColor"
-                              fill="none"
-                              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                            />
-                          </svg>
-                          <span className="absolute text-[10.5px] font-bold text-[#0F172A]">
-                            {job.matchPercent}%
+                          {/* Bookmark Icon */}
+                          <button
+                            type="button"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-slate-400 hover:text-slate-600 transition-colors p-1 rounded-md"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+                            </svg>
+                          </button>
+
+                          {/* Posted Date */}
+                          <span className="text-[12px] text-[#94A3B8] w-[95px] text-right hidden sm:inline-block">
+                            {job.posted}
                           </span>
                         </div>
-
-                        {/* Bookmark Icon */}
-                        <button
-                          type="button"
-                          onClick={(e) => e.stopPropagation()}
-                          className="text-slate-400 hover:text-slate-600 transition-colors p-1 rounded-md"
-                        >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-                          </svg>
-                        </button>
-
-                        {/* Posted Date */}
-                        <span className="text-[12px] text-[#94A3B8] w-[95px] text-right hidden sm:inline-block">
-                          {job.posted}
-                        </span>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </div>
             </div>
 

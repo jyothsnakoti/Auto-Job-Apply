@@ -88,6 +88,14 @@ export const getJobs = async (params = {}) => {
     ? data.items
     : Array.isArray(data.matches)
     ? data.matches
+    : Array.isArray(data.jobs)
+    ? data.jobs
+    : Array.isArray(data.content)
+    ? data.content
+    : Array.isArray(data.data)
+    ? data.data
+    : Array.isArray(data.results)
+    ? data.results
     : Array.isArray(data)
     ? data
     : [];

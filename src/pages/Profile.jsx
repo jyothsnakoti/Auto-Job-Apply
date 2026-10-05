@@ -55,12 +55,12 @@ const Profile = () => {
 
   // Raw Location details from server
   const [rawLocationDetails, setRawLocationDetails] = useState({
-    addressLine1: "Hitech City Road",
-    city: "Hyderabad",
-    state: "Telangana",
-    postcode: "500081",
-    countyDistrict: "Rangareddy",
-    country: "India",
+    addressLine1: "",
+    city: "",
+    state: "",
+    postcode: "",
+    countyDistrict: "",
+    country: "",
   });
 
   // Edit Mode States
@@ -69,21 +69,16 @@ const Profile = () => {
   const [isEditingWorkPrefs, setIsEditingWorkPrefs] = useState(false);
 
   // Personal Info State
-  const [fullName, setFullName] = useState("Naresh P");
-  const [email, setEmail] = useState("nareshpulluri79@gmail.com");
-  const [phone, setPhone] = useState("+91 98765 43210");
-  const [linkedin, setLinkedin] = useState("https://www.linkedin.com/in/nareshp");
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [linkedin, setLinkedin] = useState("");
 
   // Location & Work Auth State
-  const [currentLocation, setCurrentLocation] = useState("Bengaluru, Karnataka, India");
+  const [currentLocation, setCurrentLocation] = useState("");
   const [openToRelocate, setOpenToRelocate] = useState("Yes");
-  const [citizenship, setCitizenship] = useState(["India"]);
-  const [targetCountries, setTargetCountries] = useState([
-    "India",
-    "United States",
-    "Canada",
-    "United Kingdom",
-  ]);
+  const [citizenship, setCitizenship] = useState([]);
+  const [targetCountries, setTargetCountries] = useState([]);
 
   // Diversity & Inclusion State
   const [gender, setGender] = useState("Male");
@@ -285,12 +280,12 @@ const Profile = () => {
           if (prof.linkedinUrl || prof.linkedin) setLinkedin(prof.linkedinUrl || prof.linkedin);
 
           setRawLocationDetails({
-            addressLine1: prof.addressLine1 || prof.address || "Hitech City Road",
-            city: prof.city || "Hyderabad",
-            state: prof.state || "Telangana",
-            postcode: prof.postcode || prof.postalCode || "500081",
-            countyDistrict: prof.countyDistrict || prof.district || "Rangareddy",
-            country: prof.country || "India",
+            addressLine1: prof.addressLine1 || prof.address || "",
+            city: prof.city || "",
+            state: prof.state || "",
+            postcode: prof.postcode || prof.postalCode || "",
+            countyDistrict: prof.countyDistrict || prof.district || "",
+            country: prof.country || "",
           });
 
           const addrParts = [prof.addressLine1, prof.city, prof.state, prof.country].filter(Boolean);
@@ -419,17 +414,17 @@ const Profile = () => {
         .map((s) => s.trim())
         .filter(Boolean);
 
-      const addressLine1 = parts[0] || rawLocationDetails.addressLine1 || currentLocation || "Hitech City Road";
-      const city = parts[1] || rawLocationDetails.city || "Hyderabad";
-      const state = parts[2] || rawLocationDetails.state || "Telangana";
-      const country = parts[3] || parts[parts.length - 1] || rawLocationDetails.country || "India";
+      const addressLine1 = parts[0] || rawLocationDetails.addressLine1 || currentLocation || "";
+      const city = parts[1] || rawLocationDetails.city || "";
+      const state = parts[2] || rawLocationDetails.state || "";
+      const country = parts[3] || parts[parts.length - 1] || rawLocationDetails.country || "";
 
       const payload = {
         addressLine1,
         city,
         state,
-        postcode: rawLocationDetails.postcode || "500081",
-        countyDistrict: rawLocationDetails.countyDistrict || "Rangareddy",
+        postcode: rawLocationDetails.postcode || "",
+        countyDistrict: rawLocationDetails.countyDistrict || "",
         country,
         willingToRelocate: openToRelocate.toLowerCase() === "no" ? "no" : "yes",
       };
