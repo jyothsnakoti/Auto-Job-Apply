@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
+import EnhancedResumeViewer from "../components/EnhancedResumeViewer";
 import {
   getJobs,
   getMoreJobsForResume,
@@ -605,51 +606,44 @@ const BrowseJobs = () => {
     await fetchJobsData({ page: nextPage, resetList: false });
   };
 
-  // Enhance Resume Action Handler (POST /api/v1/Get_EnhancedResume_for_PoorJDScore)
+  // Enhance Resume Action Handler (POST /api/jobs/{jobId}/enhance -> GET /api/jobs/{jobId}/enhance)
   const handleEnhanceResume = async () => {
     if (isEnhancing || !selectedJobModal) return;
     setEnhanceError(null);
     setEnhanceSuccess(null);
 
-    const candidateId = getCandidateId();
-    const resumeId = getStoredResumeId();
     const selectedJobId = getJobId(selectedJobModal);
 
-    console.log("[BrowseJobs] Triggering Enhance Resume with dynamic IDs:", {
-      JDid: selectedJobId,
-      Candidateid: candidateId,
-      ResumeID: resumeId,
-    });
+    console.log("[BrowseJobs] Triggering Enhance Resume for Job ID:", selectedJobId);
 
-    if (!selectedJobId || !candidateId || !resumeId) {
-      const missing = [];
-      if (!selectedJobId) missing.push("Job ID (JDid)");
-      if (!candidateId) missing.push("Candidate ID (Candidateid)");
-      if (!resumeId) missing.push("Resume ID (ResumeID)");
-
-      setEnhanceError(
-        `Required information is missing: ${missing.join(", ")}. Please ensure you are logged in and have uploaded a resume.`
-      );
+    if (!selectedJobId) {
+      setEnhanceError("Job ID is missing. Please select a valid job to enhance.");
       return;
     }
 
     try {
       setIsEnhancing(true);
 
-      const payload = {
-        JDid: selectedJobId,
-        Candidateid: candidateId,
-        ResumeID: resumeId,
-      };
+      const result = await getEnhancedResume(selectedJobId);
+      console.log("[BrowseJobs] Enhance Resume API Result:", result);
 
-      const result = await getEnhancedResume(payload);
-      console.log("[BrowseJobs] Enhance Resume API Response:", result);
-
-      setEnhancedResultsMap((prev) => ({
-        ...prev,
-        [selectedJobId]: result,
-      }));
-      setEnhanceSuccess("Resume successfully enhanced for this role!");
+      if (result?.status === "NO_BRIDGEABLE_GAPS") {
+        setEnhanceSuccess(
+          result?.message || "No bridgeable skill gaps identified for this role."
+        );
+      } else if (result?.status === "NOT_NEEDED") {
+        setEnhanceSuccess(
+          result?.message || "Resume enhancement is not needed for this role."
+        );
+      } else {
+        setEnhancedResultsMap((prev) => ({
+          ...prev,
+          [selectedJobId]: result,
+        }));
+        setEnhanceSuccess(
+          result?.message || "Resume successfully enhanced for this role!"
+        );
+      }
     } catch (err) {
       console.error("[BrowseJobs] Enhance Resume Error:", err);
       const errMsg =
@@ -2542,19 +2536,25 @@ const BrowseJobs = () => {
                     </div>
                   )}
 
-                {/* Enhanced Resume Content */}
+                {/* Professional Enhanced Resume Content */}
                 <div>
-                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
-                    Enhanced Resume Text
-                  </h4>
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 text-xs text-slate-800 font-mono whitespace-pre-wrap leading-relaxed select-text">
-                    {enhancedResultsMap[getJobId(selectedJobModal)]?.EnhResume ||
-                      enhancedResultsMap[getJobId(selectedJobModal)]
-                        ?.enhResume ||
-                      enhancedResultsMap[getJobId(selectedJobModal)]
-                        ?.enhanced_resume ||
-                      "No enhanced resume text content returned."}
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+                      Professional Formatted Resume
+                    </h4>
+                    <span className="text-[11px] text-[#4F46E5] font-semibold bg-[#EEF2FF] border border-[#C7D2FE] px-2.5 py-0.5 rounded-full">
+                      Dynamically Formatted
+                    </span>
                   </div>
+                  <EnhancedResumeViewer
+                    resumeText={
+                      enhancedResultsMap[getJobId(selectedJobModal)]?.EnhResume ||
+                      enhancedResultsMap[getJobId(selectedJobModal)]?.enhResume ||
+                      enhancedResultsMap[getJobId(selectedJobModal)]?.enhanced_resume ||
+                      enhancedResultsMap[getJobId(selectedJobModal)]?.enhancedResume
+                    }
+                    compact={false}
+                  />
                 </div>
               </div>
 

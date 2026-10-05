@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
+import EnhancedResumeViewer from "../components/EnhancedResumeViewer";
 import {
     getStoredUser,
     getOnboardingProfile,
@@ -1032,40 +1033,56 @@ const Dashboard = () => {
 
   // Dynamic Dashboard Statistics Cards (From GET /api/dashboard endpoint with fallback)
   const statsCards = useMemo(() => {
-    const totalJobs = jobs.length;
-    const qualifiedCount = jobs.filter(
-      (j) => (j.matchPercent || 0) >= 80
-    ).length;
+    // 1. Jobs Found
+    const jobsFoundVal =
+      typeof dashboardMetrics?.jobsFound === "number"
+        ? dashboardMetrics.jobsFound
+        : jobs.length > 0
+        ? jobs.length
+        : 0;
 
-    const usedApps =
-      typeof billingInfo?.usedApplications === "number"
-        ? billingInfo.usedApplications
-        : typeof billingInfo?.applicationsUsed === "number"
-          ? billingInfo.applicationsUsed
-          : applications.length;
+    // 2. Qualified Matches
+    const qualifiedMatchesVal =
+      typeof dashboardMetrics?.qualifiedMatches === "number"
+        ? dashboardMetrics.qualifiedMatches
+        : jobs.filter((j) => (j.matchPercent || 0) >= 80).length;
 
-    const allowance =
-      typeof billingInfo?.applicationAllowance === "number"
+    // 3. Allowance (for supporting text & limits)
+    const allowanceVal =
+      typeof dashboardMetrics?.applicationAllowance === "number"
+        ? dashboardMetrics.applicationAllowance
+        : typeof billingInfo?.applicationAllowance === "number"
         ? billingInfo.applicationAllowance
         : typeof billingInfo?.applicationLimit === "number"
-          ? billingInfo.applicationLimit
-          : null;
+        ? billingInfo.applicationLimit
+        : 100;
 
-    const remainingApps =
-      typeof billingInfo?.remainingApplications === "number"
+    // 4. Applications Submitted
+    const submittedVal =
+      typeof dashboardMetrics?.applicationsSubmitted === "number"
+        ? dashboardMetrics.applicationsSubmitted
+        : typeof billingInfo?.usedApplications === "number"
+        ? billingInfo.usedApplications
+        : typeof billingInfo?.applicationsUsed === "number"
+        ? billingInfo.applicationsUsed
+        : applications.length;
+
+    // 5. Applications Remaining
+    const remainingVal =
+      typeof dashboardMetrics?.applicationsRemaining === "number"
+        ? dashboardMetrics.applicationsRemaining
+        : typeof billingInfo?.remainingApplications === "number"
         ? billingInfo.remainingApplications
-        : allowance !== null
-          ? Math.max(0, allowance - usedApps)
-          : 0;
+        : Math.max(0, allowanceVal - submittedVal);
 
     return [
       {
         id: "jobs-found",
         title: "Jobs Found",
-        value: totalJobs > 0 ? totalJobs.toLocaleString() : "0",
+        value: Number(jobsFoundVal).toLocaleString(),
         supportingText:
-          totalJobs > 0
-            ? `${totalJobs} matched jobs ready`
+          jobsFoundVal > 0
+            ? "New jobs in the last 7 days"
             : hasResume
               ? "No matches found"
               : "Upload resume to find matches",
@@ -1097,7 +1114,7 @@ const Dashboard = () => {
         icon: dashboard4Icon,
       },
     ];
-  }, [dashboardMetrics, jobs, billingInfo, applications]);
+  }, [dashboardMetrics, jobs, billingInfo, applications, hasResume]);
 
   // Dynamic Application Tabs with Counts
   const applicationTabs = useMemo(() => {
@@ -1138,45 +1155,42 @@ const Dashboard = () => {
     );
   }, [applications, selectedAppTab]);
 
-  // Enhance Resume Action Handler
+  // Enhance Resume Action Handler (POST /api/jobs/{jobId}/enhance -> GET /api/jobs/{jobId}/enhance)
   const handleEnhanceResume = async () => {
     if (isEnhancing || !selectedJobModal) return;
     setEnhanceError(null);
     setEnhanceSuccess(null);
 
-    const candidateId = getCandidateId();
-    const resumeId = getStoredResumeId();
     const selectedJobId = getJobId(selectedJobModal);
 
-    if (!selectedJobId || !candidateId || !resumeId) {
-      const missing = [];
-      if (!selectedJobId) missing.push("Job ID (JDid)");
-      if (!candidateId) missing.push("Candidate ID (Candidateid)");
-      if (!resumeId) missing.push("Resume ID (ResumeID)");
-
-      setEnhanceError(
-        `Required information is missing: ${missing.join(
-          ", "
-        )}. Please ensure you are logged in and have uploaded a resume.`
-      );
+    if (!selectedJobId) {
+      setEnhanceError("Job ID is missing. Please select a valid job to enhance.");
       return;
     }
 
     try {
       setIsEnhancing(true);
 
-      const payload = {
-        JDid: selectedJobId,
-        Candidateid: candidateId,
-        ResumeID: resumeId,
-      };
+      const result = await getEnhancedResume(selectedJobId);
+      console.log("[Dashboard] Enhance Resume Result:", result);
 
-      const result = await getEnhancedResume(payload);
-      setEnhancedResultsMap((prev) => ({
-        ...prev,
-        [selectedJobId]: result,
-      }));
-      setEnhanceSuccess("Resume successfully enhanced for this role!");
+      if (result?.status === "NO_BRIDGEABLE_GAPS") {
+        setEnhanceSuccess(
+          result?.message || "No bridgeable skill gaps identified for this role."
+        );
+      } else if (result?.status === "NOT_NEEDED") {
+        setEnhanceSuccess(
+          result?.message || "Resume enhancement is not needed for this role."
+        );
+      } else {
+        setEnhancedResultsMap((prev) => ({
+          ...prev,
+          [selectedJobId]: result,
+        }));
+        setEnhanceSuccess(
+          result?.message || "Resume successfully enhanced for this role!"
+        );
+      }
     } catch (err) {
       console.error("[Dashboard] Enhance Resume Error:", err);
       const errMsg =
@@ -3052,10 +3066,16 @@ const Dashboard = () => {
                                 {copiedResume ? "✓ Copied" : "Copy Text"}
                               </button>
                             </div>
-                            <div className="bg-white rounded-lg border border-slate-200 p-3 max-h-[160px] overflow-y-auto text-[11.5px] text-slate-700 whitespace-pre-wrap font-mono leading-relaxed">
-                              {enhancedResultsMap[selectedJobId]?.EnhResume ||
-                                enhancedResultsMap[selectedJobId]?.enhResume ||
-                                enhancedResultsMap[selectedJobId]?.enhanced_resume}
+                            <div className="max-h-[220px] overflow-y-auto pr-0.5">
+                              <EnhancedResumeViewer
+                                resumeText={
+                                  enhancedResultsMap[selectedJobId]?.EnhResume ||
+                                  enhancedResultsMap[selectedJobId]?.enhResume ||
+                                  enhancedResultsMap[selectedJobId]?.enhanced_resume ||
+                                  enhancedResultsMap[selectedJobId]?.enhancedResume
+                                }
+                                compact={true}
+                              />
                             </div>
                           </div>
                         )}
@@ -3556,19 +3576,25 @@ const Dashboard = () => {
                     </div>
                   )}
 
-                {/* Enhanced Resume Content */}
+                {/* Professional Enhanced Resume Content */}
                 <div>
-                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
-                    Enhanced Resume Text
-                  </h4>
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 text-xs text-slate-800 font-mono whitespace-pre-wrap leading-relaxed select-text">
-                    {enhancedResultsMap[getJobId(selectedJobModal)]?.EnhResume ||
-                      enhancedResultsMap[getJobId(selectedJobModal)]
-                        ?.enhResume ||
-                      enhancedResultsMap[getJobId(selectedJobModal)]
-                        ?.enhanced_resume ||
-                      "No enhanced resume text content returned."}
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+                      Professional Formatted Resume
+                    </h4>
+                    <span className="text-[11px] text-[#4F46E5] font-semibold bg-[#EEF2FF] border border-[#C7D2FE] px-2.5 py-0.5 rounded-full">
+                      Dynamically Formatted
+                    </span>
                   </div>
+                  <EnhancedResumeViewer
+                    resumeText={
+                      enhancedResultsMap[getJobId(selectedJobModal)]?.EnhResume ||
+                      enhancedResultsMap[getJobId(selectedJobModal)]?.enhResume ||
+                      enhancedResultsMap[getJobId(selectedJobModal)]?.enhanced_resume ||
+                      enhancedResultsMap[getJobId(selectedJobModal)]?.enhancedResume
+                    }
+                    compact={false}
+                  />
                 </div>
               </div>
 
