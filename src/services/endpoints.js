@@ -162,6 +162,8 @@ export const RESUME_ENDPOINTS = {
   // Ngrok Endpoint Reference
   UPLOAD_NGROK: `${RESUME_API_BASE_URL}/api/v1/Get_N_JDs_for_Res`,
   GET: `${API_BASE_URL}/api/resumes`,
+  MATCHES_STATUS: `${API_BASE_URL}/api/resumes/matches/status`,
+  MATCHES_REFRESH: `${API_BASE_URL}/api/resumes/matches/refresh`,
 
   DOWNLOAD: (id) =>
     `${API_BASE_URL}/api/resumes/${id}/download`,
