@@ -17,6 +17,8 @@ import {
   getBillingStatus,
   checkUserHasResume,
   getDashboard,
+  getDashboardData,
+  getStoredDashboardData,
   getJobs,
 } from "../services/api";
 
@@ -1075,10 +1077,11 @@ const Dashboard = () => {
 
   // Dynamic Dashboard Statistics Cards (From GET /api/dashboard endpoint with fallback)
   const statsCards = useMemo(() => {
-    const totalJobs = jobs.length;
-    const qualifiedCount = jobs.filter(
-      (j) => (j.matchPercent || 0) >= 80
-    ).length;
+    const totalJobs = dashboardMetrics?.jobsFound ?? jobs.length;
+
+    const qualifiedMatchesVal =
+      dashboardMetrics?.qualifiedMatches ??
+      jobs.filter((j) => (j.matchPercent || 0) >= 80).length;
 
     const usedApps =
       typeof billingInfo?.usedApplications === "number"
@@ -1087,12 +1090,16 @@ const Dashboard = () => {
           ? billingInfo.applicationsUsed
           : applications.length;
 
+    const submittedVal = dashboardMetrics?.applicationsSubmitted ?? usedApps;
+
     const allowance =
       typeof billingInfo?.applicationAllowance === "number"
         ? billingInfo.applicationAllowance
         : typeof billingInfo?.applicationLimit === "number"
           ? billingInfo.applicationLimit
-          : null;
+          : (dashboardMetrics?.applicationAllowance ?? null);
+
+    const allowanceVal = allowance !== null ? allowance : "N/A";
 
     const remainingApps =
       typeof billingInfo?.remainingApplications === "number"
@@ -1101,11 +1108,14 @@ const Dashboard = () => {
           ? Math.max(0, allowance - usedApps)
           : 0;
 
+    const remainingVal =
+      dashboardMetrics?.applicationsRemaining ?? remainingApps;
+
     return [
       {
         id: "jobs-found",
         title: "Jobs Found",
-        value: totalJobs > 0 ? totalJobs.toLocaleString() : "0",
+        value: totalJobs > 0 ? Number(totalJobs).toLocaleString() : "0",
         supportingText:
           totalJobs > 0
             ? `${totalJobs} matched jobs ready`
@@ -1140,7 +1150,7 @@ const Dashboard = () => {
         icon: dashboard4Icon,
       },
     ];
-  }, [dashboardMetrics, jobs, billingInfo, applications]);
+  }, [dashboardMetrics, jobs, billingInfo, applications, hasResume]);
 
   // Dynamic Application Tabs with Counts
   const applicationTabs = useMemo(() => {
