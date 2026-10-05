@@ -687,6 +687,20 @@ const BrowseJobs = () => {
     setTimeout(() => setCopiedResume(false), 2500);
   };
 
+  const handleDownloadEnhancedResume = (text, job) => {
+    if (!text) return;
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const jobTitle = (job?.title || "Enhanced_Resume").replace(/[^a-zA-Z0-9_-]/g, "_");
+    link.href = url;
+    link.download = `${jobTitle}_Resume.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   // Get Updated ATS Action Handler (POST /api/v1/Get_Score_for_EnhancedResume)
   const handleGetUpdatedAts = async () => {
     if (!selectedJobModal || isUpdatingAts) return;
@@ -2393,13 +2407,16 @@ const BrowseJobs = () => {
                   <button
                     type="button"
                     onClick={() =>
-                      handleCopyEnhancedResume(
+                      handleDownloadEnhancedResume(
                         enhancedResultsMap[getJobId(selectedJobModal)]
                           ?.EnhResume ||
                         enhancedResultsMap[getJobId(selectedJobModal)]
                           ?.enhResume ||
                         enhancedResultsMap[getJobId(selectedJobModal)]
-                          ?.enhanced_resume
+                          ?.enhanced_resume ||
+                        enhancedResultsMap[getJobId(selectedJobModal)]
+                          ?.enhancedResume,
+                        selectedJobModal
                       )
                     }
                     className="px-3.5 py-1.5 bg-[#EEF2FF] hover:bg-[#E0E7FF] text-[#4F46E5] text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
@@ -2409,15 +2426,15 @@ const BrowseJobs = () => {
                       fill="none"
                       viewBox="0 0 24 24"
                       stroke="currentColor"
+                      strokeWidth="2"
                     >
                       <path
                         strokeLinecap="round"
                         strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
                       />
                     </svg>
-                    <span>{copiedResume ? "Copied!" : "Copy Resume"}</span>
+                    <span>Download</span>
                   </button>
 
                   <button

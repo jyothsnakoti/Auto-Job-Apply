@@ -19,7 +19,7 @@ export const postEnhanceJobResume = async (jobId) => {
     ENHANCE_RESUME_ENDPOINTS?.POST_ENHANCE?.(jobId) ||
     `${API_BASE_URL}/api/jobs/${jobId}/enhance`;
 
-  console.log(`[enhanceResumeService] Step 1: Calling POST ${endpoint}`);
+  console.log("Step 1: Calling POST", `/api/jobs/${jobId}/enhance`);
 
   try {
     const response = await apiClient.post(endpoint, null, {
@@ -27,11 +27,9 @@ export const postEnhanceJobResume = async (jobId) => {
         Accept: 'application/json',
       },
     });
-    console.log('[enhanceResumeService] POST enhance response:', response.data);
+    console.log("POST enhance response:", response.data);
     return response.data || { status: 'OK' };
   } catch (error) {
-    console.warn('[enhanceResumeService] apiClient.post failed, attempting fetchWithAuth fallback:', error?.message);
-
     const res = await fetchWithAuth(endpoint, {
       method: 'POST',
       headers: {
@@ -59,6 +57,7 @@ export const postEnhanceJobResume = async (jobId) => {
       throw err;
     }
 
+    console.log("POST enhance response:", data);
     return data || { status: 'OK' };
   }
 };
@@ -79,7 +78,7 @@ export const getEnhancedJobResume = async (jobId) => {
     ENHANCE_RESUME_ENDPOINTS?.GET_ENHANCED?.(jobId) ||
     `${API_BASE_URL}/api/jobs/${jobId}/enhance`;
 
-  console.log(`[enhanceResumeService] Step 2: Calling GET ${endpoint}`);
+  console.log("Step 2: Calling GET", `/api/jobs/${jobId}/enhance`);
 
   try {
     const response = await apiClient.get(endpoint, {
@@ -87,11 +86,9 @@ export const getEnhancedJobResume = async (jobId) => {
         Accept: 'application/json',
       },
     });
-    console.log('[enhanceResumeService] GET enhance response:', response.data);
+    console.log("GET enhance response:", response.data);
     return response.data;
   } catch (error) {
-    console.warn('[enhanceResumeService] apiClient.get failed, attempting fetchWithAuth fallback:', error?.message);
-
     const res = await fetchWithAuth(endpoint, {
       method: 'GET',
       headers: {
@@ -119,6 +116,7 @@ export const getEnhancedJobResume = async (jobId) => {
       throw err;
     }
 
+    console.log("GET enhance response:", data);
     return data;
   }
 };

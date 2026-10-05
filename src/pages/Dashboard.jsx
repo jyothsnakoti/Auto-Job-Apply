@@ -1106,7 +1106,6 @@ const Dashboard = () => {
 
   // Dynamic Dashboard Statistics Cards (From GET /api/dashboard endpoint with fallback)
   const statsCards = useMemo(() => {
-<<<<<<< HEAD
     // 1. Jobs Found
     const jobsFoundVal =
       typeof dashboardMetrics?.jobsFound === "number"
@@ -1114,13 +1113,6 @@ const Dashboard = () => {
         : jobs.length > 0
         ? jobs.length
         : 0;
-=======
-    const totalJobs = dashboardMetrics?.jobsFound ?? jobs.length;
-
-    const qualifiedMatchesVal =
-      dashboardMetrics?.qualifiedMatches ??
-      jobs.filter((j) => (j.matchPercent || 0) >= 80).length;
->>>>>>> 8f2adb9d1943e0b2a19a95b77434e108e1232382
 
     // 2. Qualified Matches
     const qualifiedMatchesVal =
@@ -1128,7 +1120,6 @@ const Dashboard = () => {
         ? dashboardMetrics.qualifiedMatches
         : jobs.filter((j) => (j.matchPercent || 0) >= 80).length;
 
-<<<<<<< HEAD
     // 3. Allowance (for supporting text & limits)
     const allowanceVal =
       typeof dashboardMetrics?.applicationAllowance === "number"
@@ -1138,18 +1129,6 @@ const Dashboard = () => {
         : typeof billingInfo?.applicationLimit === "number"
         ? billingInfo.applicationLimit
         : 100;
-=======
-    const submittedVal = dashboardMetrics?.applicationsSubmitted ?? usedApps;
-
-    const allowance =
-      typeof billingInfo?.applicationAllowance === "number"
-        ? billingInfo.applicationAllowance
-        : typeof billingInfo?.applicationLimit === "number"
-          ? billingInfo.applicationLimit
-          : (dashboardMetrics?.applicationAllowance ?? null);
-
-    const allowanceVal = allowance !== null ? allowance : "N/A";
->>>>>>> 8f2adb9d1943e0b2a19a95b77434e108e1232382
 
     // 4. Applications Submitted
     const submittedVal =
@@ -1169,18 +1148,11 @@ const Dashboard = () => {
         ? billingInfo.remainingApplications
         : Math.max(0, allowanceVal - submittedVal);
 
-    const remainingVal =
-      dashboardMetrics?.applicationsRemaining ?? remainingApps;
-
     return [
       {
         id: "jobs-found",
         title: "Jobs Found",
-<<<<<<< HEAD
         value: Number(jobsFoundVal).toLocaleString(),
-=======
-        value: totalJobs > 0 ? Number(totalJobs).toLocaleString() : "0",
->>>>>>> 8f2adb9d1943e0b2a19a95b77434e108e1232382
         supportingText:
           jobsFoundVal > 0
             ? "New jobs in the last 7 days"
