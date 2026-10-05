@@ -6,10 +6,6 @@ import {
   getStoredUser,
   getOnboardingProfile,
   getStoredJobMatches,
-import {
-  getStoredUser,
-  getOnboardingProfile,
-  getStoredJobMatches,
   getOnboardingState,
   getEnhancedResume,
   getScoreForEnhancedResume,
@@ -2096,14 +2092,14 @@ const Dashboard = () => {
                   No Job Matches Yet
                 </h3>
                 <p className="text-xs text-[#64748B] max-w-md">
-                  Upload your resume in Resume Setup to automatically discover top job matches tailored specifically to your skills and experience.
+                  Upload your resume in Profile to automatically discover top job matches tailored specifically to your skills and experience.
                 </p>
                 <button
                   type="button"
-                  onClick={() => navigate("/resume-setup")}
+                  onClick={() => navigate("/profile")}
                   className="mt-2 px-5 py-2.5 text-xs font-semibold text-white bg-[#4F46E5] hover:bg-[#4338CA] rounded-[10px] shadow-xs transition-colors cursor-pointer"
                 >
-                  Upload Resume
+                  Upload Resume in Profile
                 </button>
               </div>
             ) : filteredJobs.length === 0 ? (
@@ -2138,147 +2134,163 @@ const Dashboard = () => {
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4.5 w-full">
-                {filteredJobs.map((job, idx) => {
-                  const scoreVal = getMatchPercent(job);
-                  const matchLabel = getMatchLabel(job);
-                  const matchColorClass = getMatchBadgeColor(scoreVal);
-                  const matchedSkills = getMatchedSkills(job);
-                  const missingRequired = getMissingRequiredSkills(job);
-                  const displayTitle = job.title || `Job Match #${idx + 1}`;
-                  const displayCompany =
-                    job.company ||
-                    (job.job_id
-                      ? `ID: ${
-                          job.job_id.length > 14
-                            ? `${job.job_id.slice(0, 8)}...${job.job_id.slice(-4)}`
-                            : job.job_id
-                        }`
-                      : "Verified Match");
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4.5 w-full">
+                  {filteredJobs.slice(0, 4).map((job, idx) => {
+                    const scoreVal = getMatchPercent(job);
+                    const matchLabel = getMatchLabel(job);
+                    const matchColorClass = getMatchBadgeColor(scoreVal);
+                    const matchedSkills = getMatchedSkills(job);
+                    const missingRequired = getMissingRequiredSkills(job);
+                    const displayTitle = job.title || `Job Match #${idx + 1}`;
+                    const displayCompany =
+                      job.company ||
+                      (job.job_id
+                        ? `ID: ${
+                            job.job_id.length > 14
+                              ? `${job.job_id.slice(0, 8)}...${job.job_id.slice(-4)}`
+                              : job.job_id
+                          }`
+                        : "Verified Match");
 
-                  return (
-                    <div
-                      key={job.job_id || job.id || `job-card-${idx}`}
-                      onClick={() => setSelectedJobModal(job)}
-                      className="bg-white rounded-[20px] border border-[#E2E8F0] p-5 flex flex-col justify-between shadow-[0_1px_3px_rgba(15,23,42,0.02)] hover:shadow-md hover:border-slate-300 transition-all duration-200 min-h-[230px] cursor-pointer group"
-                    >
-                      <div>
-                        {/* Top Header: Logo + Match Badge */}
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="w-[40px] h-[40px] rounded-[10px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2">
-                            {job.logo ? (
-                              <img
-                                src={job.logo}
-                                alt={job.company || "Job Logo"}
-                                className="w-full h-full object-contain"
-                              />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-[#4F46E5]">
-                                <svg
-                                  className="w-5 h-5"
-                                  fill="none"
-                                  viewBox="0 0 24 24"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                                  />
-                                </svg>
-                              </div>
-                            )}
-                          </div>
-                          <span
-                            className={`text-[12px] font-semibold px-2.5 py-0.5 rounded-full ${matchColorClass}`}
-                          >
-                            {matchLabel}
-                          </span>
-                        </div>
-
-                        {/* Job Title & Company */}
-                        <div className="mt-3.5">
-                          <h3 className="text-[15px] font-bold text-[#0F172A] tracking-tight leading-snug group-hover:text-[#4F46E5] transition-colors line-clamp-1">
-                            {displayTitle}
-                          </h3>
-                          <div
-                            className="flex items-center gap-1 text-[13px] text-[#64748B] font-normal mt-1 truncate"
-                            title={job.job_id || job.company}
-                          >
-                            <span className="truncate">{displayCompany}</span>
-                            {job.company && <VerifiedTick />}
-                          </div>
-                        </div>
-
-                        {/* Skills / Match Highlights or Location */}
-                        {matchedSkills.length > 0 ? (
-                          <div className="mt-3 flex flex-col gap-1.5">
-                            <div className="flex items-center gap-1 flex-wrap">
-                              {matchedSkills.slice(0, 3).map((skill, sIdx) => (
-                                <span
-                                  key={`${skill}-${sIdx}`}
-                                  className="text-[11px] font-medium bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md truncate max-w-[110px]"
-                                >
-                                  {skill}
-                                </span>
-                              ))}
-                              {matchedSkills.length > 3 && (
-                                <span className="text-[11px] font-medium text-[#64748B] bg-slate-50 px-1.5 py-0.5 rounded-md">
-                                  +{matchedSkills.length - 3}
-                                </span>
+                    return (
+                      <div
+                        key={job.job_id || job.id || `job-card-${idx}`}
+                        onClick={() => setSelectedJobModal(job)}
+                        className="bg-white rounded-[20px] border border-[#E2E8F0] p-5 flex flex-col justify-between shadow-[0_1px_3px_rgba(15,23,42,0.02)] hover:shadow-md hover:border-slate-300 transition-all duration-200 min-h-[230px] cursor-pointer group"
+                      >
+                        <div>
+                          {/* Top Header: Logo + Match Badge */}
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="w-[40px] h-[40px] rounded-[10px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2">
+                              {job.logo ? (
+                                <img
+                                  src={job.logo}
+                                  alt={job.company || "Job Logo"}
+                                  className="w-full h-full object-contain"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-[#4F46E5]">
+                                  <svg
+                                    className="w-5 h-5"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                                    />
+                                  </svg>
+                                </div>
                               )}
                             </div>
-                            {missingRequired.length > 0 && (
-                              <div className="text-[11.5px] text-[#DC2626] font-medium truncate">
-                                Missing: {missingRequired.slice(0, 2).join(", ")}
-                              </div>
-                            )}
+                            <span
+                              className={`text-[12px] font-semibold px-2.5 py-0.5 rounded-full ${matchColorClass}`}
+                            >
+                              {matchLabel}
+                            </span>
                           </div>
-                        ) : (
-                          <div className="mt-3 flex flex-col gap-1">
-                            <div className="flex items-center gap-1.5 text-[12.5px] text-[#64748B]">
-                              <img
-                                src={mapIcon}
-                                alt=""
-                                className="w-[10px] h-[12px] object-contain shrink-0"
-                              />
-                              <span className="truncate">{job.location}</span>
-                            </div>
-                            <div className="text-[12px] text-[#94A3B8]">
-                              {job.posted}
-                            </div>
-                          </div>
-                        )}
-                      </div>
 
-                      {/* Action Buttons */}
-                      <div className="flex items-center gap-2.5 pt-4 mt-auto">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedJobModal(job);
-                          }}
-                          className="flex-1 h-[36px] rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] font-medium text-[#334155] hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-center"
-                        >
-                          View Details
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedJobModal(job);
-                          }}
-                          className="flex-1 h-[36px] rounded-[10px] bg-[#4F46E5] hover:bg-[#4338CA] text-[13px] font-medium text-white shadow-xs transition-colors cursor-pointer flex items-center justify-center active:scale-[0.99]"
-                        >
-                          Apply Now
-                        </button>
+                          {/* Job Title & Company */}
+                          <div className="mt-3.5">
+                            <h3 className="text-[15px] font-bold text-[#0F172A] tracking-tight leading-snug group-hover:text-[#4F46E5] transition-colors line-clamp-1">
+                              {displayTitle}
+                            </h3>
+                            <div
+                              className="flex items-center gap-1 text-[13px] text-[#64748B] font-normal mt-1 truncate"
+                              title={job.job_id || job.company}
+                            >
+                              <span className="truncate">{displayCompany}</span>
+                              {job.company && <VerifiedTick />}
+                            </div>
+                          </div>
+
+                          {/* Skills / Match Highlights or Location */}
+                          {matchedSkills.length > 0 ? (
+                            <div className="mt-3 flex flex-col gap-1.5">
+                              <div className="flex items-center gap-1 flex-wrap">
+                                {matchedSkills.slice(0, 3).map((skill, sIdx) => (
+                                  <span
+                                    key={`${skill}-${sIdx}`}
+                                    className="text-[11px] font-medium bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md truncate max-w-[110px]"
+                                  >
+                                    {skill}
+                                  </span>
+                                ))}
+                                {matchedSkills.length > 3 && (
+                                  <span className="text-[11px] font-medium text-[#64748B] bg-slate-50 px-1.5 py-0.5 rounded-md">
+                                    +{matchedSkills.length - 3}
+                                  </span>
+                                )}
+                              </div>
+                              {missingRequired.length > 0 && (
+                                <div className="text-[11.5px] text-[#DC2626] font-medium truncate">
+                                  Missing: {missingRequired.slice(0, 2).join(", ")}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="mt-3 flex flex-col gap-1">
+                              <div className="flex items-center gap-1.5 text-[12.5px] text-[#64748B]">
+                                <img
+                                  src={mapIcon}
+                                  alt=""
+                                  className="w-[10px] h-[12px] object-contain shrink-0"
+                                />
+                                <span className="truncate">{job.location}</span>
+                              </div>
+                              <div className="text-[12px] text-[#94A3B8]">
+                                {job.posted}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex items-center gap-2.5 pt-4 mt-auto">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedJobModal(job);
+                            }}
+                            className="flex-1 h-[36px] rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] font-medium text-[#334155] hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-center"
+                          >
+                            View Details
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedJobModal(job);
+                            }}
+                            className="flex-1 h-[36px] rounded-[10px] bg-[#4F46E5] hover:bg-[#4338CA] text-[13px] font-medium text-white shadow-xs transition-colors cursor-pointer flex items-center justify-center active:scale-[0.99]"
+                          >
+                            Apply Now
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+
+                {filteredJobs.length > 4 && (
+                  <div className="flex items-center justify-between pt-1 text-xs text-[#64748B]">
+                    <span>Showing 4 of {filteredJobs.length} top matches</span>
+                    <button
+                      type="button"
+                      onClick={() => navigate("/browse-jobs")}
+                      className="text-[#4F46E5] hover:text-[#4338CA] font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      <span>Browse all {filteredJobs.length} matching jobs</span>
+                      <span>→</span>
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
 

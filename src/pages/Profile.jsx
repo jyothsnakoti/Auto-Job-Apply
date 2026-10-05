@@ -102,6 +102,7 @@ const Profile = () => {
   const [downloadError, setDownloadError] = useState(null);
   const [deletingResumeId, setDeletingResumeId] = useState(null);
   const [settingPrimaryId, setSettingPrimaryId] = useState(null);
+  const [resumeToDelete, setResumeToDelete] = useState(null);
   const resumeFileInputRef = React.useRef(null);
 
   const formatResumeDate = (dateVal) => {
@@ -122,10 +123,24 @@ const Profile = () => {
   const formatResumeSize = (size) => {
     if (!size || isNaN(size)) return null;
     const bytes = Number(size);
-    if (bytes < 1024 * 1024) {
-      return `${(bytes / 1024).toFixed(1)} KB`;
-    }
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const formatContentType = (contentType, fileName = "") => {
+    if (!contentType && fileName) {
+      const ext = fileName.split(".").pop()?.toLowerCase();
+      if (ext === "pdf") return "PDF";
+      if (ext === "doc") return "DOC";
+      if (ext === "docx") return "DOCX";
+    }
+    if (!contentType) return "PDF";
+    const lower = String(contentType).toLowerCase();
+    if (lower.includes("pdf")) return "PDF";
+    if (lower.includes("wordprocessingml") || lower.includes("docx")) return "DOCX";
+    if (lower.includes("msword") || lower.includes("doc")) return "DOC";
+    return contentType;
   };
 
   const fetchUserResumes = async () => {
@@ -140,7 +155,7 @@ const Profile = () => {
         list = data.resumes;
       } else if (data && Array.isArray(data.data)) {
         list = data.data;
-      } else if (data && (data.id || data.fileName || data.name || data.title)) {
+      } else if (data && (data.id !== undefined || data.fileName || data.name)) {
         list = [data];
       }
       setResumes(list);
@@ -154,8 +169,8 @@ const Profile = () => {
 
   const handleDownloadResume = async (resume) => {
     const targetId = resume?.id ?? resume?.resumeId ?? resume?._id ?? resume?.fileId ?? resume?.uuid;
-    if (!targetId && targetId !== 0) {
-      setDownloadError("Invalid resume identifier. Please refresh the page and try again.");
+    if (targetId === undefined || targetId === null || targetId === "") {
+      setDownloadError("Unable to download resume.");
       return;
     }
     if (downloadingResumeId === targetId) return;
@@ -171,16 +186,16 @@ const Profile = () => {
       await downloadResume(targetId, filename);
     } catch (err) {
       console.error("Failed to download resume:", err);
-      setDownloadError(err.message || "Failed to download resume.");
+      setDownloadError(err.message || "Unable to download resume.");
     } finally {
       setDownloadingResumeId(null);
     }
   };
 
-  const handleDeleteResume = async (resume) => {
+  const confirmDeleteResume = async (resume) => {
     const targetId = resume?.id ?? resume?.resumeId ?? resume?._id ?? resume?.fileId ?? resume?.uuid;
-    if (!targetId && targetId !== 0) {
-      setDownloadError("Invalid resume identifier. Please refresh the page and try again.");
+    if (targetId === undefined || targetId === null || targetId === "") {
+      setDownloadError("Unable to delete resume.");
       return;
     }
     if (deletingResumeId === targetId) return;
@@ -191,12 +206,12 @@ const Profile = () => {
       await fetchUserResumes();
       setToast({
         show: true,
-        message: "Resume deleted successfully!",
+        message: "Resume deleted.",
         type: "success",
       });
     } catch (err) {
       console.error("Failed to delete resume:", err);
-      setDownloadError(err.message || "Failed to delete resume. Please try again.");
+      setDownloadError(err.message || "Unable to delete resume.");
     } finally {
       setDeletingResumeId(null);
     }
@@ -204,8 +219,8 @@ const Profile = () => {
 
   const handleSetPrimary = async (resume) => {
     const targetId = resume?.id ?? resume?.resumeId ?? resume?._id ?? resume?.fileId ?? resume?.uuid;
-    if (!targetId && targetId !== 0) {
-      setDownloadError("Invalid resume identifier. Please refresh the page and try again.");
+    if (targetId === undefined || targetId === null || targetId === "") {
+      setDownloadError("Unable to set primary resume.");
       return;
     }
     if (settingPrimaryId === targetId) return;
@@ -216,12 +231,12 @@ const Profile = () => {
       await fetchUserResumes();
       setToast({
         show: true,
-        message: "Default resume updated successfully!",
+        message: "Primary resume updated.",
         type: "success",
       });
     } catch (err) {
-      console.error("Failed to set default resume:", err);
-      setDownloadError(err.message || "Unable to set this resume as default.");
+      console.error("Failed to set primary resume:", err);
+      setDownloadError(err.message || "Unable to set primary resume.");
     } finally {
       setSettingPrimaryId(null);
     }
@@ -231,7 +246,6 @@ const Profile = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Reset file input so identical file can be re-selected if needed
     e.target.value = "";
 
     const validation = validateResumeFile(file);
@@ -243,19 +257,16 @@ const Profile = () => {
     try {
       setIsUploadingResume(true);
       setResumeUploadError(null);
-      const response = await uploadResume(file);
-      console.log('[Profile] Upload response data:', response);
-      await fetchUserResumes().catch((fetchErr) => {
-        console.warn("[Profile] Could not refresh resume list after upload:", fetchErr);
-      });
+      await uploadResume(file);
+      await fetchUserResumes();
       setToast({
         show: true,
-        message: "Resume uploaded successfully!",
+        message: "Resume uploaded successfully.",
         type: "success",
       });
     } catch (err) {
       console.error("Resume upload error from profile:", err);
-      setResumeUploadError(err.message || "Unable to upload resume. Please try again.");
+      setResumeUploadError(err.message || "Unable to upload resume.");
     } finally {
       setIsUploadingResume(false);
     }
@@ -753,22 +764,33 @@ const Profile = () => {
                         <polyline points="14 2 14 8 20 8" />
                       </svg>
                     </div>
-                    <span className="text-[13.5px] font-semibold text-[#0F172A]">No resumes uploaded yet</span>
-                    <span className="text-[12px] text-[#64748B]">Upload your resume to get matched with opportunities.</span>
+                    <span className="text-[13.5px] font-semibold text-[#0F172A]">No resumes uploaded yet.</span>
+                    <span className="text-[12px] text-[#64748B]">Upload your resume to get started.</span>
                   </div>
                 ) : (
                   /* List of Resumes */
-                  <div className="mt-4 flex flex-col gap-3 max-h-[340px] overflow-y-auto pr-0.5">
+                  <div className="mt-4 flex flex-col gap-3 max-h-[360px] overflow-y-auto pr-0.5">
+                    {/* Notice if no resume is marked primary by backend */}
+                    {!resumes.some((r) => r.isPrimary === true) && (
+                      <div className="p-3 rounded-xl bg-amber-50 border border-amber-200/80 text-amber-800 text-[12px] font-medium flex items-center gap-2">
+                        <svg className="w-4 h-4 text-amber-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="12" y1="8" x2="12" y2="12" />
+                          <line x1="12" y1="16" x2="12.01" y2="16" />
+                        </svg>
+                        <span>No primary resume selected. Click "Set as Primary" on a resume below.</span>
+                      </div>
+                    )}
+
                     {resumes.map((resume, idx) => {
                       const realResumeId = resume.id ?? resume.resumeId ?? resume.fileId ?? resume._id ?? resume.uuid;
-                      const resumeId = realResumeId;
                       const itemKey = realResumeId ?? `resume-item-${idx}`;
                       const resumeName =
                         resume.fileName ||
                         resume.filename ||
                         resume.name ||
                         resume.title ||
-                        `${(fullName || "User").replace(/\s+/g, "_")}_Resume.pdf`;
+                        `resume_${idx + 1}.pdf`;
                       const uploadDate = formatResumeDate(
                         resume.uploadedAt ||
                           resume.createdAt ||
@@ -776,24 +798,13 @@ const Profile = () => {
                           resume.created_at
                       );
                       const sizeStr = formatResumeSize(resume.fileSize || resume.size);
+                      const fileTypeTag = formatContentType(resume.contentType, resumeName);
                       const isDownloading = realResumeId !== undefined && downloadingResumeId === realResumeId;
                       const isDeleting = realResumeId !== undefined && deletingResumeId === realResumeId;
                       const isSettingPrimary = realResumeId !== undefined && settingPrimaryId === realResumeId;
 
-                      const hasExplicitPrimary = resumes.some(
-                        (r) =>
-                          r.isPrimary === true ||
-                          r.primary === true ||
-                          r.isDefault === true ||
-                          r.default === true
-                      );
-                      const isPrimary = Boolean(
-                        resume.isPrimary === true ||
-                          resume.primary === true ||
-                          resume.isDefault === true ||
-                          resume.default === true ||
-                          (!hasExplicitPrimary && idx === 0)
-                      );
+                      // Primary status is strictly based on backend returns (Requirement 11)
+                      const isPrimary = Boolean(resume.isPrimary === true);
 
                       return (
                         <div
@@ -804,7 +815,7 @@ const Profile = () => {
                               : "border-[#E2E8F0] bg-[#F8FAFC]/70 hover:bg-slate-50"
                           }`}
                         >
-                          {/* File Icon + Info + Default Badge */}
+                          {/* File Icon + Info + Primary Badge */}
                           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
                             <div className={`w-[38px] h-[38px] rounded-[10px] flex items-center justify-center shrink-0 ${
                               isPrimary ? "bg-[#EEF2FF] text-[#4F46E5]" : "bg-slate-100 text-slate-500"
@@ -818,28 +829,28 @@ const Profile = () => {
                             </div>
 
                             <div className="flex flex-col min-w-0 flex-1">
-                              <div className="flex items-center gap-1.5 min-w-0">
+                              <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                                 <span className="text-[13px] font-bold text-[#0F172A] truncate" title={resumeName}>
                                   {resumeName}
                                 </span>
                                 {isPrimary && (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-indigo-50 text-[#4F46E5] border border-indigo-200/80 shadow-2xs shrink-0">
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-[#EEF2FF] text-[#4F46E5] border border-indigo-200/80 shadow-2xs shrink-0">
                                     <svg className="w-2.5 h-2.5 text-[#4F46E5]" fill="currentColor" viewBox="0 0 20 20">
                                       <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                                     </svg>
-                                    Default
+                                    Primary
                                   </span>
                                 )}
                               </div>
                               <span className="text-[11px] text-[#94A3B8] mt-0.5 truncate">
-                                Uploaded: {uploadDate} {sizeStr ? `• ${sizeStr}` : ""}
+                                {fileTypeTag} {sizeStr ? `• ${sizeStr}` : ""} • Uploaded {uploadDate}
                               </span>
                             </div>
                           </div>
 
                           {/* Action Buttons Toolbar */}
                           <div className="flex items-center gap-1.5 shrink-0 justify-end self-end md:self-center">
-                            {/* Make Default Button (if not already default) */}
+                            {/* Set as Primary Button (if not already primary) */}
                             {!isPrimary && (
                               <button
                                 type="button"
@@ -852,7 +863,7 @@ const Profile = () => {
                                 }
                                 disabled={isDownloading || isDeleting || isSettingPrimary}
                                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-[#E2E8F0] hover:bg-indigo-50 hover:border-indigo-200 hover:text-[#4F46E5] text-slate-600 text-[11.5px] sm:text-[12px] font-medium transition-all cursor-pointer shadow-2xs disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
-                                title="Set as default resume"
+                                title="Set as Primary Resume"
                               >
                                 {isSettingPrimary ? (
                                   <>
@@ -860,14 +871,14 @@ const Profile = () => {
                                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                                     </svg>
-                                    <span>Setting...</span>
+                                    <span>Updating...</span>
                                   </>
                                 ) : (
                                   <>
                                     <svg className="w-3.5 h-3.5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                                       <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                                     </svg>
-                                    <span>Make Default</span>
+                                    <span>Set as Primary</span>
                                   </>
                                 )}
                               </button>
@@ -893,7 +904,7 @@ const Profile = () => {
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                                   </svg>
-                                  <span className="hidden xs:inline">Downloading...</span>
+                                  <span>Downloading...</span>
                                 </>
                               ) : (
                                 <>
@@ -905,11 +916,11 @@ const Profile = () => {
                               )}
                             </button>
 
-                            {/* Dustbin / Trash Delete Button */}
+                            {/* Delete Button */}
                             <button
                               type="button"
                               onClick={() =>
-                                handleDeleteResume({
+                                setResumeToDelete({
                                   ...resume,
                                   id: realResumeId,
                                   fileName: resumeName,
@@ -960,7 +971,7 @@ const Profile = () => {
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                       </svg>
-                      <span>Uploading Resume...</span>
+                      <span>Uploading...</span>
                     </>
                   ) : (
                     <>
@@ -969,9 +980,9 @@ const Profile = () => {
                     </>
                   )}
                 </button>
-              </div>
             </div>
           </div>
+        </div>
 
           {/* Middle Row: Location & Work Authorization Card */}
           <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-6 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col gap-5 w-full">
@@ -1469,6 +1480,54 @@ const Profile = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Resume Confirmation Modal */}
+      {resumeToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-100 flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Delete resume?</h3>
+                <p className="text-xs text-slate-500 mt-0.5">This action cannot be undone.</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-slate-700">
+              Are you sure you want to delete{" "}
+              <span className="font-semibold text-slate-900">
+                {resumeToDelete.fileName || resumeToDelete.filename || resumeToDelete.name || "this resume"}
+              </span>
+              ?
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setResumeToDelete(null)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const target = resumeToDelete;
+                  setResumeToDelete(null);
+                  if (target) await confirmDeleteResume(target);
+                }}
+                className="px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl transition-colors shadow-xs cursor-pointer"
+              >
+                Delete Resume
+              </button>
+            </div>
           </div>
         </div>
       )}
