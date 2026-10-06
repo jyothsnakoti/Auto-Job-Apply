@@ -770,7 +770,7 @@ const BrowseJobs = () => {
 
   const handleClear = () => {
     setSearchQuery("");
-    setSelectedDate("Last 7 days");
+    setSelectedDate("All time");
     setSelectedLocations([]);
     setLocationSearch("");
     setSelectedWorkplace([]);
@@ -794,7 +794,7 @@ const BrowseJobs = () => {
         workplace: [],
         jobTypes: [],
         employmentTypes: [],
-        date: "Last 7 days",
+        date: "All time",
       },
     });
   };

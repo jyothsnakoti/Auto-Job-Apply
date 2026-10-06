@@ -943,7 +943,7 @@ const Dashboard = () => {
   // Filter Clear Handler
   const handleClear = () => {
     setSearchQuery("");
-    setSelectedDate("Last 7 days");
+    setSelectedDate("All time");
     setSelectedLocations([]);
     setLocationSearch("");
     setSelectedWorkplace([]);
@@ -1106,40 +1106,12 @@ const Dashboard = () => {
 
   // Dynamic Dashboard Statistics Cards (From GET /api/dashboard endpoint with fallback)
   const statsCards = useMemo(() => {
-<<<<<<< HEAD
-    // 1. Jobs Found
-    const jobsFoundVal =
-      typeof dashboardMetrics?.jobsFound === "number"
-        ? dashboardMetrics.jobsFound
-        : jobs.length > 0
-        ? jobs.length
-        : 0;
-=======
     const totalJobs = dashboardMetrics?.jobsFound ?? jobs.length;
 
-    const qualifiedMatchesVal =
-      dashboardMetrics?.qualifiedMatches ??
-      jobs.filter((j) => (j.matchPercent || 0) >= 80).length;
->>>>>>> 8f2adb9d1943e0b2a19a95b77434e108e1232382
-
-    // 2. Qualified Matches
     const qualifiedMatchesVal =
       typeof dashboardMetrics?.qualifiedMatches === "number"
         ? dashboardMetrics.qualifiedMatches
         : jobs.filter((j) => (j.matchPercent || 0) >= 80).length;
-
-<<<<<<< HEAD
-    // 3. Allowance (for supporting text & limits)
-    const allowanceVal =
-      typeof dashboardMetrics?.applicationAllowance === "number"
-        ? dashboardMetrics.applicationAllowance
-        : typeof billingInfo?.applicationAllowance === "number"
-        ? billingInfo.applicationAllowance
-        : typeof billingInfo?.applicationLimit === "number"
-        ? billingInfo.applicationLimit
-        : 100;
-=======
-    const submittedVal = dashboardMetrics?.applicationsSubmitted ?? usedApps;
 
     const allowance =
       typeof billingInfo?.applicationAllowance === "number"
@@ -1149,9 +1121,7 @@ const Dashboard = () => {
           : (dashboardMetrics?.applicationAllowance ?? null);
 
     const allowanceVal = allowance !== null ? allowance : "N/A";
->>>>>>> 8f2adb9d1943e0b2a19a95b77434e108e1232382
 
-    // 4. Applications Submitted
     const submittedVal =
       typeof dashboardMetrics?.applicationsSubmitted === "number"
         ? dashboardMetrics.applicationsSubmitted
@@ -1161,29 +1131,23 @@ const Dashboard = () => {
         ? billingInfo.applicationsUsed
         : applications.length;
 
-    // 5. Applications Remaining
     const remainingVal =
       typeof dashboardMetrics?.applicationsRemaining === "number"
         ? dashboardMetrics.applicationsRemaining
         : typeof billingInfo?.remainingApplications === "number"
         ? billingInfo.remainingApplications
-        : Math.max(0, allowanceVal - submittedVal);
-
-    const remainingVal =
-      dashboardMetrics?.applicationsRemaining ?? remainingApps;
+        : allowance !== null
+        ? Math.max(0, allowance - submittedVal)
+        : 0;
 
     return [
       {
         id: "jobs-found",
         title: "Jobs Found",
-<<<<<<< HEAD
-        value: Number(jobsFoundVal).toLocaleString(),
-=======
         value: totalJobs > 0 ? Number(totalJobs).toLocaleString() : "0",
->>>>>>> 8f2adb9d1943e0b2a19a95b77434e108e1232382
         supportingText:
-          jobsFoundVal > 0
-            ? "New jobs in the last 7 days"
+          totalJobs > 0
+            ? `${totalJobs} matched jobs ready`
             : hasResume
               ? "No matches found"
               : "Upload resume to find matches",
@@ -3658,7 +3622,7 @@ const Dashboard = () => {
                     }
                     compact={false}
                   />
-                </div>
+                 </div>
               </div>
 
               {/* Modal Footer */}
