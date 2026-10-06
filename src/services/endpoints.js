@@ -176,6 +176,9 @@ export const RESUME_ENDPOINTS = {
 };
 
 export const ENHANCE_RESUME_ENDPOINTS = {
+  // API 1 (POST) & API 2 (GET): /api/jobs/{jobId}/enhance
+  POST_ENHANCE: (jobId) => `${API_BASE_URL}/api/jobs/${jobId}/enhance`,
+  GET_ENHANCED: (jobId) => `${API_BASE_URL}/api/jobs/${jobId}/enhance`,
   GET_ENHANCED_RESUME: `${RESUME_API_BASE_URL}/api/v1/Get_EnhancedResume_for_PoorJDScore`,
   GET_SCORE_FOR_ENHANCED_RESUME: `${RESUME_API_BASE_URL}/api/v1/Get_Score_for_EnhancedResume`,
 };
@@ -191,6 +194,7 @@ export const DASHBOARD_ENDPOINTS = {
 export const JOB_ENDPOINTS = {
   LIST: `${API_BASE_URL}/api/jobs`,
   GET: `${API_BASE_URL}/api/jobs`,
+  ENHANCE: (jobId) => `${API_BASE_URL}/api/jobs/${jobId}/enhance`,
 };
 
 

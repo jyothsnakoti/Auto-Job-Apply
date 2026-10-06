@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
+import EnhancedResumeViewer from "../components/EnhancedResumeViewer";
 import {
   getStoredUser,
   getOnboardingProfile,
@@ -358,6 +359,36 @@ const transformMatchToJob = (match, index = 0) => {
 
   const jobId = match.jobId || match.job_id || match.JDid || match.jd_id || match.id || `match-${index + 1}`;
 
+  // Handle backend employmentType like FULL_TIME, PART_TIME, CONTRACT
+  let rawEmployment = match.employmentType || match.employment_type || match.type || "";
+  let employmentType = "";
+  if (rawEmployment) {
+    const rawEmp = String(rawEmployment).toUpperCase().replace(/_/g, "-");
+    if (rawEmp.includes("FULL")) employmentType = "Full-time";
+    else if (rawEmp.includes("PART")) employmentType = "Part-time";
+    else if (rawEmp.includes("CONTRACT")) employmentType = "Contract";
+    else if (rawEmp.includes("INTERN")) employmentType = "Internship";
+    else if (rawEmp.includes("FREELANCE")) employmentType = "Freelance";
+    else employmentType = cleanHtmlText(rawEmployment);
+  } else {
+    employmentType = "Full-time";
+  }
+
+  // Handle backend workplace like REMOTE, ONSITE, HYBRID
+  let rawWorkplace = match.workplace || match.workMode || match.work_mode || "";
+  let workMode = "";
+  if (rawWorkplace) {
+    const rawWp = String(rawWorkplace).toUpperCase();
+    if (rawWp.includes("REMOTE")) workMode = "Remote";
+    else if (rawWp.includes("ONSITE") || rawWp.includes("ON_SITE") || rawWp.includes("OFFICE")) workMode = "On-site";
+    else if (rawWp.includes("HYBRID")) workMode = "Hybrid";
+    else workMode = cleanHtmlText(rawWorkplace);
+  } else if (location.toLowerCase().includes("remote")) {
+    workMode = "Remote";
+  } else {
+    workMode = "On-site";
+  }
+
   return {
     id: jobId,
     job_id: jobId,
@@ -368,12 +399,10 @@ const transformMatchToJob = (match, index = 0) => {
     location,
     country: match.country || "",
     fullLocation: cleanHtmlText(match.fullLocation || location),
-    type: cleanHtmlText(match.type || match.employmentType || match.employment_type || "Full-time"),
-    workMode: cleanHtmlText(
-      match.workMode ||
-      match.work_mode ||
-      (location.toLowerCase().includes("remote") ? "Remote" : "On-site")
-    ),
+    type: employmentType,
+    employmentType,
+    workMode,
+    workplace: workMode,
     department: cleanHtmlText(match.department || "Engineering"),
     posted: match.postedAt ? new Date(match.postedAt).toLocaleDateString() : cleanHtmlText(match.posted || "Recent match"),
     postedAt: match.postedAt || null,
@@ -1251,52 +1280,60 @@ const Dashboard = () => {
 
   // Dynamic Dashboard Statistics Cards (From GET /api/dashboard & GET /api/resumes/matches/status)
   const statsCards = useMemo(() => {
-    const totalJobs =
+    // 1. Jobs Found
+    const jobsFoundVal =
+      typeof
       typeof matchStatus?.matchCount === "number" && matchStatus.matchCount > 0
         ? matchStatus.matchCount
-        : (dashboardMetrics?.jobsFound ?? jobs.length);
+        : (dashboardMetrics?.jobsFound === "number"
+        ? dashboardMetrics.jobsFound
+        : jobs.length > 0
+        ? jobs.length
+        : 0);
 
+    // 2. Qualified Matches
     const qualifiedMatchesVal =
-      dashboardMetrics?.qualifiedMatches ??
-      jobs.filter((j) => (j.matchPercent || 0) >= 80).length;
+      typeof dashboardMetrics?.qualifiedMatches === "number"
+        ? dashboardMetrics.qualifiedMatches
+        : jobs.filter((j) => (j.matchPercent || 0) >= 80).length;
 
-    const usedApps =
-      typeof billingInfo?.usedApplications === "number"
-        ? billingInfo.usedApplications
-        : typeof billingInfo?.applicationsUsed === "number"
-          ? billingInfo.applicationsUsed
-          : applications.length;
-
-    const submittedVal = dashboardMetrics?.applicationsSubmitted ?? usedApps;
-
-    const allowance =
-      typeof billingInfo?.applicationAllowance === "number"
+    // 3. Allowance (for supporting text & limits)
+    const allowanceVal =
+      typeof dashboardMetrics?.applicationAllowance === "number"
+        ? dashboardMetrics.applicationAllowance
+        : typeof billingInfo?.applicationAllowance === "number"
         ? billingInfo.applicationAllowance
         : typeof billingInfo?.applicationLimit === "number"
-          ? billingInfo.applicationLimit
-          : (dashboardMetrics?.applicationAllowance ?? null);
+        ? billingInfo.applicationLimit
+        : 100;
 
-    const allowanceVal = allowance !== null ? allowance : "N/A";
+    // 4. Applications Submitted
+    const submittedVal =
+      typeof dashboardMetrics?.applicationsSubmitted === "number"
+        ? dashboardMetrics.applicationsSubmitted
+        : typeof billingInfo?.usedApplications === "number"
+        ? billingInfo.usedApplications
+        : typeof billingInfo?.applicationsUsed === "number"
+        ? billingInfo.applicationsUsed
+        : applications.length;
 
-    const remainingApps =
-      typeof billingInfo?.remainingApplications === "number"
-        ? billingInfo.remainingApplications
-        : allowance !== null
-          ? Math.max(0, allowance - usedApps)
-          : 0;
-
+    // 5. Applications Remaining
     const remainingVal =
-      dashboardMetrics?.applicationsRemaining ?? remainingApps;
+      typeof dashboardMetrics?.applicationsRemaining === "number"
+        ? dashboardMetrics.applicationsRemaining
+        : typeof billingInfo?.remainingApplications === "number"
+        ? billingInfo.remainingApplications
+        : Math.max(0, allowanceVal - submittedVal);
 
     return [
       {
         id: "jobs-found",
         title: "Jobs Found",
-        value: totalJobs > 0 ? Number(totalJobs).toLocaleString() : "0",
+        value: Number(jobsFoundVal).toLocaleString(),
         supportingText: matchStatus?.lastComputedAt
           ? `Computed ${formatMatchTime(matchStatus.lastComputedAt)}`
-          : totalJobs > 0
-            ? `${totalJobs} matched jobs ready`
+          : jobsFoundVal > 0
+            ? "New jobs in the last 7 days"
             : matchStatus?.hasPrimaryResume === false
               ? "Primary resume required"
               : hasResume
@@ -1371,45 +1408,42 @@ const Dashboard = () => {
     );
   }, [applications, selectedAppTab]);
 
-  // Enhance Resume Action Handler
+  // Enhance Resume Action Handler (POST /api/jobs/{jobId}/enhance -> GET /api/jobs/{jobId}/enhance)
   const handleEnhanceResume = async () => {
     if (isEnhancing || !selectedJobModal) return;
     setEnhanceError(null);
     setEnhanceSuccess(null);
 
-    const candidateId = getCandidateId();
-    const resumeId = getStoredResumeId();
     const selectedJobId = getJobId(selectedJobModal);
 
-    if (!selectedJobId || !candidateId || !resumeId) {
-      const missing = [];
-      if (!selectedJobId) missing.push("Job ID (JDid)");
-      if (!candidateId) missing.push("Candidate ID (Candidateid)");
-      if (!resumeId) missing.push("Resume ID (ResumeID)");
-
-      setEnhanceError(
-        `Required information is missing: ${missing.join(
-          ", "
-        )}. Please ensure you are logged in and have uploaded a resume.`
-      );
+    if (!selectedJobId) {
+      setEnhanceError("Job ID is missing. Please select a valid job to enhance.");
       return;
     }
 
     try {
       setIsEnhancing(true);
 
-      const payload = {
-        JDid: selectedJobId,
-        Candidateid: candidateId,
-        ResumeID: resumeId,
-      };
+      const result = await getEnhancedResume(selectedJobId);
+      console.log("[Dashboard] Enhance Resume Result:", result);
 
-      const result = await getEnhancedResume(payload);
-      setEnhancedResultsMap((prev) => ({
-        ...prev,
-        [selectedJobId]: result,
-      }));
-      setEnhanceSuccess("Resume successfully enhanced for this role!");
+      if (result?.status === "NO_BRIDGEABLE_GAPS") {
+        setEnhanceSuccess(
+          result?.message || "No bridgeable skill gaps identified for this role."
+        );
+      } else if (result?.status === "NOT_NEEDED") {
+        setEnhanceSuccess(
+          result?.message || "Resume enhancement is not needed for this role."
+        );
+      } else {
+        setEnhancedResultsMap((prev) => ({
+          ...prev,
+          [selectedJobId]: result,
+        }));
+        setEnhanceSuccess(
+          result?.message || "Resume successfully enhanced for this role!"
+        );
+      }
     } catch (err) {
       console.error("[Dashboard] Enhance Resume Error:", err);
       const errMsg =
@@ -1429,6 +1463,20 @@ const Dashboard = () => {
     navigator.clipboard.writeText(text);
     setCopiedResume(true);
     setTimeout(() => setCopiedResume(false), 2500);
+  };
+
+  const handleDownloadEnhancedResume = (text, job) => {
+    if (!text) return;
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const jobTitle = (job?.title || "Enhanced_Resume").replace(/[^a-zA-Z0-9_-]/g, "_");
+    link.href = url;
+    link.download = `${jobTitle}_Resume.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const handleGetUpdatedAts = async () => {
@@ -2203,46 +2251,52 @@ const Dashboard = () => {
                     </div>
 
                     <div className="flex flex-col gap-1 max-h-[220px] overflow-y-auto">
-                      {companyOptions
-                        .filter((c) =>
-                          c.toLowerCase().includes(companySearch.toLowerCase())
-                        )
-                        .map((comp) => {
-                          const isChecked = selectedCompanies.includes(comp);
-                          return (
-                            <div
-                              key={comp}
-                              onClick={() =>
-                                toggleCheckbox(
-                                  selectedCompanies,
-                                  setSelectedCompanies,
-                                  comp
-                                )
-                              }
-                              className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
-                            >
+                      {dynamicCompanyOptions.length === 0 ? (
+                        <div className="text-xs text-slate-400 px-2 py-1">
+                          No companies available
+                        </div>
+                      ) : (
+                        dynamicCompanyOptions
+                          .filter((c) =>
+                            c.toLowerCase().includes(companySearch.toLowerCase())
+                          )
+                          .map((comp) => {
+                            const isChecked = selectedCompanies.includes(comp);
+                            return (
                               <div
-                                className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
-                                  ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                                  : "border-slate-300 bg-white"
-                                  }`}
+                                key={comp}
+                                onClick={() =>
+                                  toggleCheckbox(
+                                    selectedCompanies,
+                                    setSelectedCompanies,
+                                    comp
+                                  )
+                                }
+                                className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
                               >
-                                {isChecked && (
-                                  <svg
-                                    className="w-2.5 h-2.5"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="3.5"
-                                  >
-                                    <polyline points="20 6 9 17 4 12" />
-                                  </svg>
-                                )}
+                                <div
+                                  className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
+                                    ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
+                                    : "border-slate-300 bg-white"
+                                    }`}
+                                >
+                                  {isChecked && (
+                                    <svg
+                                      className="w-2.5 h-2.5"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="3.5"
+                                    >
+                                      <polyline points="20 6 9 17 4 12" />
+                                    </svg>
+                                  )}
+                                </div>
+                                <span className="truncate">{comp}</span>
                               </div>
-                              <span className="truncate">{comp}</span>
-                            </div>
-                          );
-                        })}
+                            );
+                          })
+                      )}
                     </div>
                   </div>
                 )}
@@ -2358,317 +2412,6 @@ const Dashboard = () => {
                             className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${isSelected
                               ? "bg-[#0F4C3A] text-white"
                               : "border border-slate-300"
-                              }`}
-                          >
-                            {isSelected && (
-                              <svg
-                                className="w-2.5 h-2.5"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="3.5"
-                              >
-                                <polyline points="20 6 9 17 4 12" />
-                              </svg>
-                            )}
-                          </div>
-                          <span>{exp}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Sponsors Visa Button */}
-              <button
-                type="button"
-                onClick={() => setSponsorsVisa(!sponsorsVisa)}
-                className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${sponsorsVisa
-                    ? "border-slate-400 bg-slate-100 text-[#0F172A] font-medium"
-                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
-              >
-                <span>Sponsors Visa</span>
-              </button>
-
-              {/* Employment Type Dropdown */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => toggleDropdown("employmentType")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "employmentType" ||
-                      selectedEmploymentTypes.length > 0
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                    }`}
-                >
-                  <span>Employment Type</span>
-                  <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "employmentType" ? "rotate-180" : ""
-                      }`}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                  >
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
-                </button>
-
-                {activeDropdown === "employmentType" && (
-                  <div className="absolute top-full left-0 mt-2 w-[170px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2.5 z-50 flex flex-col gap-1">
-                    {employmentTypeOptions.map((type) => {
-                      const isChecked = selectedEmploymentTypes.includes(type);
-                      return (
-                        <div
-                          key={type}
-                          onClick={() =>
-                            toggleCheckbox(
-                              selectedEmploymentTypes,
-                              setSelectedEmploymentTypes,
-                              type
-                            )
-                          }
-                          className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
-                        >
-                          <div
-                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
-                                ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                                : "border-slate-300 bg-white"
-                              }`}
-                          >
-                            {isChecked && (
-                              <svg
-                                className="w-2.5 h-2.5"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="3.5"
-                              >
-                                <polyline points="20 6 9 17 4 12" />
-                              </svg>
-                            )}
-                          </div>
-                          <span>{type}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* 4. Companies Dropdown */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => toggleDropdown("companies")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "companies" || selectedCompanies.length > 0
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                    }`}
-                >
-                  <span>Companies</span>
-                  <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "companies" ? "rotate-180" : ""
-                      }`}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                  >
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
-                </button>
-
-                {activeDropdown === "companies" && (
-                  <div className="absolute top-full left-0 mt-2 w-[270px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-3 z-50 flex flex-col gap-2">
-                    <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-[8px] border border-slate-200 bg-white">
-                      <svg
-                        className="w-3.5 h-3.5 text-slate-400 shrink-0"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      >
-                        <circle cx="11" cy="11" r="7" />
-                        <path d="m20 20-3.5-3.5" />
-                      </svg>
-                      <input
-                        type="text"
-                        value={companySearch}
-                        onChange={(e) => setCompanySearch(e.target.value)}
-                        placeholder="Search companies..."
-                        className="w-full text-xs text-slate-800 placeholder:text-slate-400 outline-none bg-transparent"
-                      />
-                    </div>
-
-                    <div className="text-[11px] font-semibold text-slate-400 tracking-wider px-1 pt-1">
-                      COMPANIES
-                    </div>
-
-                    <div className="flex flex-col gap-1 max-h-[220px] overflow-y-auto">
-                      {dynamicCompanyOptions.length === 0 ? (
-                        <div className="text-xs text-slate-400 px-2 py-1">
-                          No companies available
-                        </div>
-                      ) : (
-                        dynamicCompanyOptions
-                          .filter((c) =>
-                            c.toLowerCase().includes(companySearch.toLowerCase())
-                          )
-                          .map((comp) => {
-                            const isChecked = selectedCompanies.includes(comp);
-                            return (
-                              <div
-                                key={comp}
-                                onClick={() =>
-                                  toggleCheckbox(
-                                    selectedCompanies,
-                                    setSelectedCompanies,
-                                    comp
-                                  )
-                                }
-                                className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
-                              >
-                                <div
-                                  className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
-                                      ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                                      : "border-slate-300 bg-white"
-                                    }`}
-                                >
-                                  {isChecked && (
-                                    <svg
-                                      className="w-2.5 h-2.5"
-                                      viewBox="0 0 24 24"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="3.5"
-                                    >
-                                      <polyline points="20 6 9 17 4 12" />
-                                    </svg>
-                                  )}
-                                </div>
-                                <span className="truncate">{comp}</span>
-                              </div>
-                            );
-                          })
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Degree Level Dropdown */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => toggleDropdown("degree")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "degree" || selectedDegrees.length > 0
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                    }`}
-                >
-                  <span>Degree Level</span>
-                  <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "degree" ? "rotate-180" : ""
-                      }`}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                  >
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
-                </button>
-
-                {activeDropdown === "degree" && (
-                  <div className="absolute top-full left-0 mt-2 w-[210px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2.5 z-50 flex flex-col gap-1">
-                    {degreeOptions.map((deg) => {
-                      const isChecked = selectedDegrees.includes(deg);
-                      return (
-                        <div
-                          key={deg}
-                          onClick={() =>
-                            toggleCheckbox(
-                              selectedDegrees,
-                              setSelectedDegrees,
-                              deg
-                            )
-                          }
-                          className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
-                        >
-                          <div
-                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
-                                ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                                : "border-slate-300 bg-white"
-                              }`}
-                          >
-                            {isChecked && (
-                              <svg
-                                className="w-2.5 h-2.5"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="3.5"
-                              >
-                                <polyline points="20 6 9 17 4 12" />
-                              </svg>
-                            )}
-                          </div>
-                          <span>{deg}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Max Experience Dropdown */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => toggleDropdown("experience")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "experience" || selectedExperience !== ""
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                    }`}
-                >
-                  <span>Max Experience</span>
-                  <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "experience" ? "rotate-180" : ""
-                      }`}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                  >
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
-                </button>
-
-                {activeDropdown === "experience" && (
-                  <div className="absolute top-full left-0 mt-2 w-[210px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2.5 z-50 flex flex-col gap-0.5">
-                    {experienceOptions.map((exp) => {
-                      const isSelected = selectedExperience === exp;
-                      return (
-                        <div
-                          key={exp}
-                          onClick={() => {
-                            setSelectedExperience(
-                              exp === selectedExperience ? "" : exp
-                            );
-                            setActiveDropdown(null);
-                          }}
-                          className={`flex items-center gap-2.5 px-3 py-1.5 rounded-[6px] cursor-pointer text-[13px] transition-colors ${isSelected
-                              ? "bg-slate-50 text-[#0F172A] font-medium"
-                              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                            }`}
-                        >
-                          <div
-                            className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${isSelected
-                                ? "bg-[#0F4C3A] text-white"
-                                : "border border-slate-300"
                               }`}
                           >
                             {isSelected && (
@@ -3651,10 +3394,16 @@ const Dashboard = () => {
                                 {copiedResume ? "✓ Copied" : "Copy Text"}
                               </button>
                             </div>
-                            <div className="bg-white rounded-lg border border-slate-200 p-3 max-h-[160px] overflow-y-auto text-[11.5px] text-slate-700 whitespace-pre-wrap font-mono leading-relaxed">
-                              {enhancedResultsMap[selectedJobId]?.EnhResume ||
-                                enhancedResultsMap[selectedJobId]?.enhResume ||
-                                enhancedResultsMap[selectedJobId]?.enhanced_resume}
+                            <div className="max-h-[220px] overflow-y-auto pr-0.5">
+                              <EnhancedResumeViewer
+                                resumeText={
+                                  enhancedResultsMap[selectedJobId]?.EnhResume ||
+                                  enhancedResultsMap[selectedJobId]?.enhResume ||
+                                  enhancedResultsMap[selectedJobId]?.enhanced_resume ||
+                                  enhancedResultsMap[selectedJobId]?.enhancedResume
+                                }
+                                compact={true}
+                              />
                             </div>
                           </div>
                         )}
@@ -4006,18 +3755,30 @@ const Dashboard = () => {
                   <button
                     type="button"
                     onClick={() =>
-                      handleCopyEnhancedResume(
+                      handleDownloadEnhancedResume(
                         enhancedResultsMap[getJobId(selectedJobModal)]?.EnhResume ||
                         enhancedResultsMap[getJobId(selectedJobModal)]?.enhResume ||
-                        enhancedResultsMap[getJobId(selectedJobModal)]?.enhanced_resume
+                        enhancedResultsMap[getJobId(selectedJobModal)]?.enhanced_resume ||
+                        enhancedResultsMap[getJobId(selectedJobModal)]?.enhancedResume,
+                        selectedJobModal
                       )
                     }
                     className="px-3.5 py-1.5 bg-[#EEF2FF] hover:bg-[#E0E7FF] text-[#4F46E5] text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
                   >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                      />
                     </svg>
-                    <span>{copiedResume ? "Copied!" : "Copy Resume"}</span>
+                    <span>Download</span>
                   </button>
 
                   <button
@@ -4155,19 +3916,25 @@ const Dashboard = () => {
                     </div>
                   )}
 
-                {/* Enhanced Resume Content */}
+                {/* Professional Enhanced Resume Content */}
                 <div>
-                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
-                    Enhanced Resume Text
-                  </h4>
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 text-xs text-slate-800 font-mono whitespace-pre-wrap leading-relaxed select-text">
-                    {enhancedResultsMap[getJobId(selectedJobModal)]?.EnhResume ||
-                      enhancedResultsMap[getJobId(selectedJobModal)]
-                        ?.enhResume ||
-                      enhancedResultsMap[getJobId(selectedJobModal)]
-                        ?.enhanced_resume ||
-                      "No enhanced resume text content returned."}
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+                      Professional Formatted Resume
+                    </h4>
+                    <span className="text-[11px] text-[#4F46E5] font-semibold bg-[#EEF2FF] border border-[#C7D2FE] px-2.5 py-0.5 rounded-full">
+                      Dynamically Formatted
+                    </span>
                   </div>
+                  <EnhancedResumeViewer
+                    resumeText={
+                      enhancedResultsMap[getJobId(selectedJobModal)]?.EnhResume ||
+                      enhancedResultsMap[getJobId(selectedJobModal)]?.enhResume ||
+                      enhancedResultsMap[getJobId(selectedJobModal)]?.enhanced_resume ||
+                      enhancedResultsMap[getJobId(selectedJobModal)]?.enhancedResume
+                    }
+                    compact={false}
+                  />
                 </div>
               </div>
 

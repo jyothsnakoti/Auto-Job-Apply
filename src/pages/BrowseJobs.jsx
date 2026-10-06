@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
+import EnhancedResumeViewer from "../components/EnhancedResumeViewer";
 import {
   getJobs,
   getMoreJobsForResume,
@@ -286,12 +287,34 @@ const transformMatchToJob = (match, index = 0) => {
   }
   const fullLocation = [location, country].filter(Boolean).join(", ");
 
-  // Workplace & Employment Type
+  // Workplace & Employment Type normalization for backend responses
   const rawWorkplace = match.workplace || match.workMode || match.work_mode || "";
-  const workplace = cleanHtmlText(rawWorkplace);
+  let workplace = "";
+  if (rawWorkplace) {
+    const rawWp = String(rawWorkplace).toUpperCase();
+    if (rawWp.includes("REMOTE")) workplace = "Remote";
+    else if (rawWp.includes("ONSITE") || rawWp.includes("ON_SITE") || rawWp.includes("OFFICE")) workplace = "On-site";
+    else if (rawWp.includes("HYBRID")) workplace = "Hybrid";
+    else workplace = cleanHtmlText(rawWorkplace);
+  } else if (location.toLowerCase().includes("remote")) {
+    workplace = "Remote";
+  } else {
+    workplace = "On-site";
+  }
 
   const rawEmploymentType = match.employmentType || match.type || match.employment_type || "";
-  const employmentType = cleanHtmlText(rawEmploymentType);
+  let employmentType = "";
+  if (rawEmploymentType) {
+    const rawEmp = String(rawEmploymentType).toUpperCase().replace(/_/g, "-");
+    if (rawEmp.includes("FULL")) employmentType = "Full-time";
+    else if (rawEmp.includes("PART")) employmentType = "Part-time";
+    else if (rawEmp.includes("CONTRACT")) employmentType = "Contract";
+    else if (rawEmp.includes("INTERN")) employmentType = "Internship";
+    else if (rawEmp.includes("FREELANCE")) employmentType = "Freelance";
+    else employmentType = cleanHtmlText(rawEmploymentType);
+  } else {
+    employmentType = "Full-time";
+  }
 
   // Posted At
   const posted = match.postedAt ? formatPostedDate(match.postedAt) : cleanHtmlText(match.posted || "");
@@ -756,51 +779,44 @@ const BrowseJobs = () => {
     await fetchJobsData({ page: nextPage, resetList: false });
   };
 
-  // Enhance Resume Action Handler (POST /api/v1/Get_EnhancedResume_for_PoorJDScore)
+  // Enhance Resume Action Handler (POST /api/jobs/{jobId}/enhance -> GET /api/jobs/{jobId}/enhance)
   const handleEnhanceResume = async () => {
     if (isEnhancing || !selectedJobModal) return;
     setEnhanceError(null);
     setEnhanceSuccess(null);
 
-    const candidateId = getCandidateId();
-    const resumeId = getStoredResumeId();
     const selectedJobId = getJobId(selectedJobModal);
 
-    console.log("[BrowseJobs] Triggering Enhance Resume with dynamic IDs:", {
-      JDid: selectedJobId,
-      Candidateid: candidateId,
-      ResumeID: resumeId,
-    });
+    console.log("[BrowseJobs] Triggering Enhance Resume for Job ID:", selectedJobId);
 
-    if (!selectedJobId || !candidateId || !resumeId) {
-      const missing = [];
-      if (!selectedJobId) missing.push("Job ID (JDid)");
-      if (!candidateId) missing.push("Candidate ID (Candidateid)");
-      if (!resumeId) missing.push("Resume ID (ResumeID)");
-
-      setEnhanceError(
-        `Required information is missing: ${missing.join(", ")}. Please ensure you are logged in and have uploaded a resume.`
-      );
+    if (!selectedJobId) {
+      setEnhanceError("Job ID is missing. Please select a valid job to enhance.");
       return;
     }
 
     try {
       setIsEnhancing(true);
 
-      const payload = {
-        JDid: selectedJobId,
-        Candidateid: candidateId,
-        ResumeID: resumeId,
-      };
+      const result = await getEnhancedResume(selectedJobId);
+      console.log("[BrowseJobs] Enhance Resume API Result:", result);
 
-      const result = await getEnhancedResume(payload);
-      console.log("[BrowseJobs] Enhance Resume API Response:", result);
-
-      setEnhancedResultsMap((prev) => ({
-        ...prev,
-        [selectedJobId]: result,
-      }));
-      setEnhanceSuccess("Resume successfully enhanced for this role!");
+      if (result?.status === "NO_BRIDGEABLE_GAPS") {
+        setEnhanceSuccess(
+          result?.message || "No bridgeable skill gaps identified for this role."
+        );
+      } else if (result?.status === "NOT_NEEDED") {
+        setEnhanceSuccess(
+          result?.message || "Resume enhancement is not needed for this role."
+        );
+      } else {
+        setEnhancedResultsMap((prev) => ({
+          ...prev,
+          [selectedJobId]: result,
+        }));
+        setEnhanceSuccess(
+          result?.message || "Resume successfully enhanced for this role!"
+        );
+      }
     } catch (err) {
       console.error("[BrowseJobs] Enhance Resume Error:", err);
       const errMsg =
@@ -820,6 +836,20 @@ const BrowseJobs = () => {
     navigator.clipboard.writeText(text);
     setCopiedResume(true);
     setTimeout(() => setCopiedResume(false), 2500);
+  };
+
+  const handleDownloadEnhancedResume = (text, job) => {
+    if (!text) return;
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const jobTitle = (job?.title || "Enhanced_Resume").replace(/[^a-zA-Z0-9_-]/g, "_");
+    link.href = url;
+    link.download = `${jobTitle}_Resume.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   // Get Updated ATS Action Handler (POST /api/v1/Get_Score_for_EnhancedResume)
@@ -2717,13 +2747,16 @@ const BrowseJobs = () => {
                   <button
                     type="button"
                     onClick={() =>
-                      handleCopyEnhancedResume(
+                      handleDownloadEnhancedResume(
                         enhancedResultsMap[getJobId(selectedJobModal)]
                           ?.EnhResume ||
                         enhancedResultsMap[getJobId(selectedJobModal)]
                           ?.enhResume ||
                         enhancedResultsMap[getJobId(selectedJobModal)]
-                          ?.enhanced_resume
+                          ?.enhanced_resume ||
+                        enhancedResultsMap[getJobId(selectedJobModal)]
+                          ?.enhancedResume,
+                        selectedJobModal
                       )
                     }
                     className="px-3.5 py-1.5 bg-[#EEF2FF] hover:bg-[#E0E7FF] text-[#4F46E5] text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
@@ -2733,15 +2766,15 @@ const BrowseJobs = () => {
                       fill="none"
                       viewBox="0 0 24 24"
                       stroke="currentColor"
+                      strokeWidth="2"
                     >
                       <path
                         strokeLinecap="round"
                         strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
                       />
                     </svg>
-                    <span>{copiedResume ? "Copied!" : "Copy Resume"}</span>
+                    <span>Download</span>
                   </button>
 
                   <button
@@ -2894,19 +2927,25 @@ const BrowseJobs = () => {
                     </div>
                   )}
 
-                {/* Enhanced Resume Content */}
+                {/* Professional Enhanced Resume Content */}
                 <div>
-                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
-                    Enhanced Resume Text
-                  </h4>
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 text-xs text-slate-800 font-mono whitespace-pre-wrap leading-relaxed select-text">
-                    {enhancedResultsMap[getJobId(selectedJobModal)]?.EnhResume ||
-                      enhancedResultsMap[getJobId(selectedJobModal)]
-                        ?.enhResume ||
-                      enhancedResultsMap[getJobId(selectedJobModal)]
-                        ?.enhanced_resume ||
-                      "No enhanced resume text content returned."}
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+                      Professional Formatted Resume
+                    </h4>
+                    <span className="text-[11px] text-[#4F46E5] font-semibold bg-[#EEF2FF] border border-[#C7D2FE] px-2.5 py-0.5 rounded-full">
+                      Dynamically Formatted
+                    </span>
                   </div>
+                  <EnhancedResumeViewer
+                    resumeText={
+                      enhancedResultsMap[getJobId(selectedJobModal)]?.EnhResume ||
+                      enhancedResultsMap[getJobId(selectedJobModal)]?.enhResume ||
+                      enhancedResultsMap[getJobId(selectedJobModal)]?.enhanced_resume ||
+                      enhancedResultsMap[getJobId(selectedJobModal)]?.enhancedResume
+                    }
+                    compact={false}
+                  />
                 </div>
               </div>
 

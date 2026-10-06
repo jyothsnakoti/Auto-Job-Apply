@@ -1,63 +1,267 @@
-import { apiClient } from './authService';
-import { RESUME_API_BASE_URL } from './endpoints';
+import { apiClient, fetchWithAuth } from './authService';
+import { ENHANCE_RESUME_ENDPOINTS, API_BASE_URL } from './endpoints';
 import { getStoredTokens, getStoredUser } from './authService';
 import { getOnboardingState } from './onboardingService';
 
 /**
- * Endpoint for Resume Enhancement based on Job Description
+ * API 1: Generate / Enhance Resume
+ * POST /api/jobs/{jobId}/enhance
+ *
+ * @param {string|number} jobId - Job ID to enhance for
+ * @returns {Promise<Object>} POST API response
  */
-const ENHANCE_RESUME_URL = `${RESUME_API_BASE_URL || ''}/api/v1/Get_EnhancedResume_for_PoorJDScore`;
+export const postEnhanceJobResume = async (jobId) => {
+  if (!jobId && jobId !== 0) {
+    throw new Error('Job ID is required for resume enhancement.');
+  }
+
+  const endpoint =
+    ENHANCE_RESUME_ENDPOINTS?.POST_ENHANCE?.(jobId) ||
+    `${API_BASE_URL}/api/jobs/${jobId}/enhance`;
+
+  console.log("Step 1: Calling POST", `/api/jobs/${jobId}/enhance`);
+
+  try {
+    const response = await apiClient.post(endpoint, null, {
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+    console.log("POST enhance response:", response.data);
+    return response.data || { status: 'OK' };
+  } catch (error) {
+    const res = await fetchWithAuth(endpoint, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+
+    const text = await res.text().catch(() => '');
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = text ? { message: text } : {};
+    }
+
+    if (!res.ok) {
+      const errMsg =
+        data?.message ||
+        data?.detail ||
+        data?.error ||
+        `Enhance resume request failed with status ${res.status}`;
+      const err = new Error(errMsg);
+      err.status = res.status;
+      err.data = data;
+      throw err;
+    }
+
+    console.log("POST enhance response:", data);
+    return data || { status: 'OK' };
+  }
+};
 
 /**
- * Call the backend Enhance Resume API
- * POST /api/v1/Get_EnhancedResume_for_PoorJDScore
+ * API 2: Get Enhanced Resume
+ * GET /api/jobs/{jobId}/enhance
  *
- * @param {Object} payload - { JDid, Candidateid, ResumeID }
- * @returns {Promise<Object>} Enhanced resume response data
+ * @param {string|number} jobId - Job ID to retrieve enhancement for
+ * @returns {Promise<Object>} GET API response with enhanced resume details
  */
-export const getEnhancedResume = async (payload) => {
-  if (!payload) {
-    throw new Error('Payload is required for enhance resume request.');
+export const getEnhancedJobResume = async (jobId) => {
+  if (!jobId && jobId !== 0) {
+    throw new Error('Job ID is required to fetch enhanced resume.');
   }
 
-  const { JDid, Candidateid, ResumeID } = payload;
+  const endpoint =
+    ENHANCE_RESUME_ENDPOINTS?.GET_ENHANCED?.(jobId) ||
+    `${API_BASE_URL}/api/jobs/${jobId}/enhance`;
 
-  if (!JDid) {
-    throw new Error('Job ID (JDid) is missing.');
-  }
-  if (!Candidateid) {
-    throw new Error('Candidate ID (Candidateid) is missing.');
-  }
-  if (!ResumeID) {
-    throw new Error('Resume ID (ResumeID) is missing.');
-  }
+  console.log("Step 2: Calling GET", `/api/jobs/${jobId}/enhance`);
 
-  console.log('[enhanceResumeService] Calling Enhance Resume API:', {
-    endpoint: ENHANCE_RESUME_URL,
-    payload: {
-      JDid,
-      Candidateid,
-      ResumeID,
-    },
-  });
-
-  const response = await apiClient.post(
-    ENHANCE_RESUME_URL,
-    {
-      JDid,
-      Candidateid,
-      ResumeID,
-    },
-    {
+  try {
+    const response = await apiClient.get(endpoint, {
       headers: {
-        'ngrok-skip-browser-warning': 'true',
-        'Content-Type': 'application/json',
+        Accept: 'application/json',
       },
-    }
-  );
+    });
+    console.log("GET enhance response:", response.data);
+    return response.data;
+  } catch (error) {
+    const res = await fetchWithAuth(endpoint, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
+    });
 
-  console.log('[enhanceResumeService] Enhance Resume API response:', response.data);
-  return response.data;
+    const text = await res.text().catch(() => '');
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = text ? { message: text } : {};
+    }
+
+    if (!res.ok) {
+      const errMsg =
+        data?.message ||
+        data?.detail ||
+        data?.error ||
+        `Failed to fetch enhanced resume with status ${res.status}`;
+      const err = new Error(errMsg);
+      err.status = res.status;
+      err.data = data;
+      throw err;
+    }
+
+    console.log("GET enhance response:", data);
+    return data;
+  }
+};
+
+/**
+ * Sequential Enhance Resume Workflow:
+ * User clicks "Enhance Resume"
+ *         ↓
+ * POST /api/jobs/{jobId}/enhance
+ *         ↓
+ * Status check (OK, SCORED, NO_BRIDGEABLE_GAPS, NOT_NEEDED, GUARDRAIL_FAILED)
+ *         ↓
+ * If enhancement succeeds (OK / SCORED)
+ *         ↓
+ * GET /api/jobs/{jobId}/enhance
+ *         ↓
+ * Return GET response normalized for existing UI
+ *
+ * @param {string|number|Object} jobOrPayload - Job ID or payload object containing jobId/JDid
+ * @returns {Promise<Object>} Normalized enhanced resume data for UI display
+ */
+export const getEnhancedResume = async (jobOrPayload) => {
+  if (!jobOrPayload && jobOrPayload !== 0) {
+    throw new Error('Job ID or payload is required for enhance resume request.');
+  }
+
+  // Extract jobId dynamically from argument
+  let jobId = jobOrPayload;
+  if (typeof jobOrPayload === 'object' && jobOrPayload !== null) {
+    jobId =
+      jobOrPayload.jobId ||
+      jobOrPayload.job_id ||
+      jobOrPayload.JDid ||
+      jobOrPayload.jd_id ||
+      jobOrPayload.id;
+  }
+
+  if (!jobId && jobId !== 0) {
+    throw new Error('Job ID (jobId / JDid) is missing for enhance resume request.');
+  }
+
+  // Step 1: Call POST /api/jobs/{jobId}/enhance
+  const postData = await postEnhanceJobResume(jobId);
+
+  // Status inspection
+  const rawStatus =
+    postData?.status ||
+    postData?.enhancementStatus ||
+    postData?.resultStatus ||
+    '';
+  const normalizedStatus = String(rawStatus).toUpperCase().trim();
+
+  console.log(`[enhanceResumeService] POST response status: "${normalizedStatus}"`);
+
+  // Handle GUARDRAIL_FAILED
+  if (normalizedStatus === 'GUARDRAIL_FAILED') {
+    const errorMsg =
+      postData?.message ||
+      postData?.detail ||
+      'Enhancement guardrail check failed. Resume modifications could not be safely verified.';
+    const err = new Error(errorMsg);
+    err.status = 'GUARDRAIL_FAILED';
+    err.data = postData;
+    throw err;
+  }
+
+  // Handle NO_BRIDGEABLE_GAPS
+  if (normalizedStatus === 'NO_BRIDGEABLE_GAPS') {
+    return {
+      status: 'NO_BRIDGEABLE_GAPS',
+      jobId,
+      message:
+        postData?.message ||
+        'No bridgeable skill gaps identified for this role.',
+      ...postData,
+    };
+  }
+
+  // Handle NOT_NEEDED
+  if (normalizedStatus === 'NOT_NEEDED') {
+    return {
+      status: 'NOT_NEEDED',
+      jobId,
+      message:
+        postData?.message ||
+        'Resume enhancement is not needed for this role — your profile is already well aligned.',
+      ...postData,
+    };
+  }
+
+  // For OK, SCORED, or general 200 enhancement success, proceed to Step 2 (GET)
+  let getData = null;
+  try {
+    getData = await getEnhancedJobResume(jobId);
+  } catch (getErr) {
+    console.error('[enhanceResumeService] Error fetching enhanced resume via GET:', getErr);
+    // If GET fails but POST had text preview or partial data, preserve it or rethrow
+    if (postData?.enhancedResume || postData?.EnhResume || postData?.enhResume) {
+      getData = postData;
+    } else {
+      throw getErr;
+    }
+  }
+
+  // Extract enhanced resume text across common naming variations
+  const enhancedResumeText =
+    getData?.enhancedResume ||
+    getData?.EnhResume ||
+    getData?.enhResume ||
+    getData?.enhanced_resume ||
+    getData?.resumeText ||
+    getData?.enhancedText ||
+    getData?.text ||
+    postData?.enhancedResume ||
+    postData?.EnhResume ||
+    postData?.enhResume ||
+    '';
+
+  // Extract bridgeable gaps across common naming variations
+  const bridgeableGaps =
+    getData?.bridgeable_gaps ||
+    getData?.bridgeableGaps ||
+    getData?.gaps ||
+    getData?.skillsBridged ||
+    postData?.bridgeable_gaps ||
+    postData?.bridgeableGaps ||
+    [];
+
+  const normalizedResult = {
+    ...(typeof postData === 'object' ? postData : {}),
+    ...(typeof getData === 'object' ? getData : {}),
+    status: getData?.status || postData?.status || 'OK',
+    jobId,
+    enhancedResume: enhancedResumeText,
+    EnhResume: enhancedResumeText,
+    enhResume: enhancedResumeText,
+    enhanced_resume: enhancedResumeText,
+    bridgeable_gaps: bridgeableGaps,
+    bridgeableGaps: bridgeableGaps,
+    postData,
+    getData,
+  };
+
+  console.log('[enhanceResumeService] Final normalized enhanced resume result:', normalizedResult);
+  return normalizedResult;
 };
 
 /**
