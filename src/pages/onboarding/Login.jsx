@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
 import AuthLayout from './AuthLayout';
-import { loginUser, initiateLinkedInAuth } from '../../services/api';
+import { loginUser, initiateLinkedInAuth, getBillingStatus } from '../../services/api';
 
 const validateEmail = (email) => {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -78,14 +78,39 @@ const Login = () => {
     setIsSubmitting(true);
 
     try {
-      await loginUser({
+      const loginResponse = await loginUser({
         email: emailTrimmed,
         password: password,
         rememberMe: formData.rememberMe,
       });
 
-      // Existing user login successful -> navigate directly to Dashboard
-      navigate('/dashboard');
+      // Hit check billing status endpoint
+      let hasActivePlan = false;
+      try {
+        const token = loginResponse?.accessToken;
+        const billingStatus = await getBillingStatus(token);
+
+        hasActivePlan = Boolean(
+          billingStatus === true ||
+          billingStatus?.hasPlan === true ||
+          billingStatus?.status === true ||
+          billingStatus?.has_plan === true ||
+          billingStatus?.isSubscribed === true ||
+          billingStatus?.active === true ||
+          (typeof billingStatus?.status === 'string' &&
+            ['active', 'true', 'subscribed', 'paid'].includes(billingStatus.status.toLowerCase()))
+        );
+      } catch (billingErr) {
+        console.warn('[Login] Billing status check failed or returned no plan:', billingErr);
+        hasActivePlan = false;
+      }
+
+      // If billing status is false -> navigate to Plan, if true -> navigate to Dashboard
+      if (hasActivePlan) {
+        navigate('/dashboard');
+      } else {
+        navigate('/plan');
+      }
     } catch (err) {
       console.error('[Login] Submission error:', err);
       if (err.status === 401 || err.status === 403) {
