@@ -21,8 +21,6 @@ import {
   getDashboardData,
   getStoredDashboardData,
   getJobs,
-  getResumeMatchesStatus,
-  refreshResumeMatches,
 } from "../services/api";
 
 import dashboard1Icon from "../assets/dashboard1.svg";
@@ -482,22 +480,6 @@ const getMissingRequiredSkills = (job) => {
   return [];
 };
 
-const formatMatchTime = (isoString) => {
-  if (!isoString) return "";
-  try {
-    const date = new Date(isoString);
-    if (isNaN(date.getTime())) return String(isoString);
-    return date.toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return String(isoString);
-  }
-};
-
 const Dashboard = () => {
   const navigate = useNavigate();
   const [userName, setUserName] = useState("");
@@ -583,167 +565,11 @@ const Dashboard = () => {
 
   const dropdownRef = useRef(null);
 
-  // Dynamic ATS Resume Matches Status from GET /api/resumes/matches/status
-  const [matchStatus, setMatchStatus] = useState({
-    hasPrimaryResume: null,
-    refreshing: false,
-    matchCount: 0,
-    lastComputedAt: null,
-    progress: null,
-    lastResult: null,
-  });
-  const [isLoadingMatchStatus, setIsLoadingMatchStatus] = useState(true);
-  const [isManualCheckingStatus, setIsManualCheckingStatus] = useState(false);
-  const prevRefreshingRef = useRef(false);
-  const pollingTimeoutRef = useRef(null);
-  const hasAutoRefreshedRef = useRef(false);
-
   // Dynamic Dashboard Metrics from GET /api/dashboard
   const [dashboardMetrics, setDashboardMetrics] = useState(() => {
     return getStoredDashboardData() || null;
   });
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(!dashboardMetrics);
-
-  // Reload jobs and dashboard data when matching finishes (refreshing transitions from true -> false)
-  const reloadJobsAndDashboard = useCallback(async () => {
-    try {
-      setIsLoadingJobs(true);
-      // 1. Reload dashboard stats
-      const dashData = await getDashboard().catch(() => null);
-      if (dashData) {
-        setDashboardMetrics(dashData);
-      }
-      // 2. Reload jobs list from GET /api/jobs
-      const jobsRes = await getJobs({ sort: "best_match", page: 0, size: 20 }).catch(() => null);
-      if (jobsRes && Array.isArray(jobsRes.items) && jobsRes.items.length > 0) {
-        const transformed = jobsRes.items
-          .map((m, idx) => transformMatchToJob(m, idx))
-          .filter(Boolean);
-        setJobs(transformed);
-        const last = transformed[transformed.length - 1];
-        if (last?.job_id || last?.id) {
-          setLastJobId(last.job_id || last.id);
-        }
-      } else if (Array.isArray(dashData?.topMatches) && dashData.topMatches.length > 0) {
-        const transformed = dashData.topMatches
-          .map((m, idx) => transformMatchToJob(m, idx))
-          .filter(Boolean);
-        setJobs(transformed);
-      }
-    } catch (err) {
-      console.warn("[Dashboard] Error reloading jobs/dashboard after match refresh:", err);
-    } finally {
-      setIsLoadingJobs(false);
-    }
-  }, []);
-
-  // Poll GET /api/resumes/matches/status (with automatic background refresh)
-  const fetchMatchStatus = useCallback(
-    async (isInitial = false) => {
-      try {
-        if (isInitial) setIsLoadingMatchStatus(true);
-        const status = await getResumeMatchesStatus();
-        if (!status) return;
-
-        setMatchStatus(status);
-
-        if (status.hasPrimaryResume === false) {
-          setHasResume(false);
-        } else if (status.hasPrimaryResume === true) {
-          setHasResume(true);
-        }
-
-        // Detect transition from refreshing=true to refreshing=false -> reload GET /api/jobs and GET /api/dashboard
-        if (prevRefreshingRef.current === true && status.refreshing === false) {
-          console.log("[Dashboard] ATS matching complete. Reloading GET /api/jobs and GET /api/dashboard...");
-          reloadJobsAndDashboard();
-        }
-
-        prevRefreshingRef.current = Boolean(status.refreshing);
-
-        // Automatic Refresh without manual user click:
-        // If user has a primary resume, matching is not already running, and we haven't auto-refreshed yet
-        if (
-          isInitial &&
-          status.hasPrimaryResume === true &&
-          !status.refreshing &&
-          !hasAutoRefreshedRef.current
-        ) {
-          hasAutoRefreshedRef.current = true;
-          console.log("[Dashboard] Automatically requesting fresh ATS matching on initial load...");
-          try {
-            await refreshResumeMatches();
-            setMatchStatus((prev) => ({
-              ...prev,
-              refreshing: true,
-              progress: "Initiating automatic ATS match refresh...",
-            }));
-            prevRefreshingRef.current = true;
-            if (pollingTimeoutRef.current) clearTimeout(pollingTimeoutRef.current);
-            pollingTimeoutRef.current = setTimeout(() => {
-              fetchMatchStatus(false);
-            }, 1000);
-            return;
-          } catch (autoErr) {
-            console.warn("[Dashboard] Auto-refresh match notice:", autoErr?.message);
-          }
-        }
-
-        // Polling: While matching runs (refreshing=true), poll every 3 seconds
-        if (status.refreshing) {
-          if (pollingTimeoutRef.current) clearTimeout(pollingTimeoutRef.current);
-          pollingTimeoutRef.current = setTimeout(() => {
-            fetchMatchStatus(false);
-          }, 3000);
-        }
-      } catch (err) {
-        console.warn("[Dashboard] Could not fetch resume matches status:", err);
-      } finally {
-        if (isInitial) setIsLoadingMatchStatus(false);
-        setIsManualCheckingStatus(false);
-      }
-    },
-    [reloadJobsAndDashboard]
-  );
-
-  // Initialize and clean up polling timer
-  useEffect(() => {
-    fetchMatchStatus(true);
-    return () => {
-      if (pollingTimeoutRef.current) {
-        clearTimeout(pollingTimeoutRef.current);
-      }
-    };
-  }, [fetchMatchStatus]);
-
-  const handleManualRefreshStatus = async () => {
-    setIsManualCheckingStatus(true);
-    await fetchMatchStatus(false);
-  };
-
-  const handleRequestMatchRefresh = async () => {
-    if (isManualCheckingStatus || matchStatus.refreshing) return;
-    if (matchStatus.hasPrimaryResume === false) {
-      navigate("/profile");
-      return;
-    }
-    try {
-      setIsManualCheckingStatus(true);
-      await refreshResumeMatches();
-      setMatchStatus((prev) => ({
-        ...prev,
-        refreshing: true,
-        progress: "Matching requested...",
-      }));
-      prevRefreshingRef.current = true;
-      setTimeout(() => {
-        fetchMatchStatus(false);
-      }, 500);
-    } catch (err) {
-      console.error("[Dashboard] Error requesting match refresh:", err);
-      setIsManualCheckingStatus(false);
-    }
-  };
 
   // 1. Fetch Dynamic Dashboard Metrics & Top Matches from GET /api/dashboard
   useEffect(() => {
@@ -1282,14 +1108,11 @@ const Dashboard = () => {
   const statsCards = useMemo(() => {
     // 1. Jobs Found
     const jobsFoundVal =
-      typeof
-      typeof matchStatus?.matchCount === "number" && matchStatus.matchCount > 0
-        ? matchStatus.matchCount
-        : (dashboardMetrics?.jobsFound === "number"
+      typeof dashboardMetrics?.jobsFound === "number"
         ? dashboardMetrics.jobsFound
         : jobs.length > 0
         ? jobs.length
-        : 0);
+        : 0;
 
     // 2. Qualified Matches
     const qualifiedMatchesVal =
@@ -1330,15 +1153,12 @@ const Dashboard = () => {
         id: "jobs-found",
         title: "Jobs Found",
         value: Number(jobsFoundVal).toLocaleString(),
-        supportingText: matchStatus?.lastComputedAt
-          ? `Computed ${formatMatchTime(matchStatus.lastComputedAt)}`
-          : jobsFoundVal > 0
+        supportingText:
+          jobsFoundVal > 0
             ? "New jobs in the last 7 days"
-            : matchStatus?.hasPrimaryResume === false
-              ? "Primary resume required"
-              : hasResume
-                ? "No matches found"
-                : "Upload resume to find matches",
+            : hasResume
+              ? "No matches found"
+              : "Upload resume to find matches",
         iconBg: "#EFF6FF",
         icon: dashboard1Icon,
       },
@@ -1367,7 +1187,7 @@ const Dashboard = () => {
         icon: dashboard4Icon,
       },
     ];
-  }, [matchStatus, dashboardMetrics, jobs, billingInfo, applications, hasResume]);
+  }, [dashboardMetrics, jobs, billingInfo, applications, hasResume]);
 
   // Dynamic Application Tabs with Counts
   const applicationTabs = useMemo(() => {
@@ -1550,140 +1370,15 @@ const Dashboard = () => {
         {/* Dashboard Main Content */}
         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-7 flex flex-col gap-6 w-full bg-[#F8FAFC]">
 
-          {/* Welcome Header & Match Status Indicator */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="flex flex-col gap-1">
-              <h1 className="text-[20px] md:text-[22px] font-bold text-black tracking-tight">
-                Welcome back, {userName || "User"}!
-              </h1>
-              <p className="text-[13px] text-[#64748B]">
-                Your job search is running. We're finding, matching and applying to the best opportunities for you.
-              </p>
-            </div>
-
-            {/* ATS Match Status Badge & Manual Refresh */}
-            {matchStatus.hasPrimaryResume && (
-              <div className="flex items-center gap-2 self-start sm:self-auto">
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-white border border-[#E2E8F0] shadow-xs text-[#334155]">
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      matchStatus.refreshing
-                        ? "bg-amber-500 animate-ping"
-                        : "bg-emerald-500"
-                    }`}
-                  />
-                  <span>
-                    {matchStatus.refreshing
-                      ? "ATS Matching Active"
-                      : matchStatus.lastComputedAt
-                        ? `Synced ${formatMatchTime(matchStatus.lastComputedAt)}`
-                        : "Matches Ready"}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleRequestMatchRefresh}
-                  disabled={isManualCheckingStatus || matchStatus.refreshing}
-                  title="Request fresh ATS match run"
-                  className="px-3 py-1.5 rounded-xl bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] text-xs font-semibold text-[#0F172A] flex items-center gap-1.5 transition-all shadow-2xs disabled:opacity-60 cursor-pointer"
-                >
-                  <svg
-                    className={`w-3.5 h-3.5 ${
-                      isManualCheckingStatus || matchStatus.refreshing
-                        ? "animate-spin text-[#6366F1]"
-                        : "text-[#64748B]"
-                    }`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                    />
-                  </svg>
-                  <span>
-                    {isManualCheckingStatus
-                      ? "Requesting..."
-                      : matchStatus.refreshing
-                        ? "Matching Active..."
-                        : "Refresh Matches"}
-                  </span>
-                </button>
-              </div>
-            )}
+          {/* Welcome Header */}
+          <div className="flex flex-col gap-1">
+            <h1 className="text-[20px] md:text-[22px] font-bold text-black tracking-tight">
+              Welcome back, {userName || "User"}!
+            </h1>
+            <p className="text-[13px] text-[#64748B]">
+              Your job search is running. We're finding, matching and applying to the best opportunities for you.
+            </p>
           </div>
-
-          {/* Conditional Match Status Banner: No Primary Resume */}
-          {matchStatus.hasPrimaryResume === false && (
-            <div className="w-full p-4 rounded-[16px] bg-amber-50 border border-amber-200/80 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in duration-300">
-              <div className="flex items-start gap-3">
-                <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center shrink-0 text-amber-600 mt-0.5 sm:mt-0">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-amber-900">Primary Resume Required</h3>
-                  <p className="text-xs text-amber-700 mt-0.5">
-                    No primary resume detected. Please set or upload a primary resume in your profile to enable automated ATS matching and job recommendations.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => navigate("/profile")}
-                className="px-4 py-2 text-xs font-semibold text-white bg-[#6366F1] hover:bg-[#4F46E5] rounded-xl shadow-xs transition-all whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                Go to Profile & Resumes
-              </button>
-            </div>
-          )}
-
-          {/* Conditional Match Status Banner: Live Refreshing Progress */}
-          {matchStatus.refreshing && (
-            <div className="w-full p-4.5 rounded-[18px] bg-gradient-to-r from-indigo-50/90 via-purple-50/80 to-blue-50/90 border border-indigo-200/80 shadow-xs flex flex-col gap-2.5 animate-in fade-in duration-300">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-9 h-9 rounded-xl bg-[#6366F1]/10 flex items-center justify-center text-[#6366F1] shrink-0">
-                    <svg className="w-4.5 h-4.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-sm font-bold text-[#0F172A]">ATS Job Matching In Progress</h3>
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-100 text-indigo-700">
-                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-ping" />
-                        Scanning Live
-                      </span>
-                    </div>
-                    <p className="text-xs text-[#64748B] mt-0.5 truncate">
-                      {matchStatus.progress || "Fetching and scoring matching jobs from ATS..."}
-                    </p>
-                  </div>
-                </div>
-                <div className="hidden sm:flex items-center text-xs font-medium text-indigo-600 bg-white/80 px-3 py-1.5 rounded-xl border border-indigo-100 shadow-xs shrink-0">
-                  Polling updates...
-                </div>
-              </div>
-              <div className="w-full bg-indigo-100/70 rounded-full h-1.5 overflow-hidden">
-                <div className="bg-[#6366F1] h-1.5 rounded-full animate-pulse w-3/4 transition-all duration-500" />
-              </div>
-            </div>
-          )}
 
           {/* 1. Dashboard Statistics Cards (Dynamic From API) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4.5 w-full">
