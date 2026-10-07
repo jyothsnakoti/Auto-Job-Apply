@@ -5,24 +5,18 @@ import Header from "../components/Header";
 import EnhancedResumeViewer from "../components/EnhancedResumeViewer";
 import {
   getJobs,
-  getMoreJobsForResume,
   getPrimaryResumeId,
   getOnboardingState,
-  getMoreJobs,
-  getNMoreJDsForResume,
   getStoredResumeId,
   getStoredJobMatches,
   getEnhancedResume,
-  getCandidateId,
+  downloadEnhancedResume,
   getJobId,
+  getJobById,
   getScoreForEnhancedResume,
   checkUserHasResume,
 } from "../services/api";
 
-import googleLogo from "../assets/google.svg";
-import microsoftLogo from "../assets/microsoft.svg";
-import amazonLogo from "../assets/amazon.svg";
-import shopifyLogo from "../assets/shopify.svg";
 import aiLogo from "../assets/ai.svg";
 import mapIcon from "../assets/map.svg";
 import tickIcon from "../assets/tick.svg";
@@ -48,14 +42,6 @@ const dateOptions = [
 
 const workplaceOptions = ["Remote", "On-site", "Hybrid"];
 
-const degreeOptions = [
-  "Bachelor's Degree",
-  "Master's Degree",
-  "Doctorate (PhD)",
-  "Associate Degree",
-  "No Degree Required",
-];
-
 const experienceOptions = [
   "Entry Level (0-1 yrs)",
   "Junior (1-3 yrs)",
@@ -64,8 +50,7 @@ const experienceOptions = [
   "Lead / Principal (8+ yrs)",
 ];
 
-const jobTypeOptions = ["Full-time", "Part-time", "Contract", "Internship"];
-const employmentTypeOptions = [
+const jobTypeOptions = [
   "Full-time",
   "Part-time",
   "Contract",
@@ -249,28 +234,33 @@ const transformMatchToJob = (match, index = 0) => {
     match.matchScore !== undefined && match.matchScore !== null
       ? match.matchScore
       : typeof match.overall_score === "number"
-      ? match.overall_score
-      : typeof match.score_data?.overall_score === "number"
-        ? match.score_data.overall_score
-        : typeof match.score === "number"
-          ? match.score
-          : typeof match.overall_score === "string" &&
-            !isNaN(Number(match.overall_score)) &&
-            match.overall_score.trim() !== ""
-            ? Number(match.overall_score)
-            : null;
+        ? match.overall_score
+        : typeof match.score_data?.overall_score === "number"
+          ? match.score_data.overall_score
+          : typeof match.score === "number"
+            ? match.score
+            : typeof match.overall_score === "string" &&
+              !isNaN(Number(match.overall_score)) &&
+              match.overall_score.trim() !== ""
+              ? Number(match.overall_score)
+              : null;
 
   const matchPercent =
     rawScore !== null && !isNaN(rawScore)
       ? Math.min(100, Math.max(1, Math.round(Number(rawScore))))
       : null;
 
-  let logo = aiLogo;
-  const compLower = (company || "").toLowerCase();
-  if (compLower.includes("google")) logo = googleLogo;
-  else if (compLower.includes("microsoft")) logo = microsoftLogo;
-  else if (compLower.includes("amazon") || compLower.includes("luna")) logo = amazonLogo;
-  else if (compLower.includes("shopify")) logo = shopifyLogo;
+  let logo = match.logo || match.companyLogo || match.logo_url || null;
+  if (
+    typeof logo === "string" &&
+    (logo.includes("amazon") ||
+      logo.includes("ai.svg") ||
+      logo.includes("google.svg") ||
+      logo.includes("microsoft.svg") ||
+      logo.includes("shopify.svg"))
+  ) {
+    logo = null;
+  }
 
   // Location & Country
   let location = cleanHtmlText(match.location || match.city || "");
@@ -391,6 +381,7 @@ const transformMatchToJob = (match, index = 0) => {
     postedAt: match.postedAt || null,
     match: matchText,
     matchPercent,
+    displayScore,
     rawScore,
     matchScore: rawScore,
     matchColor,
@@ -411,7 +402,65 @@ const BrowseJobs = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [selectedJobModal, setSelectedJobModal] = useState(null);
+  const [isLoadingJobDetails, setIsLoadingJobDetails] = useState(false);
   const [isJobSaved, setIsJobSaved] = useState(false);
+
+  // Helper to open job modal and fetch full job details from GET /api/jobs/{originalJobId}
+  const handleOpenJobModal = async (job) => {
+    if (!job) return;
+    setSelectedJobModal(job);
+
+    const originalJobId = getJobId(job);
+    console.log("[BrowseJobs] Opening job modal. Original Job ID:", originalJobId);
+
+    if (originalJobId) {
+      try {
+        setIsLoadingJobDetails(true);
+        console.log(`[BrowseJobs] Fetching job details from GET /api/jobs/${originalJobId}...`);
+        const details = await getJobById(originalJobId);
+        console.log(`[BrowseJobs] GET /api/jobs/${originalJobId} details response:`, details);
+
+        if (details && typeof details === "object") {
+          setSelectedJobModal((prevModal) => {
+            if (!prevModal) return prevModal;
+            const currentModalId = getJobId(prevModal);
+            if (currentModalId === originalJobId) {
+              return {
+                ...prevModal,
+                ...details,
+                title: details.title || details.jobTitle || prevModal.title,
+                company: details.companyName || details.company || prevModal.company,
+                companyDomain: details.companyDomain || prevModal.companyDomain,
+                location: details.location || prevModal.location,
+                fullLocation: details.location || details.fullLocation || prevModal.fullLocation,
+                description: details.description || details.jobDescription || prevModal.description,
+                preview: details.preview || details.description || details.jobDescription || prevModal.preview,
+                responsibilities: Array.isArray(details.responsibilities) && details.responsibilities.length > 0
+                  ? details.responsibilities
+                  : prevModal.responsibilities,
+                requiredSkills: Array.isArray(details.requiredSkills) && details.requiredSkills.length > 0
+                  ? details.requiredSkills
+                  : (Array.isArray(details.skills) ? details.skills : prevModal.requiredSkills),
+                preferredSkills: Array.isArray(details.preferredSkills) && details.preferredSkills.length > 0
+                  ? details.preferredSkills
+                  : prevModal.preferredSkills,
+                experience: details.experience || details.requiredExperience || prevModal.experience,
+                workMode: details.workplace || details.workMode || prevModal.workMode,
+                type: details.employmentType || details.type || prevModal.type,
+                salary: details.salary || details.salaryRange || prevModal.salary,
+                applyUrl: details.applyUrl || details.jobUrl || details.url || prevModal.applyUrl,
+              };
+            }
+            return prevModal;
+          });
+        }
+      } catch (err) {
+        console.warn(`[BrowseJobs] GET /api/jobs/${originalJobId} fetch warning:`, err?.message);
+      } finally {
+        setIsLoadingJobDetails(false);
+      }
+    }
+  };
 
   // Dynamic Jobs State (purely live data from backend)
   const [jobsList, setJobsList] = useState([]);
@@ -426,6 +475,7 @@ const BrowseJobs = () => {
 
   // Pagination & Sorting State for GET /api/jobs
   const [currentPage, setCurrentPage] = useState(0);
+  const [activePage, setActivePage] = useState(1);
   const [pageSize] = useState(20);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -433,6 +483,7 @@ const BrowseJobs = () => {
 
   // Enhance Resume States
   const [isEnhancing, setIsEnhancing] = useState(false);
+  const [isDownloadingResume, setIsDownloadingResume] = useState(false);
   const [enhanceError, setEnhanceError] = useState(null);
   const [enhanceSuccess, setEnhanceSuccess] = useState(null);
   const [enhancedResultsMap, setEnhancedResultsMap] = useState({});
@@ -448,12 +499,10 @@ const BrowseJobs = () => {
   const [selectedWorkplace, setSelectedWorkplace] = useState([]);
   const [selectedCompanies, setSelectedCompanies] = useState([]);
   const [companySearch, setCompanySearch] = useState("");
-  const [selectedDegrees, setSelectedDegrees] = useState([]);
   const [selectedExperience, setSelectedExperience] = useState("");
   const [selectedRoles, setSelectedRoles] = useState([]);
   const [selectedJobTypes, setSelectedJobTypes] = useState([]);
   const [sponsorsVisa, setSponsorsVisa] = useState(false);
-  const [selectedEmploymentTypes, setSelectedEmploymentTypes] = useState([]);
 
   const dropdownRef = useRef(null);
 
@@ -503,7 +552,6 @@ const BrowseJobs = () => {
         const activeRoles = overrideFilters?.roles ?? selectedRoles;
         const activeWorkplaces = overrideFilters?.workplace ?? selectedWorkplace;
         const activeJobTypes = overrideFilters?.jobTypes ?? selectedJobTypes;
-        const activeEmpTypes = overrideFilters?.employmentTypes ?? selectedEmploymentTypes;
         const activeDate = overrideFilters?.date ?? selectedDate;
 
         // Convert activeDate to postedWithinDays
@@ -523,11 +571,7 @@ const BrowseJobs = () => {
           location: activeLocs.length > 0 ? activeLocs[0] : undefined,
           role: activeRoles.length > 0 ? activeRoles[0] : undefined,
           workplace: activeWorkplaces.length > 0 ? activeWorkplaces[0].toLowerCase() : undefined,
-          employmentType: activeEmpTypes.length > 0
-            ? activeEmpTypes[0].toLowerCase()
-            : activeJobTypes.length > 0
-            ? activeJobTypes[0].toLowerCase()
-            : undefined,
+          employmentType: activeJobTypes.length > 0 ? activeJobTypes[0].toLowerCase() : undefined,
           postedWithinDays,
           sort: sort || "best_match",
           page,
@@ -549,6 +593,7 @@ const BrowseJobs = () => {
         setTotalPages(resTotalPages);
 
         if (resetList) {
+          setActivePage(1);
           if (transformed.length > 0) {
             setJobsList(transformed);
           } else {
@@ -567,6 +612,9 @@ const BrowseJobs = () => {
             const fresh = transformed.filter((j) => !existingIds.has(j.job_id || j.jobId || j.id || j.JDid));
             return [...prev, ...fresh];
           });
+          // Switch activePage to the newly loaded page
+          const newlyLoadedPage = resPage + 1;
+          setActivePage(newlyLoadedPage);
         }
 
         const hasMore = resPage + 1 < resTotalPages && items.length > 0;
@@ -597,7 +645,6 @@ const BrowseJobs = () => {
       selectedRoles,
       selectedWorkplace,
       selectedJobTypes,
-      selectedEmploymentTypes,
       selectedDate,
       pageSize,
     ]
@@ -687,12 +734,28 @@ const BrowseJobs = () => {
     setTimeout(() => setCopiedResume(false), 2500);
   };
 
-  const handleDownloadEnhancedResume = (text, job) => {
+  const handleDownloadEnhancedResume = async (text, job) => {
+    const targetJob = job || selectedJobModal;
+    const jobId = getJobId(targetJob);
+    const jobTitle = (targetJob?.title || "Enhanced_Resume").replace(/[^a-zA-Z0-9_-]/g, "_");
+    const fallbackFilename = `${jobTitle}_Resume.docx`;
+
+    if (jobId) {
+      try {
+        setIsDownloadingResume(true);
+        await downloadEnhancedResume(jobId, fallbackFilename);
+        setIsDownloadingResume(false);
+        return;
+      } catch (err) {
+        console.warn("[BrowseJobs] API download enhanced resume failed, fallback to text blob:", err);
+        setIsDownloadingResume(false);
+      }
+    }
+
     if (!text) return;
     const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    const jobTitle = (job?.title || "Enhanced_Resume").replace(/[^a-zA-Z0-9_-]/g, "_");
     link.href = url;
     link.download = `${jobTitle}_Resume.txt`;
     document.body.appendChild(link);
@@ -784,19 +847,19 @@ const BrowseJobs = () => {
 
   const handleClear = () => {
     setSearchQuery("");
-    setSelectedDate("Last 7 days");
+    setSelectedDate("All time");
     setSelectedLocations([]);
     setLocationSearch("");
     setSelectedWorkplace([]);
     setSelectedCompanies([]);
     setCompanySearch("");
-    setSelectedDegrees([]);
     setSelectedExperience("");
     setSelectedRoles([]);
     setSelectedJobTypes([]);
     setSponsorsVisa(false);
-    setSelectedEmploymentTypes([]);
     setSortOption("best_match");
+    setActiveDropdown(null);
+    setActivePage(1);
     fetchJobsData({
       page: 0,
       resetList: true,
@@ -807,8 +870,7 @@ const BrowseJobs = () => {
         roles: [],
         workplace: [],
         jobTypes: [],
-        employmentTypes: [],
-        date: "Last 7 days",
+        date: "All time",
       },
     });
   };
@@ -919,6 +981,9 @@ const BrowseJobs = () => {
     selectedJobTypes,
   ]);
 
+  // Derived total pages for local page switching
+  const totalClientPages = Math.max(1, Math.ceil(filteredJobs.length / 20));
+
   return (
     <div className="flex h-screen overflow-hidden bg-[#F8FAFC]">
       {/* Left Sidebar */}
@@ -982,14 +1047,6 @@ const BrowseJobs = () => {
                 <span className="text-base leading-none">✕</span>
                 <span>Clear</span>
               </button>
-
-              <button
-                type="button"
-                onClick={() => fetchJobsData({ page: 0, resetList: true })}
-                className="h-[40px] px-5 text-[13.5px] font-semibold text-white bg-[#4F46E5] hover:bg-[#4338CA] rounded-[10px] active:scale-[0.99] transition-all cursor-pointer whitespace-nowrap shadow-2xs"
-              >
-                Apply
-              </button>
             </div>
 
             {/* Second Row: Filter Buttons */}
@@ -1000,8 +1057,8 @@ const BrowseJobs = () => {
                   type="button"
                   onClick={() => toggleDropdown("date")}
                   className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "date" || selectedDate !== "All time"
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
                     }`}
                 >
                   <span>Date</span>
@@ -1029,14 +1086,14 @@ const BrowseJobs = () => {
                             setActiveDropdown(null);
                           }}
                           className={`flex items-center gap-2.5 px-3 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] ${isSelected
-                              ? "font-semibold text-[#0F172A] bg-slate-50"
-                              : "text-slate-700"
+                            ? "font-semibold text-[#0F172A] bg-slate-50"
+                            : "text-slate-700"
                             }`}
                         >
                           <div
                             className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${isSelected
-                                ? "border-[#0F4C3A] bg-[#0F4C3A] text-white"
-                                : "border-slate-300"
+                              ? "border-[#0F4C3A] bg-[#0F4C3A] text-white"
+                              : "border-slate-300"
                               }`}
                           >
                             {isSelected && (
@@ -1065,8 +1122,8 @@ const BrowseJobs = () => {
                   type="button"
                   onClick={() => toggleDropdown("location")}
                   className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "location" || selectedLocations.length > 0
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
                     }`}
                 >
                   <span>Location</span>
@@ -1130,8 +1187,8 @@ const BrowseJobs = () => {
                               >
                                 <div
                                   className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
-                                      ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                                      : "border-slate-300 bg-white"
+                                    ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
+                                    : "border-slate-300 bg-white"
                                     }`}
                                 >
                                   {isChecked && (
@@ -1162,8 +1219,8 @@ const BrowseJobs = () => {
                   type="button"
                   onClick={() => toggleDropdown("role")}
                   className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "role" || selectedRoles.length > 0
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
                     }`}
                 >
                   <span>Role</span>
@@ -1198,8 +1255,8 @@ const BrowseJobs = () => {
                           >
                             <div
                               className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
-                                  ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                                  : "border-slate-300 bg-white"
+                                ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
+                                : "border-slate-300 bg-white"
                                 }`}
                             >
                               {isChecked && (
@@ -1229,8 +1286,8 @@ const BrowseJobs = () => {
                   type="button"
                   onClick={() => toggleDropdown("jobType")}
                   className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "jobType" || selectedJobTypes.length > 0
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
                     }`}
                 >
                   <span>Job Type</span>
@@ -1260,8 +1317,8 @@ const BrowseJobs = () => {
                         >
                           <div
                             className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
-                                ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                                : "border-slate-300 bg-white"
+                              ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
+                              : "border-slate-300 bg-white"
                               }`}
                           >
                             {isChecked && (
@@ -1290,8 +1347,8 @@ const BrowseJobs = () => {
                   type="button"
                   onClick={() => toggleDropdown("workplace")}
                   className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "workplace" || selectedWorkplace.length > 0
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
                     }`}
                 >
                   <span>Workplace</span>
@@ -1321,8 +1378,8 @@ const BrowseJobs = () => {
                         >
                           <div
                             className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
-                                ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                                : "border-slate-300 bg-white"
+                              ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
+                              : "border-slate-300 bg-white"
                               }`}
                           >
                             {isChecked && (
@@ -1350,8 +1407,8 @@ const BrowseJobs = () => {
                 type="button"
                 onClick={() => setSponsorsVisa(!sponsorsVisa)}
                 className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${sponsorsVisa
-                    ? "border-slate-400 bg-slate-100 text-[#0F172A] font-medium"
-                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                  ? "border-slate-400 bg-slate-100 text-[#0F172A] font-medium"
+                  : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
                   }`}
               >
                 <span>Sponsors Visa</span>
@@ -1363,8 +1420,8 @@ const BrowseJobs = () => {
                   type="button"
                   onClick={() => toggleDropdown("companies")}
                   className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "companies" || selectedCompanies.length > 0
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
                     }`}
                 >
                   <span>Companies</span>
@@ -1428,8 +1485,8 @@ const BrowseJobs = () => {
                               >
                                 <div
                                   className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
-                                      ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                                      : "border-slate-300 bg-white"
+                                    ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
+                                    : "border-slate-300 bg-white"
                                     }`}
                                 >
                                   {isChecked && (
@@ -1454,75 +1511,14 @@ const BrowseJobs = () => {
                 )}
               </div>
 
-              {/* Degree Level Dropdown */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => toggleDropdown("degree")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "degree" || selectedDegrees.length > 0
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                    }`}
-                >
-                  <span>Degree Level</span>
-                  <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "degree" ? "rotate-180" : ""
-                      }`}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                  >
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
-                </button>
-
-                {activeDropdown === "degree" && (
-                  <div className="absolute top-full left-0 mt-2 w-[210px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2.5 z-50 flex flex-col gap-1">
-                    {degreeOptions.map((deg) => {
-                      const isChecked = selectedDegrees.includes(deg);
-                      return (
-                        <div
-                          key={deg}
-                          onClick={() =>
-                            toggleCheckbox(selectedDegrees, setSelectedDegrees, deg)
-                          }
-                          className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
-                        >
-                          <div
-                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
-                                ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                                : "border-slate-300 bg-white"
-                              }`}
-                          >
-                            {isChecked && (
-                              <svg
-                                className="w-2.5 h-2.5"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="3.5"
-                              >
-                                <polyline points="20 6 9 17 4 12" />
-                              </svg>
-                            )}
-                          </div>
-                          <span>{deg}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
               {/* Max Experience Dropdown */}
               <div className="relative">
                 <button
                   type="button"
                   onClick={() => toggleDropdown("experience")}
                   className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "experience" || selectedExperience !== ""
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
                     }`}
                 >
                   <span>Max Experience</span>
@@ -1550,14 +1546,14 @@ const BrowseJobs = () => {
                             setActiveDropdown(null);
                           }}
                           className={`flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] ${isSelected
-                              ? "font-semibold text-[#0F172A] bg-slate-50"
-                              : "text-slate-700"
+                            ? "font-semibold text-[#0F172A] bg-slate-50"
+                            : "text-slate-700"
                             }`}
                         >
                           <div
                             className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${isSelected
-                                ? "bg-[#0F4C3A] text-white"
-                                : "border border-slate-300"
+                              ? "bg-[#0F4C3A] text-white"
+                              : "border border-slate-300"
                               }`}
                           >
                             {isSelected && (
@@ -1580,25 +1576,23 @@ const BrowseJobs = () => {
                 )}
               </div>
 
-              {/* 11. Sort Dropdown (Best Match vs Newest) */}
+              {/* Sort Dropdown (Best Match vs Newest) */}
               <div className="relative sm:ml-auto">
                 <button
                   type="button"
                   onClick={() => toggleDropdown("sort")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "sort" || sortOption !== "best_match"
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "sort" || sortOption !== "best_match"
+                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                    }`}
                 >
                   <span className="text-[#64748B]">Sort:</span>
                   <span className="font-semibold text-[#0F172A]">
                     {sortOption === "newest" ? "Newest First" : "Best ATS Match"}
                   </span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "sort" ? "rotate-180" : ""
-                    }`}
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "sort" ? "rotate-180" : ""
+                      }`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1616,11 +1610,10 @@ const BrowseJobs = () => {
                         setActiveDropdown(null);
                         fetchJobsData({ page: 0, resetList: true, customSort: "best_match" });
                       }}
-                      className={`flex items-center justify-between px-3 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] ${
-                        sortOption === "best_match"
-                          ? "font-semibold text-[#0F172A] bg-slate-50"
-                          : "text-slate-700"
-                      }`}
+                      className={`flex items-center justify-between px-3 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] ${sortOption === "best_match"
+                        ? "font-semibold text-[#0F172A] bg-slate-50"
+                        : "text-slate-700"
+                        }`}
                     >
                       <span>Best ATS Match</span>
                       {sortOption === "best_match" && (
@@ -1633,11 +1626,10 @@ const BrowseJobs = () => {
                         setActiveDropdown(null);
                         fetchJobsData({ page: 0, resetList: true, customSort: "newest" });
                       }}
-                      className={`flex items-center justify-between px-3 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] ${
-                        sortOption === "newest"
-                          ? "font-semibold text-[#0F172A] bg-slate-50"
-                          : "text-slate-700"
-                      }`}
+                      className={`flex items-center justify-between px-3 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] ${sortOption === "newest"
+                        ? "font-semibold text-[#0F172A] bg-slate-50"
+                        : "text-slate-700"
+                        }`}
                     >
                       <span>Newest First</span>
                       {sortOption === "newest" && (
@@ -1723,152 +1715,193 @@ const BrowseJobs = () => {
                     </button>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4.5 w-full">
-                    {filteredJobs.map((job, idx) => (
-                      <div
-                        key={job.id || job.job_id || job.jobId || `job-${idx}`}
-                        onClick={() => setSelectedJobModal(job)}
-                        className="bg-white rounded-[20px] border border-[#E2E8F0] p-5 flex flex-col justify-between shadow-[0_1px_3px_rgba(15,23,42,0.02)] hover:shadow-md hover:border-slate-300 transition-all duration-200 min-h-[260px] cursor-pointer group"
-                      >
-                        <div>
-                          {/* Top Header: Logo + Match Badge */}
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="w-[40px] h-[40px] rounded-[10px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2">
-                              <img
-                                src={job.logo || aiLogo}
-                                alt={job.company}
-                                className="w-full h-full object-contain"
-                              />
-                            </div>
-                            <span
-                              className={`text-[12px] font-semibold px-2.5 py-0.5 rounded-full ${job.matchColor || "bg-[#EEF2FF] text-[#4F46E5]"}`}
-                            >
-                              {job.match || (job.matchPercent ? `${job.matchPercent}% match` : "ATS Match")}
-                            </span>
-                          </div>
-
-                          {/* Job Title & Company */}
-                          <div className="mt-3.5">
-                            <h3 className="text-[15px] font-bold text-[#0F172A] tracking-tight leading-snug group-hover:text-[#4F46E5] transition-colors line-clamp-2">
-                              {job.title}
-                            </h3>
-                            <div className="flex items-center gap-1.5 text-[13px] text-[#64748B] font-normal mt-1 flex-wrap">
-                              <span className="font-medium text-slate-700 truncate max-w-[140px]">{job.company}</span>
-                              {job.companyDomain && (
-                                <span className="text-[11px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded font-mono">
-                                  {job.companyDomain}
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4.5 w-full">
+                      {filteredJobs
+                        .slice((activePage - 1) * 20, activePage * 20)
+                        .map((job, idx) => (
+                          <div
+                            key={job.id || job.job_id || job.jobId || `job-${idx}`}
+                            onClick={() => handleOpenJobModal(job)}
+                            className="bg-white rounded-[20px] border border-[#E2E8F0] p-5 flex flex-col justify-between shadow-[0_1px_3px_rgba(15,23,42,0.02)] hover:shadow-md hover:border-slate-300 transition-all duration-200 min-h-[260px] cursor-pointer group"
+                          >
+                            <div>
+                              {/* Top Header: Logo + Match Badge */}
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="w-[40px] h-[40px] rounded-[10px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2">
+                                  <img
+                                    src={job.logo || aiLogo}
+                                    alt={job.company}
+                                    className="w-full h-full object-contain"
+                                  />
+                                </div>
+                                <span
+                                  className={`text-[12px] font-semibold px-2.5 py-0.5 rounded-full ${job.matchColor || "bg-[#EEF2FF] text-[#4F46E5]"}`}
+                                >
+                                  {job.match || (job.matchPercent ? `${job.matchPercent}% match` : "ATS Match")}
                                 </span>
-                              )}
-                              <VerifiedTick />
+                              </div>
+
+                              {/* Job Title & Company */}
+                              <div className="mt-3.5">
+                                <h3 className="text-[15px] font-bold text-[#0F172A] tracking-tight leading-snug group-hover:text-[#4F46E5] transition-colors line-clamp-2">
+                                  {job.title}
+                                </h3>
+                                <div className="flex items-center gap-1.5 text-[13px] text-[#64748B] font-normal mt-1 flex-wrap">
+                                  <span className="font-medium text-slate-700 truncate max-w-[140px]">{job.company}</span>
+                                  {job.companyDomain && (
+                                    <span className="text-[11px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded font-mono">
+                                      {job.companyDomain}
+                                    </span>
+                                  )}
+                                  <VerifiedTick />
+                                </div>
+                              </div>
+
+                              {/* Location, Workplace & Type Pills */}
+                              <div className="mt-3 flex flex-col gap-1.5">
+                                <div className="flex items-center gap-1.5 text-[12.5px] text-[#64748B]">
+                                  <img
+                                    src={mapIcon}
+                                    alt=""
+                                    className="w-[10px] h-[12px] object-contain shrink-0"
+                                  />
+                                  <span className="truncate">{job.fullLocation || job.location}</span>
+                                </div>
+
+                                <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                                  {job.workMode && (
+                                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 capitalize">
+                                      {job.workMode}
+                                    </span>
+                                  )}
+                                  {job.type && (
+                                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 capitalize">
+                                      {job.type}
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="text-[11.5px] text-[#94A3B8] mt-0.5">
+                                  {job.posted}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="flex items-center gap-2.5 pt-4 mt-auto">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenJobModal(job);
+                                }}
+                                className="flex-1 h-[36px] rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] font-medium text-[#334155] hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-center"
+                              >
+                                View Details
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenJobModal(job);
+                                }}
+                                className="flex-1 h-[36px] rounded-[10px] bg-[#4F46E5] hover:bg-[#4338CA] text-[13px] font-medium text-white shadow-xs transition-colors cursor-pointer flex items-center justify-center active:scale-[0.99]"
+                              >
+                                Apply Now
+                              </button>
                             </div>
                           </div>
+                        ))}
+                    </div>
 
-                          {/* Location, Workplace & Type Pills */}
-                          <div className="mt-3 flex flex-col gap-1.5">
-                            <div className="flex items-center gap-1.5 text-[12.5px] text-[#64748B]">
-                              <img
-                                src={mapIcon}
-                                alt=""
-                                className="w-[10px] h-[12px] object-contain shrink-0"
-                              />
-                              <span className="truncate">{job.fullLocation || job.location}</span>
-                            </div>
-
-                            <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                              {job.workMode && (
-                                <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 capitalize">
-                                  {job.workMode}
-                                </span>
-                              )}
-                              {job.type && (
-                                <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 capitalize">
-                                  {job.type}
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="text-[11.5px] text-[#94A3B8] mt-0.5">
-                              {job.posted}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="flex items-center gap-2.5 pt-4 mt-auto">
+                    {/* Pagination Bar with Page Numbers and Load More Button */}
+                    <div className="flex flex-col items-center justify-center pt-6 pb-8 gap-3">
+                      {loadMoreError && (
+                        <div className="text-[13px] text-rose-600 bg-rose-50 border border-rose-200 px-4 py-2 rounded-lg flex items-center gap-2">
+                          <span>{loadMoreError}</span>
                           <button
                             type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedJobModal(job);
-                            }}
-                            className="flex-1 h-[36px] rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] font-medium text-[#334155] hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-center"
+                            onClick={handleLoadMoreJobs}
+                            className="underline text-rose-700 font-medium hover:text-rose-900 cursor-pointer ml-1"
                           >
-                            View Details
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedJobModal(job);
-                            }}
-                            className="flex-1 h-[36px] rounded-[10px] bg-[#4F46E5] hover:bg-[#4338CA] text-[13px] font-medium text-white shadow-xs transition-colors cursor-pointer flex items-center justify-center active:scale-[0.99]"
-                          >
-                            Apply Now
+                            Retry
                           </button>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      )}
 
-                {/* Load More Button & Status */}
-                {jobsList.length > 0 && (
-                  <div className="flex flex-col items-center justify-center pt-4 pb-8 gap-2.5">
-                    {loadMoreError && (
-                      <div className="text-[13px] text-rose-600 bg-rose-50 border border-rose-200 px-4 py-2 rounded-lg flex items-center gap-2">
-                        <span>{loadMoreError}</span>
+                      <div className="flex items-center gap-2 flex-wrap justify-center">
+                        {/* Prev Page Button */}
                         <button
                           type="button"
-                          onClick={handleLoadMoreJobs}
-                          className="underline text-rose-700 font-medium hover:text-rose-900 cursor-pointer ml-1"
+                          onClick={() => setActivePage((p) => Math.max(1, p - 1))}
+                          disabled={activePage === 1}
+                          className="w-9 h-9 rounded-xl border border-[#E2E8F0] bg-white hover:bg-slate-50 disabled:opacity-40 text-slate-700 text-sm font-semibold flex items-center justify-center transition-all cursor-pointer disabled:cursor-not-allowed shadow-2xs"
                         >
-                          Retry
+                          ‹
                         </button>
-                      </div>
-                    )}
-                    {hasMoreJobs ? (
-                      <button
-                        type="button"
-                        onClick={handleLoadMoreJobs}
-                        disabled={isLoadingMore}
-                        className="h-[44px] px-6 rounded-[12px] bg-[#4F46E5] hover:bg-[#4338CA] disabled:bg-[#818CF8] text-white text-[13.5px] font-semibold flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer active:scale-[0.99] disabled:cursor-not-allowed"
-                      >
-                        {isLoadingMore ? (
-                          <>
-                            <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-                            </svg>
-                            <span>Loading more jobs...</span>
-                          </>
-                        ) : (
-                          <>
-                            <span>Load More Jobs</span>
-                            <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full font-mono">
-                              +{pageSize}
-                            </span>
-                          </>
+
+                        {/* Page Numbers */}
+                        {Array.from({ length: totalClientPages }, (_, i) => i + 1).map((pg) => {
+                          const isActive = activePage === pg;
+                          return (
+                            <button
+                              key={pg}
+                              type="button"
+                              onClick={() => setActivePage(pg)}
+                              className={`w-9 h-9 rounded-xl text-xs font-semibold flex items-center justify-center transition-all cursor-pointer ${isActive
+                                ? "bg-[#4F46E5] text-white shadow-xs scale-105"
+                                : "bg-white border border-[#E2E8F0] text-slate-700 hover:bg-slate-50 shadow-2xs"
+                                }`}
+                            >
+                              {pg}
+                            </button>
+                          );
+                        })}
+
+                        {/* Next Page Button */}
+                        <button
+                          type="button"
+                          onClick={() => setActivePage((p) => Math.min(totalClientPages, p + 1))}
+                          disabled={activePage >= totalClientPages}
+                          className="w-9 h-9 rounded-xl border border-[#E2E8F0] bg-white hover:bg-slate-50 disabled:opacity-40 text-slate-700 text-sm font-semibold flex items-center justify-center transition-all cursor-pointer disabled:cursor-not-allowed shadow-2xs"
+                        >
+                          ›
+                        </button>
+
+                        {/* Load More Jobs from Server Button */}
+                        {hasMoreJobs && (
+                          <button
+                            type="button"
+                            onClick={handleLoadMoreJobs}
+                            disabled={isLoadingMore}
+                            className="h-9 px-4 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] disabled:bg-[#818CF8] text-white text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer active:scale-[0.98] disabled:cursor-not-allowed ml-2"
+                          >
+                            {isLoadingMore ? (
+                              <>
+                                <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                                </svg>
+                                <span>Loading...</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>Load Jobs</span>
+                                <span className="bg-white/20 px-1.5 py-0.5 rounded text-[10px] font-mono">
+                                  +{pageSize}
+                                </span>
+                              </>
+                            )}
+                          </button>
                         )}
-                      </button>
-                    ) : (
-                      <div className="px-5 py-2 bg-slate-100 text-slate-500 rounded-xl text-xs font-medium border border-slate-200">
-                        All matched jobs loaded ({jobsList.length} of {totalItems || jobsList.length})
                       </div>
-                    )}
-                    <p className="text-[12px] text-[#94A3B8]">
-                      Showing {jobsList.length} stored job matches at or above ATS score threshold
-                    </p>
-                  </div>
+
+                      <p className="text-[12px] text-[#94A3B8]">
+                        Showing {Math.min(20, filteredJobs.length - (activePage - 1) * 20)} of {filteredJobs.length} loaded jobs (Page {activePage} of {totalClientPages})
+                      </p>
+                    </div>
+                  </>
                 )}
               </>
             );
@@ -1876,13 +1909,19 @@ const BrowseJobs = () => {
         </main>
       </div>
 
-      {/* Job Details Modal Popup */}
+      {/* Job Details Modal Drawer (Right side slide-over) */}
       {selectedJobModal && (() => {
         const selectedJobId = getJobId(selectedJobModal);
         const activeAtsScore =
-          updatedAtsScores[selectedJobId] ??
-          selectedJobModal.matchPercent ??
-          96;
+          updatedAtsScores[selectedJobId] !== undefined
+            ? updatedAtsScores[selectedJobId]
+            : (selectedJobModal.displayScore ??
+              (selectedJobModal.rawScore !== null && selectedJobModal.rawScore !== undefined && !isNaN(Number(selectedJobModal.rawScore))
+                ? (!Number.isInteger(Number(selectedJobModal.rawScore))
+                  ? Number(selectedJobModal.rawScore).toFixed(1)
+                  : Math.min(100, Math.max(1, Math.round(Number(selectedJobModal.rawScore)))))
+                : selectedJobModal.matchPercent) ??
+              96);
         const scoreData =
           selectedJobModal.scoreData || selectedJobModal.rawMatch?.score_data;
         const missingRequiredSkills =
@@ -1900,7 +1939,7 @@ const BrowseJobs = () => {
 
         return (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-[2px] p-4 sm:p-6"
+            className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[2px]"
             onClick={() => {
               setSelectedJobModal(null);
               setEnhanceError(null);
@@ -1908,19 +1947,21 @@ const BrowseJobs = () => {
             }}
           >
             <div
-              className="bg-white rounded-[20px] max-w-[540px] w-full shadow-2xl overflow-hidden max-h-[92vh] flex flex-col animate-in fade-in zoom-in-95 duration-150"
+              className="absolute top-0 right-0 h-full w-full sm:w-[520px] lg:w-[440px] bg-white shadow-2xl overflow-hidden flex flex-col min-h-0 animate-in slide-in-from-right duration-300"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Modal Header */}
-              <div className="p-6 pb-4 border-b border-slate-100 flex items-start justify-between gap-4">
+              <div className="p-5 sm:p-6 pb-4 border-b border-slate-100 flex items-start justify-between gap-4 shrink-0">
                 <div className="flex items-start gap-3.5 flex-1 min-w-0 pr-2">
-                  <div className="w-[44px] h-[44px] rounded-[12px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2 mt-0.5">
-                    <img
-                      src={selectedJobModal.logo || aiLogo}
-                      alt={selectedJobModal.company}
-                      className="w-full h-full object-contain"
-                    />
-                  </div>
+                  {selectedJobModal.logo ? (
+                    <div className="w-[44px] h-[44px] rounded-[12px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2 mt-0.5">
+                      <img
+                        src={selectedJobModal.logo}
+                        alt={selectedJobModal.company || "Company Logo"}
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                  ) : null}
 
                   <div className="flex flex-col flex-1 min-w-0">
                     <h2 className="text-[17px] font-bold text-[#0F172A] tracking-tight leading-snug break-words">
@@ -2029,7 +2070,7 @@ const BrowseJobs = () => {
               </div>
 
               {/* Modal Scrollable Body */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              <div className="flex-1 min-h-0 overflow-y-auto p-5 sm:p-6 space-y-5">
                 {/* Feedback Alerts */}
                 {enhanceSuccess && (
                   <div className="bg-[#EEF2FF] border border-[#C7D2FE] text-[#312E81] text-xs px-3.5 py-2.5 rounded-xl flex items-center justify-between shadow-2xs">
@@ -2081,7 +2122,7 @@ const BrowseJobs = () => {
                         />
                         <path
                           className="text-[#4F46E5]"
-                          strokeDasharray={`${activeAtsScore}, 100`}
+                          strokeDasharray={`${Number(activeAtsScore) || 0}, 100`}
                           strokeWidth="3.2"
                           strokeLinecap="round"
                           stroke="currentColor"
@@ -2104,9 +2145,9 @@ const BrowseJobs = () => {
                         ATS Match
                       </h3>
                       <p className="text-[12px] text-[#64748B] mt-0.5 leading-snug">
-                        {activeAtsScore >= 80
+                        {Number(activeAtsScore) >= 80
                           ? "Strong match based on your profile, skills, experience and preferences."
-                          : activeAtsScore >= 60
+                          : Number(activeAtsScore) >= 60
                             ? "Moderate match. Enhancing your resume can bridge key skill and keyword gaps."
                             : "Lower match. Review identified gaps below or click Enhance Resume."}
                       </p>
@@ -2313,26 +2354,26 @@ const BrowseJobs = () => {
                     <div className="flex items-center gap-2 text-[12.5px]">
                       <span className="text-[#64748B]">Experience</span>
                       <span className="font-semibold text-[#0F172A]">
-                        {selectedJobModal.experience}
+                        {selectedJobModal.experience || "Not specified"}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 text-[12.5px]">
                       <span className="text-[#64748B]">Work mode</span>
                       <span className="font-semibold text-[#0F172A]">
-                        {selectedJobModal.workMode}
+                        {selectedJobModal.workMode || "On-site"}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 text-[12.5px]">
                       <span className="text-[#64748B]">Employment type</span>
                       <span className="font-semibold text-[#0F172A]">
-                        {selectedJobModal.type}
+                        {selectedJobModal.type || "Full-time"}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 text-[12.5px]">
                       <span className="text-[#64748B]">Location</span>
                       <span className="font-semibold text-[#0F172A]">
                         {selectedJobModal.fullLocation ||
-                          selectedJobModal.location}
+                          selectedJobModal.location || "Remote / Flexible"}
                       </span>
                     </div>
                   </div>
@@ -2340,14 +2381,14 @@ const BrowseJobs = () => {
               </div>
 
               {/* Modal Footer */}
-              <div className="p-5 border-t border-slate-100 bg-white shrink-0 flex flex-col gap-2.5">
+              <div className="p-4 sm:p-5 border-t border-slate-100 bg-white shrink-0 flex flex-col gap-2.5">
                 <div className="flex items-center gap-3">
                   <button
                     type="button"
                     onClick={() => setIsJobSaved(!isJobSaved)}
                     className={`flex-1 h-[44px] rounded-[12px] border text-[13.5px] font-medium flex items-center justify-center gap-2 transition-colors cursor-pointer ${isJobSaved
-                        ? "border-indigo-300 bg-indigo-50 text-[#4F46E5]"
-                        : "border-[#C7D2FE] bg-white text-[#4F46E5] hover:bg-indigo-50/50"
+                      ? "border-indigo-300 bg-indigo-50 text-[#4F46E5]"
+                      : "border-[#C7D2FE] bg-white text-[#4F46E5] hover:bg-indigo-50/50"
                       }`}
                   >
                     <svg
@@ -2419,22 +2460,35 @@ const BrowseJobs = () => {
                         selectedJobModal
                       )
                     }
-                    className="px-3.5 py-1.5 bg-[#EEF2FF] hover:bg-[#E0E7FF] text-[#4F46E5] text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                    disabled={isDownloadingResume}
+                    className="px-3.5 py-1.5 bg-[#EEF2FF] hover:bg-[#E0E7FF] disabled:bg-slate-100 text-[#4F46E5] disabled:text-slate-400 text-xs font-semibold rounded-lg transition-colors cursor-pointer disabled:cursor-not-allowed flex items-center gap-1.5"
                   >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                      />
-                    </svg>
-                    <span>Download</span>
+                    {isDownloadingResume ? (
+                      <>
+                        <svg className="animate-spin w-3.5 h-3.5 text-[#4F46E5]" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                        <span>Downloading...</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                          />
+                        </svg>
+                        <span>Download</span>
+                      </>
+                    )}
                   </button>
 
                   <button
@@ -2534,10 +2588,10 @@ const BrowseJobs = () => {
                                   {severity && (
                                     <span
                                       className={`text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${severity === "CRITICAL"
-                                          ? "bg-amber-50 text-amber-700 border-amber-200"
-                                          : severity === "PREFERRED"
-                                            ? "bg-blue-50 text-blue-700 border-blue-200"
-                                            : "bg-indigo-50 text-[#4F46E5] border-indigo-200"
+                                        ? "bg-amber-50 text-amber-700 border-amber-200"
+                                        : severity === "PREFERRED"
+                                          ? "bg-blue-50 text-blue-700 border-blue-200"
+                                          : "bg-indigo-50 text-[#4F46E5] border-indigo-200"
                                         }`}
                                     >
                                       {severity}

@@ -263,7 +263,7 @@ const AutoApply = () => {
   const [appPace, setAppPace] = useState("Apply sequentially (Recommended)");
 
   // Filter States
-  const [selectedDate, setSelectedDate] = useState("Last 7 days");
+  const [selectedDate, setSelectedDate] = useState("All time");
   const [selectedLocations, setSelectedLocations] = useState([]);
   const [locationSearch, setLocationSearch] = useState("");
   const [selectedWorkplace, setSelectedWorkplace] = useState([]);
@@ -302,7 +302,7 @@ const AutoApply = () => {
 
   const handleClear = () => {
     setSearchQuery("");
-    setSelectedDate("Last 7 days");
+    setSelectedDate("All time");
     setSelectedLocations([]);
     setLocationSearch("");
     setSelectedWorkplace([]);

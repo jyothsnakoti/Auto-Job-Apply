@@ -451,6 +451,8 @@ export const getJobId = (job) => {
 };
 
 export default {
+  postEnhanceJobResume,
+  getEnhancedJobResume,
   getEnhancedResume,
   getCandidateId,
   getStoredResumeId,

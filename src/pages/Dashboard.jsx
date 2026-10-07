@@ -8,11 +8,12 @@ import {
   getOnboardingProfile,
   getStoredJobMatches,
   getOnboardingState,
-  getEnhancedResume,
-  getScoreForEnhancedResume,
-  getCandidateId,
   getStoredResumeId,
   getJobId,
+  getEnhancedResume,
+  downloadEnhancedResume,
+  getScoreForEnhancedResume,
+  getCandidateId,
   getMoreJobsForResume,
   getPrimaryResumeId,
   getBillingStatus,
@@ -88,7 +89,13 @@ const experienceOptions = [
   "Up to 7 years",
 ];
 
-const jobTypeOptions = ["Full-time", "Part-time", "Contract", "Internship"];
+const jobTypeOptions = [
+  "Full-time",
+  "Part-time",
+  "Contract",
+  "Internship",
+  "Freelance",
+];
 const employmentTypeOptions = [
   "Full-time",
   "Part-time",
@@ -281,12 +288,17 @@ const transformMatchToJob = (match, index = 0) => {
       ? Math.min(100, Math.max(1, Math.round(Number(rawScore))))
       : null;
 
-  let logo = aiLogo;
-  const compLower = company.toLowerCase();
-  if (compLower.includes("google")) logo = googleLogo;
-  else if (compLower.includes("microsoft")) logo = microsoftLogo;
-  else if (compLower.includes("amazon") || compLower.includes("luna")) logo = amazonLogo;
-  else if (compLower.includes("shopify")) logo = shopifyLogo;
+  let logo = match.logo || match.companyLogo || match.logo_url || null;
+  if (
+    typeof logo === "string" &&
+    (logo.includes("amazon") ||
+      logo.includes("ai.svg") ||
+      logo.includes("google.svg") ||
+      logo.includes("microsoft.svg") ||
+      logo.includes("shopify.svg"))
+  ) {
+    logo = null;
+  }
 
   let location = cleanHtmlText(match.location || match.city || match.country || "");
   if (!location && cleanedFullText) {
@@ -315,7 +327,11 @@ const transformMatchToJob = (match, index = 0) => {
       ? match.preferredSkills.map(cleanHtmlText)
       : [];
 
-  let matchText = matchPercent !== null ? `${matchPercent}% match` : "ATS Match";
+  const displayScore =
+    rawScore !== null && !Number.isInteger(rawScore)
+      ? Number(rawScore).toFixed(1)
+      : matchPercent;
+  let matchText = matchPercent !== null ? `${displayScore}% match` : "ATS Match";
   let matchColor = "bg-[#EEF2FF] text-[#4F46E5]";
   if (matchPercent !== null) {
     if (matchPercent < 70) {
@@ -406,7 +422,9 @@ const transformMatchToJob = (match, index = 0) => {
     postedAt: match.postedAt || null,
     match: matchText,
     matchPercent,
+    displayScore,
     rawScore,
+    matchScore: rawScore,
     matchColor,
     logo: match.logo || logo,
     description,
@@ -441,9 +459,18 @@ const getMatchPercent = (job) => {
 };
 
 const getMatchLabel = (job) => {
+  if (job?.displayScore !== undefined && job?.displayScore !== null) {
+    return `${job.displayScore}% match`;
+  }
+  const raw = job?.rawScore ?? job?.matchScore ?? job?.overall_score;
+  if (raw !== undefined && raw !== null && !isNaN(Number(raw))) {
+    const num = Number(raw);
+    const scoreStr = !Number.isInteger(num) ? num.toFixed(1) : num;
+    return `${scoreStr}% match`;
+  }
   const percent = getMatchPercent(job);
   if (percent > 0) {
-    return `${Number.isInteger(percent) ? percent : Math.round(percent)}% match`;
+    return `${percent}% match`;
   }
   return job?.match || "ATS Match";
 };
@@ -487,7 +514,66 @@ const Dashboard = () => {
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [selectedAppTab, setSelectedAppTab] = useState("All");
   const [selectedJobModal, setSelectedJobModal] = useState(null);
+  const [isLoadingJobDetails, setIsLoadingJobDetails] = useState(false);
   const [isJobSaved, setIsJobSaved] = useState(false);
+
+  // Helper to open job modal and fetch full job details from GET /api/jobs/{originalJobId}
+  const handleOpenJobModal = async (job) => {
+    if (!job) return;
+    setSelectedJobModal(job);
+
+    const originalJobId = getJobId(job);
+    console.log("[Dashboard] Opening job modal. Original Job ID:", originalJobId);
+
+    if (originalJobId) {
+      try {
+        setIsLoadingJobDetails(true);
+        console.log(`[Dashboard] Fetching job details from GET /api/jobs/${originalJobId}...`);
+        const details = await getJobById(originalJobId);
+        console.log(`[Dashboard] GET /api/jobs/${originalJobId} details response:`, details);
+
+        if (details && typeof details === "object") {
+          setSelectedJobModal((prevModal) => {
+            if (!prevModal) return prevModal;
+            const currentModalId = getJobId(prevModal);
+            if (currentModalId === originalJobId) {
+              return {
+                ...prevModal,
+                ...details,
+                title: details.title || details.jobTitle || prevModal.title,
+                company: details.companyName || details.company || prevModal.company,
+                companyDomain: details.companyDomain || prevModal.companyDomain,
+                location: details.location || prevModal.location,
+                fullLocation: details.location || details.fullLocation || prevModal.fullLocation,
+                description: details.description || details.jobDescription || prevModal.description,
+                preview: details.preview || details.description || details.jobDescription || prevModal.preview,
+                responsibilities: Array.isArray(details.responsibilities) && details.responsibilities.length > 0
+                  ? details.responsibilities
+                  : prevModal.responsibilities,
+                requiredSkills: Array.isArray(details.requiredSkills) && details.requiredSkills.length > 0
+                  ? details.requiredSkills
+                  : (Array.isArray(details.skills) ? details.skills : prevModal.requiredSkills),
+                preferredSkills: Array.isArray(details.preferredSkills) && details.preferredSkills.length > 0
+                  ? details.preferredSkills
+                  : prevModal.preferredSkills,
+                experience: details.experience || details.requiredExperience || prevModal.experience,
+                workMode: details.workplace || details.workMode || prevModal.workMode,
+                type: details.employmentType || details.type || prevModal.type,
+                salary: details.salary || details.salaryRange || prevModal.salary,
+                applyUrl: details.applyUrl || details.jobUrl || details.url || prevModal.applyUrl,
+              };
+            }
+            return prevModal;
+          });
+        }
+      } catch (err) {
+        console.warn(`[Dashboard] GET /api/jobs/${originalJobId} fetch warning:`, err?.message);
+      } finally {
+        setIsLoadingJobDetails(false);
+      }
+    }
+  };
+
 
   // Dynamic Jobs & API Pagination State
   const [jobs, setJobs] = useState(() => {
@@ -541,6 +627,7 @@ const Dashboard = () => {
 
   // Enhance Resume States
   const [isEnhancing, setIsEnhancing] = useState(false);
+  const [isDownloadingResume, setIsDownloadingResume] = useState(false);
   const [enhanceError, setEnhanceError] = useState(null);
   const [enhanceSuccess, setEnhanceSuccess] = useState(null);
   const [enhancedResultsMap, setEnhancedResultsMap] = useState({});
@@ -943,7 +1030,7 @@ const Dashboard = () => {
   // Filter Clear Handler
   const handleClear = () => {
     setSearchQuery("");
-    setSelectedDate("Last 7 days");
+    setSelectedDate("All time");
     setSelectedLocations([]);
     setLocationSearch("");
     setSelectedWorkplace([]);
@@ -955,6 +1042,7 @@ const Dashboard = () => {
     setSelectedJobTypes([]);
     setSponsorsVisa(false);
     setSelectedEmploymentTypes([]);
+    setActiveDropdown(null);
   };
 
   const toggleDropdown = (name) => {
@@ -1130,7 +1218,6 @@ const Dashboard = () => {
         ? billingInfo.applicationLimit
         : 100;
 
-    // 4. Applications Submitted
     const submittedVal =
       typeof dashboardMetrics?.applicationsSubmitted === "number"
         ? dashboardMetrics.applicationsSubmitted
@@ -1140,7 +1227,6 @@ const Dashboard = () => {
         ? billingInfo.applicationsUsed
         : applications.length;
 
-    // 5. Applications Remaining
     const remainingVal =
       typeof dashboardMetrics?.applicationsRemaining === "number"
         ? dashboardMetrics.applicationsRemaining
@@ -1285,12 +1371,28 @@ const Dashboard = () => {
     setTimeout(() => setCopiedResume(false), 2500);
   };
 
-  const handleDownloadEnhancedResume = (text, job) => {
+  const handleDownloadEnhancedResume = async (text, job) => {
+    const targetJob = job || selectedJobModal;
+    const jobId = getJobId(targetJob);
+    const jobTitle = (targetJob?.title || "Enhanced_Resume").replace(/[^a-zA-Z0-9_-]/g, "_");
+    const fallbackFilename = `${jobTitle}_Resume.docx`;
+
+    if (jobId) {
+      try {
+        setIsDownloadingResume(true);
+        await downloadEnhancedResume(jobId, fallbackFilename);
+        setIsDownloadingResume(false);
+        return;
+      } catch (err) {
+        console.warn("[Dashboard] API download enhanced resume failed, fallback to text blob:", err);
+        setIsDownloadingResume(false);
+      }
+    }
+
     if (!text) return;
     const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    const jobTitle = (job?.title || "Enhanced_Resume").replace(/[^a-zA-Z0-9_-]/g, "_");
     link.href = url;
     link.download = `${jobTitle}_Resume.txt`;
     document.body.appendChild(link);
@@ -1830,72 +1932,6 @@ const Dashboard = () => {
                 <span>Sponsors Visa</span>
               </button>
 
-              {/* Employment Type Dropdown */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => toggleDropdown("employmentType")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "employmentType" ||
-                    selectedEmploymentTypes.length > 0
-                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                    }`}
-                >
-                  <span>Employment Type</span>
-                  <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "employmentType" ? "rotate-180" : ""
-                      }`}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                  >
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
-                </button>
-
-                {activeDropdown === "employmentType" && (
-                  <div className="absolute top-full left-0 mt-2 w-[170px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2.5 z-50 flex flex-col gap-1">
-                    {employmentTypeOptions.map((type) => {
-                      const isChecked = selectedEmploymentTypes.includes(type);
-                      return (
-                        <div
-                          key={type}
-                          onClick={() =>
-                            toggleCheckbox(
-                              selectedEmploymentTypes,
-                              setSelectedEmploymentTypes,
-                              type
-                            )
-                          }
-                          className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
-                        >
-                          <div
-                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
-                              ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                              : "border-slate-300 bg-white"
-                              }`}
-                          >
-                            {isChecked && (
-                              <svg
-                                className="w-2.5 h-2.5"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="3.5"
-                              >
-                                <polyline points="20 6 9 17 4 12" />
-                              </svg>
-                            )}
-                          </div>
-                          <span>{type}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
               {/* 4. Companies Dropdown */}
               <div className="relative">
                 <button
@@ -2148,19 +2184,6 @@ const Dashboard = () => {
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => filteredJobs.length > 0 && navigate("/auto-apply")}
-                  disabled={filteredJobs.length === 0}
-                  className={`h-[38px] px-4 rounded-[10px] text-[13px] font-medium flex items-center gap-1.5 shadow-xs transition-all whitespace-nowrap ${filteredJobs.length > 0
-                    ? "bg-[#4F46E5] hover:bg-[#4338CA] text-white active:scale-[0.99] cursor-pointer"
-                    : "bg-slate-200 text-slate-400 cursor-not-allowed"
-                    }`}
-                >
-                  <span>Auto Apply to all ({filteredJobs.length})</span>
-                  <span>→</span>
-                </button>
-
-                <button
-                  type="button"
                   onClick={() => navigate("/browse-jobs")}
                   className="h-[38px] px-4 rounded-[10px] bg-white border border-[#E2E8F0] text-[#4F46E5] hover:bg-slate-50 text-[13px] font-medium flex items-center gap-1.5 active:scale-[0.99] transition-all cursor-pointer whitespace-nowrap"
                 >
@@ -2312,39 +2335,23 @@ const Dashboard = () => {
                     return (
                       <div
                         key={job.job_id || job.id || `job-card-${idx}`}
-                        onClick={() => setSelectedJobModal(job)}
+                        onClick={() => handleOpenJobModal(job)}
                         className="bg-white rounded-[20px] border border-[#E2E8F0] p-5 flex flex-col justify-between shadow-[0_1px_3px_rgba(15,23,42,0.02)] hover:shadow-md hover:border-slate-300 transition-all duration-200 min-h-[230px] cursor-pointer group"
                       >
                         <div>
                           {/* Top Header: Logo + Match Badge */}
                           <div className="flex items-center justify-between gap-2">
-                            <div className="w-[40px] h-[40px] rounded-[10px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2">
-                              {job.logo ? (
+                            {job.logo ? (
+                              <div className="w-[40px] h-[40px] rounded-[10px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2">
                                 <img
                                   src={job.logo}
                                   alt={job.company || "Job Logo"}
                                   className="w-full h-full object-contain"
                                 />
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center text-[#4F46E5]">
-                                  <svg
-                                    className="w-5 h-5"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                  >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                                    />
-                                  </svg>
-                                </div>
-                              )}
-                            </div>
+                              </div>
+                            ) : null}
                             <span
-                              className={`text-[12px] font-semibold px-2.5 py-0.5 rounded-full ${matchColorClass}`}
+                              className={`text-[12px] font-semibold px-2.5 py-0.5 rounded-full ${matchColorClass} ${!job.logo ? "ml-auto" : ""}`}
                             >
                               {matchLabel}
                             </span>
@@ -2411,7 +2418,7 @@ const Dashboard = () => {
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              setSelectedJobModal(job);
+                              handleOpenJobModal(job);
                             }}
                             className="flex-1 h-[36px] rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] font-medium text-[#334155] hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-center"
                           >
@@ -2421,7 +2428,7 @@ const Dashboard = () => {
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              setSelectedJobModal(job);
+                              handleOpenJobModal(job);
                             }}
                             className="flex-1 h-[36px] rounded-[10px] bg-[#4F46E5] hover:bg-[#4338CA] text-[13px] font-medium text-white shadow-xs transition-colors cursor-pointer flex items-center justify-center active:scale-[0.99]"
                           >
@@ -2432,20 +2439,6 @@ const Dashboard = () => {
                     );
                   })}
                 </div>
-
-                {filteredJobs.length > 4 && (
-                  <div className="flex items-center justify-between pt-1 text-xs text-[#64748B]">
-                    <span>Showing 4 of {filteredJobs.length} top matches</span>
-                    <button
-                      type="button"
-                      onClick={() => navigate("/browse-jobs")}
-                      className="text-[#4F46E5] hover:text-[#4338CA] font-semibold flex items-center gap-1 cursor-pointer transition-colors"
-                    >
-                      <span>Browse all {filteredJobs.length} matching jobs</span>
-                      <span>→</span>
-                    </button>
-                  </div>
-                )}
               </>
             )}
           </div>
@@ -2561,7 +2554,7 @@ const Dashboard = () => {
                       <tr
                         key={app.id || app.job_id || Math.random()}
                         className="hover:bg-slate-50/60 transition-colors cursor-pointer"
-                        onClick={() => setSelectedJobModal(app)}
+                        onClick={() => handleOpenJobModal(app)}
                       >
                         {/* Company */}
                         <td className="py-4 pr-3">
@@ -2647,7 +2640,7 @@ const Dashboard = () => {
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              setSelectedJobModal(app);
+                              handleOpenJobModal(app);
                             }}
                             className="h-[30px] px-3.5 rounded-[8px] border border-[#E2E8F0] bg-white text-[12.5px] font-medium text-[#334155] hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
                           >
@@ -2690,9 +2683,12 @@ const Dashboard = () => {
         const activeAtsScore =
           selectedJobId && updatedAtsScores[selectedJobId] !== undefined
             ? updatedAtsScores[selectedJobId]
-            : rawInitialScore !== null && !isNaN(rawInitialScore)
-              ? Math.min(100, Math.max(1, Math.round(Number(rawInitialScore))))
-              : null;
+            : (selectedJobModal.displayScore ??
+               (rawInitialScore !== null && !isNaN(rawInitialScore)
+                 ? (!Number.isInteger(Number(rawInitialScore))
+                     ? Number(rawInitialScore).toFixed(1)
+                     : Math.min(100, Math.max(1, Math.round(Number(rawInitialScore)))))
+                 : (selectedJobModal.matchPercent ?? null)));
 
         const scoreData =
           currentMatch?.score_data || selectedJobModal.scoreData || null;
@@ -3132,7 +3128,7 @@ const Dashboard = () => {
                           {activeAtsScore !== null && (
                             <path
                               className="text-[#4F46E5]"
-                              strokeDasharray={`${activeAtsScore}, 100`}
+                              strokeDasharray={`${Number(activeAtsScore) || 0}, 100`}
                               strokeWidth="3.2"
                               strokeLinecap="round"
                               stroke="currentColor"
@@ -3159,9 +3155,9 @@ const Dashboard = () => {
                         </h3>
                         <p className="text-[12px] text-[#64748B] mt-0.5 leading-snug">
                           {activeAtsScore !== null
-                            ? activeAtsScore >= 80
+                            ? Number(activeAtsScore) >= 80
                               ? "Strong match based on your profile, skills, experience and preferences."
-                              : activeAtsScore >= 60
+                              : Number(activeAtsScore) >= 60
                                 ? "Moderate match. Enhancing your resume can bridge key skill and keyword gaps."
                                 : "Lower match. Review identified gaps below or click Enhance Resume."
                             : "ATS score unavailable for this job."}
@@ -3458,22 +3454,35 @@ const Dashboard = () => {
                         selectedJobModal
                       )
                     }
-                    className="px-3.5 py-1.5 bg-[#EEF2FF] hover:bg-[#E0E7FF] text-[#4F46E5] text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                    disabled={isDownloadingResume}
+                    className="px-3.5 py-1.5 bg-[#EEF2FF] hover:bg-[#E0E7FF] disabled:bg-slate-100 text-[#4F46E5] disabled:text-slate-400 text-xs font-semibold rounded-lg transition-colors cursor-pointer disabled:cursor-not-allowed flex items-center gap-1.5"
                   >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                      />
-                    </svg>
-                    <span>Download</span>
+                    {isDownloadingResume ? (
+                      <>
+                        <svg className="animate-spin w-3.5 h-3.5 text-[#4F46E5]" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                        <span>Downloading...</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                          />
+                        </svg>
+                        <span>Download</span>
+                      </>
+                    )}
                   </button>
 
                   <button
@@ -3630,7 +3639,7 @@ const Dashboard = () => {
                     }
                     compact={false}
                   />
-                </div>
+                 </div>
               </div>
 
               {/* Modal Footer */}
