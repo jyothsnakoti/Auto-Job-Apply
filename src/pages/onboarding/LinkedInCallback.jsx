@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import AuthLayout from './AuthLayout';
-import { loginWithLinkedIn, getLinkedInConfig } from '../../services/authService';
+import { loginWithLinkedIn, getLinkedInConfig, getBillingStatus } from '../../services/api';
 
 const LinkedInCallback = () => {
   const navigate = useNavigate();
@@ -74,7 +74,7 @@ const LinkedInCallback = () => {
 
       try {
         // 4. Exchange authorization code with backend POST /api/auth/linkedin
-        await loginWithLinkedIn({
+        const authData = await loginWithLinkedIn({
           code,
           redirectUri: redirectUriToUse,
           rememberMe: savedRememberMe,
@@ -86,7 +86,29 @@ const LinkedInCallback = () => {
           return;
         }
 
-        navigate('/dashboard', { replace: true });
+        let hasActivePlan = false;
+        try {
+          const billingStatus = await getBillingStatus(authData?.accessToken);
+          hasActivePlan = Boolean(
+            billingStatus === true ||
+            billingStatus?.hasPlan === true ||
+            billingStatus?.status === true ||
+            billingStatus?.has_plan === true ||
+            billingStatus?.isSubscribed === true ||
+            billingStatus?.active === true ||
+            (typeof billingStatus?.status === 'string' &&
+              ['active', 'true', 'subscribed', 'paid'].includes(billingStatus.status.toLowerCase()))
+          );
+        } catch (billingErr) {
+          console.warn('[LinkedInCallback] Billing check error:', billingErr);
+          hasActivePlan = false;
+        }
+
+        if (hasActivePlan) {
+          navigate('/dashboard', { replace: true });
+        } else {
+          navigate('/plan', { replace: true });
+        }
       } catch (err) {
         console.error('LinkedIn exchange error:', err);
         setStatus('error');

@@ -314,6 +314,92 @@ export const checkUserHasResume = async () => {
   }
 };
 
+/**
+ * GET /api/resumes/matches/status
+ * Show whether this user has a primary resume, whether ATS matching is currently running,
+ * how many matches are stored, and the latest progress/result.
+ *
+ * Authorization: Bearer <accessToken>
+ * Request: No request body.
+ *
+ * @returns {Promise<{
+ *   hasPrimaryResume: boolean,
+ *   refreshing: boolean,
+ *   matchCount: number,
+ *   lastComputedAt: string | null,
+ *   progress: string | null,
+ *   lastResult: string | null,
+ *   raw: Object
+ * }>}
+ */
+export const getResumeMatchesStatus = async () => {
+  try {
+    const url = RESUME_ENDPOINTS?.MATCHES_STATUS || '/api/resumes/matches/status';
+    const response = await apiClient.get(url);
+    const data = response.data || {};
+    return {
+      hasPrimaryResume: Boolean(data.hasPrimaryResume),
+      refreshing: Boolean(data.refreshing),
+      matchCount: typeof data.matchCount === 'number' ? data.matchCount : (Number(data.matchCount) || 0),
+      lastComputedAt: data.lastComputedAt || null,
+      progress: data.progress || null,
+      lastResult: data.lastResult || null,
+      raw: data,
+    };
+  } catch (error) {
+    console.error('[resumeService] getResumeMatchesStatus error:', error);
+    throw error;
+  }
+};
+
+// Alias
+export const getMatchesStatus = getResumeMatchesStatus;
+
+/**
+ * POST /api/resumes/matches/refresh
+ * Manually request a fresh ATS match run for the authenticated user.
+ *
+ * Authorization: Bearer <accessToken>
+ * Request: No request body.
+ *
+ * Successful response:
+ * 202 Accepted (Matching requested.)
+ *
+ * @returns {Promise<{
+ *   success: boolean,
+ *   status: number,
+ *   message: string,
+ *   data: any
+ * }>}
+ */
+export const refreshResumeMatches = async () => {
+  try {
+    const url = RESUME_ENDPOINTS?.MATCHES_REFRESH || '/api/resumes/matches/refresh';
+    const response = await apiClient.post(url);
+    return {
+      success: true,
+      status: response.status,
+      message:
+        typeof response.data === 'string'
+          ? response.data
+          : (response.data?.message || 'Matching requested.'),
+      data: response.data,
+    };
+  } catch (error) {
+    console.error('[resumeService] refreshResumeMatches error:', error);
+    const msg =
+      error.response?.data?.message ||
+      (typeof error.response?.data === 'string' ? error.response.data : '') ||
+      'Failed to request ATS match refresh.';
+    const err = new Error(msg);
+    err.status = error.response?.status || 500;
+    throw err;
+  }
+};
+
+// Alias
+export const triggerMatchesRefresh = refreshResumeMatches;
+
 export default {
   validateResumeFile,
   getUserPlan,
@@ -325,4 +411,8 @@ export default {
   deleteResume,
   downloadResume,
   checkUserHasResume,
+  getResumeMatchesStatus,
+  getMatchesStatus,
+  refreshResumeMatches,
+  triggerMatchesRefresh,
 };

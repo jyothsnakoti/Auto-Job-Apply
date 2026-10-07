@@ -463,14 +463,14 @@ const Plan = () => {
                                         setActivatingPlanId(planKey);
                                         setActionError('');
                                         await selectTrialPlan();
-                                        navigate('/dashboard', { state: { plan } });
+                                        navigate('/resume-setup', { state: { plan } });
                                     } catch (err) {
                                         console.error('Free trial activation failed:', err);
                                         const errMsg = err.message || 'Failed to activate free trial.';
                                         setActionError(errMsg);
-                                        // If already activated (400), allow user to proceed
+                                        // If already activated (400), allow user to proceed to onboarding
                                         if (err.status === 400 || errMsg.toLowerCase().includes('already')) {
-                                            navigate('/dashboard', { state: { plan } });
+                                            navigate('/resume-setup', { state: { plan } });
                                         }
                                     } finally {
                                         setActivatingPlanId(null);

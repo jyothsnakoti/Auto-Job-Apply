@@ -120,6 +120,36 @@ export const getJobs = async (params = {}) => {
 };
 
 /**
+ * GET /api/jobs/{jobId}
+ * Fetch detailed job information for a specific job ID.
+ *
+ * Authorization: Bearer access JWT (Injected automatically by apiClient)
+ * Request: No body.
+ *
+ * @param {string|number} jobId - Original job ID
+ * @returns {Promise<Object>} Job details object
+ */
+export const getJobById = async (jobId) => {
+  const cleanId = (jobId || '').toString().trim();
+  if (!cleanId) {
+    throw new Error('Job ID is required to fetch job details.');
+  }
+
+  const endpoint = JOB_ENDPOINTS?.GET_BY_ID?.(cleanId) || `${JOBS_API_URL}/${encodeURIComponent(cleanId)}`;
+  console.log(`[jobService] Calling GET /api/jobs/${cleanId} (Target: http://192.168.1.13:8081/api/jobs/${cleanId})`);
+
+  try {
+    const response = await apiClient.get(endpoint);
+    console.log(`[jobService] GET /api/jobs/${cleanId} Raw Response Data:`, response.data);
+    return response.data;
+  } catch (error) {
+    console.error(`[jobService] Error fetching job details for ID ${cleanId}:`, error);
+    throw error;
+  }
+};
+
+
+/**
  * GET /api/dashboard
  * Fetch dashboard counters and top five matched jobs.
  *
@@ -324,6 +354,7 @@ export const getPrimaryResumeId = getStoredResumeId;
 
 export default {
   getJobs,
+  getJobById,
   getDashboard,
   getDashboardData,
   fetchDashboard,
