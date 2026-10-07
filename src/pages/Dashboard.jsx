@@ -22,6 +22,7 @@ import {
   getDashboardData,
   getStoredDashboardData,
   getJobs,
+  getJobById,
   getResumeMatchesStatus,
   refreshResumeMatches,
 } from "../services/api";
@@ -290,12 +291,17 @@ const transformMatchToJob = (match, index = 0) => {
       ? Math.min(100, Math.max(1, Math.round(Number(rawScore))))
       : null;
 
-  let logo = aiLogo;
-  const compLower = company.toLowerCase();
-  if (compLower.includes("google")) logo = googleLogo;
-  else if (compLower.includes("microsoft")) logo = microsoftLogo;
-  else if (compLower.includes("amazon") || compLower.includes("luna")) logo = amazonLogo;
-  else if (compLower.includes("shopify")) logo = shopifyLogo;
+  let logo = match.logo || match.companyLogo || match.logo_url || null;
+  if (
+    typeof logo === "string" &&
+    (logo.includes("amazon") ||
+      logo.includes("ai.svg") ||
+      logo.includes("google.svg") ||
+      logo.includes("microsoft.svg") ||
+      logo.includes("shopify.svg"))
+  ) {
+    logo = null;
+  }
 
   let location = cleanHtmlText(match.location || match.city || match.country || "");
   if (!location && cleanedFullText) {
@@ -527,7 +533,66 @@ const Dashboard = () => {
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [selectedAppTab, setSelectedAppTab] = useState("All");
   const [selectedJobModal, setSelectedJobModal] = useState(null);
+  const [isLoadingJobDetails, setIsLoadingJobDetails] = useState(false);
   const [isJobSaved, setIsJobSaved] = useState(false);
+
+  // Helper to open job modal and fetch full job details from GET /api/jobs/{originalJobId}
+  const handleOpenJobModal = async (job) => {
+    if (!job) return;
+    setSelectedJobModal(job);
+
+    const originalJobId = getJobId(job);
+    console.log("[Dashboard] Opening job modal. Original Job ID:", originalJobId);
+
+    if (originalJobId) {
+      try {
+        setIsLoadingJobDetails(true);
+        console.log(`[Dashboard] Fetching job details from GET /api/jobs/${originalJobId}...`);
+        const details = await getJobById(originalJobId);
+        console.log(`[Dashboard] GET /api/jobs/${originalJobId} details response:`, details);
+
+        if (details && typeof details === "object") {
+          setSelectedJobModal((prevModal) => {
+            if (!prevModal) return prevModal;
+            const currentModalId = getJobId(prevModal);
+            if (currentModalId === originalJobId) {
+              return {
+                ...prevModal,
+                ...details,
+                title: details.title || details.jobTitle || prevModal.title,
+                company: details.companyName || details.company || prevModal.company,
+                companyDomain: details.companyDomain || prevModal.companyDomain,
+                location: details.location || prevModal.location,
+                fullLocation: details.location || details.fullLocation || prevModal.fullLocation,
+                description: details.description || details.jobDescription || prevModal.description,
+                preview: details.preview || details.description || details.jobDescription || prevModal.preview,
+                responsibilities: Array.isArray(details.responsibilities) && details.responsibilities.length > 0
+                  ? details.responsibilities
+                  : prevModal.responsibilities,
+                requiredSkills: Array.isArray(details.requiredSkills) && details.requiredSkills.length > 0
+                  ? details.requiredSkills
+                  : (Array.isArray(details.skills) ? details.skills : prevModal.requiredSkills),
+                preferredSkills: Array.isArray(details.preferredSkills) && details.preferredSkills.length > 0
+                  ? details.preferredSkills
+                  : prevModal.preferredSkills,
+                experience: details.experience || details.requiredExperience || prevModal.experience,
+                workMode: details.workplace || details.workMode || prevModal.workMode,
+                type: details.employmentType || details.type || prevModal.type,
+                salary: details.salary || details.salaryRange || prevModal.salary,
+                applyUrl: details.applyUrl || details.jobUrl || details.url || prevModal.applyUrl,
+              };
+            }
+            return prevModal;
+          });
+        }
+      } catch (err) {
+        console.warn(`[Dashboard] GET /api/jobs/${originalJobId} fetch warning:`, err?.message);
+      } finally {
+        setIsLoadingJobDetails(false);
+      }
+    }
+  };
+
 
   // Dynamic Jobs & API Pagination State
   const [jobs, setJobs] = useState(() => {
@@ -1331,7 +1396,6 @@ const Dashboard = () => {
         ? billingInfo.applicationLimit
         : 100;
 
-    // 4. Applications Submitted
     const submittedVal =
       typeof dashboardMetrics?.applicationsSubmitted === "number"
         ? dashboardMetrics.applicationsSubmitted
@@ -1341,7 +1405,6 @@ const Dashboard = () => {
         ? billingInfo.applicationsUsed
         : applications.length;
 
-    // 5. Applications Remaining
     const remainingVal =
       typeof dashboardMetrics?.applicationsRemaining === "number"
         ? dashboardMetrics.applicationsRemaining
@@ -2578,39 +2641,23 @@ const Dashboard = () => {
                     return (
                       <div
                         key={job.job_id || job.id || `job-card-${idx}`}
-                        onClick={() => setSelectedJobModal(job)}
+                        onClick={() => handleOpenJobModal(job)}
                         className="bg-white rounded-[20px] border border-[#E2E8F0] p-5 flex flex-col justify-between shadow-[0_1px_3px_rgba(15,23,42,0.02)] hover:shadow-md hover:border-slate-300 transition-all duration-200 min-h-[230px] cursor-pointer group"
                       >
                         <div>
                           {/* Top Header: Logo + Match Badge */}
                           <div className="flex items-center justify-between gap-2">
-                            <div className="w-[40px] h-[40px] rounded-[10px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2">
-                              {job.logo ? (
+                            {job.logo ? (
+                              <div className="w-[40px] h-[40px] rounded-[10px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2">
                                 <img
                                   src={job.logo}
                                   alt={job.company || "Job Logo"}
                                   className="w-full h-full object-contain"
                                 />
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center text-[#4F46E5]">
-                                  <svg
-                                    className="w-5 h-5"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                  >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                                    />
-                                  </svg>
-                                </div>
-                              )}
-                            </div>
+                              </div>
+                            ) : null}
                             <span
-                              className={`text-[12px] font-semibold px-2.5 py-0.5 rounded-full ${matchColorClass}`}
+                              className={`text-[12px] font-semibold px-2.5 py-0.5 rounded-full ${matchColorClass} ${!job.logo ? "ml-auto" : ""}`}
                             >
                               {matchLabel}
                             </span>
@@ -2677,7 +2724,7 @@ const Dashboard = () => {
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              setSelectedJobModal(job);
+                              handleOpenJobModal(job);
                             }}
                             className="flex-1 h-[36px] rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] font-medium text-[#334155] hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-center"
                           >
@@ -2687,7 +2734,7 @@ const Dashboard = () => {
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              setSelectedJobModal(job);
+                              handleOpenJobModal(job);
                             }}
                             className="flex-1 h-[36px] rounded-[10px] bg-[#4F46E5] hover:bg-[#4338CA] text-[13px] font-medium text-white shadow-xs transition-colors cursor-pointer flex items-center justify-center active:scale-[0.99]"
                           >
@@ -2813,7 +2860,7 @@ const Dashboard = () => {
                       <tr
                         key={app.id || app.job_id || Math.random()}
                         className="hover:bg-slate-50/60 transition-colors cursor-pointer"
-                        onClick={() => setSelectedJobModal(app)}
+                        onClick={() => handleOpenJobModal(app)}
                       >
                         {/* Company */}
                         <td className="py-4 pr-3">
@@ -2899,7 +2946,7 @@ const Dashboard = () => {
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              setSelectedJobModal(app);
+                              handleOpenJobModal(app);
                             }}
                             className="h-[30px] px-3.5 rounded-[8px] border border-[#E2E8F0] bg-white text-[12.5px] font-medium text-[#334155] hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
                           >
@@ -3898,7 +3945,7 @@ const Dashboard = () => {
                     }
                     compact={false}
                   />
-                </div>
+                 </div>
               </div>
 
               {/* Modal Footer */}

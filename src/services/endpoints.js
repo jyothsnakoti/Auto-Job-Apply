@@ -195,6 +195,7 @@ export const DASHBOARD_ENDPOINTS = {
 export const JOB_ENDPOINTS = {
   LIST: `${API_BASE_URL}/api/jobs`,
   GET: `${API_BASE_URL}/api/jobs`,
+  GET_BY_ID: (jobId) => `${API_BASE_URL}/api/jobs/${jobId}`,
   ENHANCE: (jobId) => `${API_BASE_URL}/api/jobs/${jobId}/enhance`,
   DOWNLOAD_ENHANCED: (jobId) => `${API_BASE_URL}/api/jobs/${jobId}/enhance/download`,
 };

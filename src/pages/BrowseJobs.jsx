@@ -5,27 +5,20 @@ import Header from "../components/Header";
 import EnhancedResumeViewer from "../components/EnhancedResumeViewer";
 import {
   getJobs,
-  getMoreJobsForResume,
   getPrimaryResumeId,
   getOnboardingState,
-  getMoreJobs,
-  getNMoreJDsForResume,
   getStoredResumeId,
   getStoredJobMatches,
   getEnhancedResume,
   downloadEnhancedResume,
-  getCandidateId,
   getJobId,
+  getJobById,
   getScoreForEnhancedResume,
   checkUserHasResume,
   getResumeMatchesStatus,
   refreshResumeMatches,
 } from "../services/api";
 
-import googleLogo from "../assets/google.svg";
-import microsoftLogo from "../assets/microsoft.svg";
-import amazonLogo from "../assets/amazon.svg";
-import shopifyLogo from "../assets/shopify.svg";
 import aiLogo from "../assets/ai.svg";
 import mapIcon from "../assets/map.svg";
 import tickIcon from "../assets/tick.svg";
@@ -51,14 +44,6 @@ const dateOptions = [
 
 const workplaceOptions = ["Remote", "On-site", "Hybrid"];
 
-const degreeOptions = [
-  "Bachelor's Degree",
-  "Master's Degree",
-  "Doctorate (PhD)",
-  "Associate Degree",
-  "No Degree Required",
-];
-
 const experienceOptions = [
   "Entry Level (0-1 yrs)",
   "Junior (1-3 yrs)",
@@ -68,13 +53,6 @@ const experienceOptions = [
 ];
 
 const jobTypeOptions = [
-  "Full-time",
-  "Part-time",
-  "Contract",
-  "Internship",
-  "Freelance",
-];
-const employmentTypeOptions = [
   "Full-time",
   "Part-time",
   "Contract",
@@ -274,12 +252,17 @@ const transformMatchToJob = (match, index = 0) => {
       ? Math.min(100, Math.max(1, Math.round(Number(rawScore))))
       : null;
 
-  let logo = aiLogo;
-  const compLower = (company || "").toLowerCase();
-  if (compLower.includes("google")) logo = googleLogo;
-  else if (compLower.includes("microsoft")) logo = microsoftLogo;
-  else if (compLower.includes("amazon") || compLower.includes("luna")) logo = amazonLogo;
-  else if (compLower.includes("shopify")) logo = shopifyLogo;
+  let logo = match.logo || match.companyLogo || match.logo_url || null;
+  if (
+    typeof logo === "string" &&
+    (logo.includes("amazon") ||
+      logo.includes("ai.svg") ||
+      logo.includes("google.svg") ||
+      logo.includes("microsoft.svg") ||
+      logo.includes("shopify.svg"))
+  ) {
+    logo = null;
+  }
 
   // Location & Country
   let location = cleanHtmlText(match.location || match.city || "");
@@ -437,7 +420,65 @@ const BrowseJobs = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [selectedJobModal, setSelectedJobModal] = useState(null);
+  const [isLoadingJobDetails, setIsLoadingJobDetails] = useState(false);
   const [isJobSaved, setIsJobSaved] = useState(false);
+
+  // Helper to open job modal and fetch full job details from GET /api/jobs/{originalJobId}
+  const handleOpenJobModal = async (job) => {
+    if (!job) return;
+    setSelectedJobModal(job);
+
+    const originalJobId = getJobId(job);
+    console.log("[BrowseJobs] Opening job modal. Original Job ID:", originalJobId);
+
+    if (originalJobId) {
+      try {
+        setIsLoadingJobDetails(true);
+        console.log(`[BrowseJobs] Fetching job details from GET /api/jobs/${originalJobId}...`);
+        const details = await getJobById(originalJobId);
+        console.log(`[BrowseJobs] GET /api/jobs/${originalJobId} details response:`, details);
+
+        if (details && typeof details === "object") {
+          setSelectedJobModal((prevModal) => {
+            if (!prevModal) return prevModal;
+            const currentModalId = getJobId(prevModal);
+            if (currentModalId === originalJobId) {
+              return {
+                ...prevModal,
+                ...details,
+                title: details.title || details.jobTitle || prevModal.title,
+                company: details.companyName || details.company || prevModal.company,
+                companyDomain: details.companyDomain || prevModal.companyDomain,
+                location: details.location || prevModal.location,
+                fullLocation: details.location || details.fullLocation || prevModal.fullLocation,
+                description: details.description || details.jobDescription || prevModal.description,
+                preview: details.preview || details.description || details.jobDescription || prevModal.preview,
+                responsibilities: Array.isArray(details.responsibilities) && details.responsibilities.length > 0
+                  ? details.responsibilities
+                  : prevModal.responsibilities,
+                requiredSkills: Array.isArray(details.requiredSkills) && details.requiredSkills.length > 0
+                  ? details.requiredSkills
+                  : (Array.isArray(details.skills) ? details.skills : prevModal.requiredSkills),
+                preferredSkills: Array.isArray(details.preferredSkills) && details.preferredSkills.length > 0
+                  ? details.preferredSkills
+                  : prevModal.preferredSkills,
+                experience: details.experience || details.requiredExperience || prevModal.experience,
+                workMode: details.workplace || details.workMode || prevModal.workMode,
+                type: details.employmentType || details.type || prevModal.type,
+                salary: details.salary || details.salaryRange || prevModal.salary,
+                applyUrl: details.applyUrl || details.jobUrl || details.url || prevModal.applyUrl,
+              };
+            }
+            return prevModal;
+          });
+        }
+      } catch (err) {
+        console.warn(`[BrowseJobs] GET /api/jobs/${originalJobId} fetch warning:`, err?.message);
+      } finally {
+        setIsLoadingJobDetails(false);
+      }
+    }
+  };
 
   // Dynamic Jobs State (purely live data from backend)
   const [jobsList, setJobsList] = useState([]);
@@ -492,12 +533,10 @@ const BrowseJobs = () => {
   const [selectedWorkplace, setSelectedWorkplace] = useState([]);
   const [selectedCompanies, setSelectedCompanies] = useState([]);
   const [companySearch, setCompanySearch] = useState("");
-  const [selectedDegrees, setSelectedDegrees] = useState([]);
   const [selectedExperience, setSelectedExperience] = useState("");
   const [selectedRoles, setSelectedRoles] = useState([]);
   const [selectedJobTypes, setSelectedJobTypes] = useState([]);
   const [sponsorsVisa, setSponsorsVisa] = useState(false);
-  const [selectedEmploymentTypes, setSelectedEmploymentTypes] = useState([]);
 
   const dropdownRef = useRef(null);
 
@@ -547,7 +586,6 @@ const BrowseJobs = () => {
         const activeRoles = overrideFilters?.roles ?? selectedRoles;
         const activeWorkplaces = overrideFilters?.workplace ?? selectedWorkplace;
         const activeJobTypes = overrideFilters?.jobTypes ?? selectedJobTypes;
-        const activeEmpTypes = overrideFilters?.employmentTypes ?? selectedEmploymentTypes;
         const activeDate = overrideFilters?.date ?? selectedDate;
 
         // Convert activeDate to postedWithinDays
@@ -567,11 +605,7 @@ const BrowseJobs = () => {
           location: activeLocs.length > 0 ? activeLocs[0] : undefined,
           role: activeRoles.length > 0 ? activeRoles[0] : undefined,
           workplace: activeWorkplaces.length > 0 ? activeWorkplaces[0].toLowerCase() : undefined,
-          employmentType: activeEmpTypes.length > 0
-            ? activeEmpTypes[0].toLowerCase()
-            : activeJobTypes.length > 0
-              ? activeJobTypes[0].toLowerCase()
-              : undefined,
+          employmentType: activeJobTypes.length > 0 ? activeJobTypes[0].toLowerCase() : undefined,
           postedWithinDays,
           sort: sort || "best_match",
           page,
@@ -612,7 +646,7 @@ const BrowseJobs = () => {
             const fresh = transformed.filter((j) => !existingIds.has(j.job_id || j.jobId || j.id || j.JDid));
             return [...prev, ...fresh];
           });
-          // Switch activePage to the newly loaded page (e.g. Page 2 for first load more, Page 3 for next, etc.)
+          // Switch activePage to the newly loaded page
           const newlyLoadedPage = resPage + 1;
           setActivePage(newlyLoadedPage);
         }
@@ -645,7 +679,6 @@ const BrowseJobs = () => {
       selectedRoles,
       selectedWorkplace,
       selectedJobTypes,
-      selectedEmploymentTypes,
       selectedDate,
       pageSize,
     ]
@@ -678,7 +711,6 @@ const BrowseJobs = () => {
         prevRefreshingRef.current = Boolean(status.refreshing);
 
         // Automatic Refresh without manual user click:
-        // If user has a primary resume, matching is not already running, and we haven't auto-refreshed yet
         if (
           isInitial &&
           status.hasPrimaryResume === true &&
@@ -749,7 +781,6 @@ const BrowseJobs = () => {
       const res = await refreshResumeMatches();
       console.log("[BrowseJobs] POST /api/resumes/matches/refresh triggered:", res);
 
-      // Immediately set refreshing state in UI and start polling status
       setMatchStatus((prev) => ({
         ...prev,
         refreshing: true,
@@ -757,7 +788,6 @@ const BrowseJobs = () => {
       }));
       prevRefreshingRef.current = true;
 
-      // Poll after brief delay
       setTimeout(() => {
         fetchMatchStatus(false);
       }, 500);
@@ -971,12 +1001,10 @@ const BrowseJobs = () => {
     setSelectedWorkplace([]);
     setSelectedCompanies([]);
     setCompanySearch("");
-    setSelectedDegrees([]);
     setSelectedExperience("");
     setSelectedRoles([]);
     setSelectedJobTypes([]);
     setSponsorsVisa(false);
-    setSelectedEmploymentTypes([]);
     setSortOption("best_match");
     setActiveDropdown(null);
     setActivePage(1);
@@ -990,7 +1018,6 @@ const BrowseJobs = () => {
         roles: [],
         workplace: [],
         jobTypes: [],
-        employmentTypes: [],
         date: "All time",
       },
     });
@@ -1101,6 +1128,9 @@ const BrowseJobs = () => {
     selectedWorkplace,
     selectedJobTypes,
   ]);
+
+  // Derived total pages for local page switching
+  const totalClientPages = Math.max(1, Math.ceil(filteredJobs.length / 20));
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#F8FAFC]">
@@ -1305,8 +1335,6 @@ const BrowseJobs = () => {
                 <span className="text-base leading-none">✕</span>
                 <span>Clear</span>
               </button>
-
-              
             </div>
 
             {/* Second Row: Filter Buttons */}
@@ -1836,7 +1864,7 @@ const BrowseJobs = () => {
                 )}
               </div>
 
-              {/* 11. Sort Dropdown (Best Match vs Newest) */}
+              {/* Sort Dropdown (Best Match vs Newest) */}
               <div className="relative sm:ml-auto">
                 <button
                   type="button"
@@ -2028,7 +2056,7 @@ const BrowseJobs = () => {
                         .map((job, idx) => (
                           <div
                             key={job.id || job.job_id || job.jobId || `job-${idx}`}
-                            onClick={() => setSelectedJobModal(job)}
+                            onClick={() => handleOpenJobModal(job)}
                             className="bg-white rounded-[20px] border border-[#E2E8F0] p-5 flex flex-col justify-between shadow-[0_1px_3px_rgba(15,23,42,0.02)] hover:shadow-md hover:border-slate-300 transition-all duration-200 min-h-[260px] cursor-pointer group"
                           >
                             <div>
@@ -2100,7 +2128,7 @@ const BrowseJobs = () => {
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setSelectedJobModal(job);
+                                  handleOpenJobModal(job);
                                 }}
                                 className="flex-1 h-[36px] rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] font-medium text-[#334155] hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-center"
                               >
@@ -2110,7 +2138,7 @@ const BrowseJobs = () => {
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setSelectedJobModal(job);
+                                  handleOpenJobModal(job);
                                 }}
                                 className="flex-1 h-[36px] rounded-[10px] bg-[#4F46E5] hover:bg-[#4338CA] text-[13px] font-medium text-white shadow-xs transition-colors cursor-pointer flex items-center justify-center active:scale-[0.99]"
                               >
@@ -2121,155 +2149,92 @@ const BrowseJobs = () => {
                         ))}
                     </div>
 
-                    {/* Pagination & Load Jobs Bottom Container */}
-                    {jobsList.length > 0 && (() => {
-                      const jobsPerPage = 20;
-                      const loadedPagesCount = Math.max(1, Math.ceil(filteredJobs.length / jobsPerPage));
-                      const totalDisplayPages = Math.max(
-                        totalPages > 0 ? totalPages : 12,
-                        loadedPagesCount,
-                        12
-                      );
-
-                      const getPageNumbers = () => {
-                        const pages = [];
-                        if (totalDisplayPages <= 7) {
-                          for (let i = 1; i <= totalDisplayPages; i++) pages.push(i);
-                        } else {
-                          if (activePage <= 4) {
-                            pages.push(1, 2, 3, 4, 5, "...", totalDisplayPages);
-                          } else if (activePage >= totalDisplayPages - 3) {
-                            pages.push(
-                              1,
-                              "...",
-                              totalDisplayPages - 4,
-                              totalDisplayPages - 3,
-                              totalDisplayPages - 2,
-                              totalDisplayPages - 1,
-                              totalDisplayPages
-                            );
-                          } else {
-                            pages.push(
-                              1,
-                              "...",
-                              activePage - 1,
-                              activePage,
-                              activePage + 1,
-                              "...",
-                              totalDisplayPages
-                            );
-                          }
-                        }
-                        return pages;
-                      };
-
-                      const pageNumbers = getPageNumbers();
-
-                      return (
-                        <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-3 sm:p-3.5 px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4 w-full shadow-[0_1px_3px_rgba(15,23,42,0.02)] mt-3 mb-6">
-                          {/* Left / Center Pagination Controls */}
-                          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto max-w-full py-1">
-                            {/* Previous Arrow */}
-                            <button
-                              type="button"
-                              onClick={() => setActivePage((prev) => Math.max(1, prev - 1))}
-                              disabled={activePage <= 1}
-                              aria-label="Previous Page"
-                              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-slate-200 bg-white flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0 shadow-2xs"
-                            >
-                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                              </svg>
-                            </button>
-
-                            {/* Numbered Page Buttons */}
-                            {pageNumbers.map((pageItem, idx) => {
-                              if (pageItem === "...") {
-                                return (
-                                  <span
-                                    key={`dots-${idx}`}
-                                    className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center text-slate-400 font-medium select-none text-[13px] shrink-0"
-                                  >
-                                    ...
-                                  </span>
-                                );
-                              }
-
-                              const isActive = pageItem === activePage;
-                              const isLoaded = pageItem <= loadedPagesCount;
-
-                              if (isActive) {
-                                return (
-                                  <button
-                                    key={pageItem}
-                                    type="button"
-                                    aria-label={`Page ${pageItem} (Active)`}
-                                    className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[#4F46E5] text-white text-[13px] font-semibold flex items-center justify-center shadow-xs cursor-default shrink-0 border border-[#4F46E5]"
-                                  >
-                                    {pageItem}
-                                  </button>
-                                );
-                              }
-
-                              return (
-                                <button
-                                  key={pageItem}
-                                  type="button"
-                                  onClick={() => {
-                                    if (isLoaded) {
-                                      setActivePage(pageItem);
-                                    }
-                                  }}
-                                  disabled={!isLoaded}
-                                  title={isLoaded ? `Go to Page ${pageItem}` : `Page ${pageItem} (Click 'Load Jobs' to load)`}
-                                  aria-label={`Page ${pageItem}${!isLoaded ? " (Disabled - Not loaded yet)" : ""}`}
-                                  className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full border text-[13px] font-medium flex items-center justify-center transition-all shrink-0 ${isLoaded
-                                    ? "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 cursor-pointer shadow-2xs"
-                                    : "border-slate-200/60 bg-slate-50/50 text-slate-300 opacity-50 cursor-not-allowed select-none"
-                                    }`}
-                                >
-                                  {pageItem}
-                                </button>
-                              );
-                            })}
-
-                            {/* Next Arrow */}
-                            <button
-                              type="button"
-                              onClick={() => setActivePage((prev) => Math.min(loadedPagesCount, prev + 1))}
-                              disabled={activePage >= loadedPagesCount}
-                              title={activePage < loadedPagesCount ? "Next Loaded Page" : "Click 'Load Jobs' to load more pages"}
-                              aria-label="Next Page"
-                              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-slate-200 bg-white flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0 shadow-2xs"
-                            >
-                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                              </svg>
-                            </button>
-                          </div>
-
-                          {/* Right Side: Load Jobs Button */}
+                    {/* Pagination Bar with Page Numbers and Load More Button */}
+                    <div className="flex flex-col items-center justify-center pt-6 pb-8 gap-3">
+                      {loadMoreError && (
+                        <div className="text-[13px] text-rose-600 bg-rose-50 border border-rose-200 px-4 py-2 rounded-lg flex items-center gap-2">
+                          <span>{loadMoreError}</span>
                           <button
                             type="button"
                             onClick={handleLoadMoreJobs}
-                            disabled={isLoadingMore || !hasMoreJobs}
-                            className="h-[38px] sm:h-[40px] px-5 sm:px-6 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] disabled:bg-[#818CF8] text-white text-[13px] sm:text-[13.5px] font-medium flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer active:scale-[0.99] disabled:cursor-not-allowed whitespace-nowrap self-stretch sm:self-auto"
+                            className="underline text-rose-700 font-medium hover:text-rose-900 cursor-pointer ml-1"
+                          >
+                            Retry
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-2 flex-wrap justify-center">
+                        {/* Prev Page Button */}
+                        <button
+                          type="button"
+                          onClick={() => setActivePage((p) => Math.max(1, p - 1))}
+                          disabled={activePage === 1}
+                          className="w-9 h-9 rounded-xl border border-[#E2E8F0] bg-white hover:bg-slate-50 disabled:opacity-40 text-slate-700 text-sm font-semibold flex items-center justify-center transition-all cursor-pointer disabled:cursor-not-allowed shadow-2xs"
+                        >
+                          ‹
+                        </button>
+
+                        {/* Page Numbers */}
+                        {Array.from({ length: totalClientPages }, (_, i) => i + 1).map((pg) => {
+                          const isActive = activePage === pg;
+                          return (
+                            <button
+                              key={pg}
+                              type="button"
+                              onClick={() => setActivePage(pg)}
+                              className={`w-9 h-9 rounded-xl text-xs font-semibold flex items-center justify-center transition-all cursor-pointer ${isActive
+                                ? "bg-[#4F46E5] text-white shadow-xs scale-105"
+                                : "bg-white border border-[#E2E8F0] text-slate-700 hover:bg-slate-50 shadow-2xs"
+                                }`}
+                            >
+                              {pg}
+                            </button>
+                          );
+                        })}
+
+                        {/* Next Page Button */}
+                        <button
+                          type="button"
+                          onClick={() => setActivePage((p) => Math.min(totalClientPages, p + 1))}
+                          disabled={activePage >= totalClientPages}
+                          className="w-9 h-9 rounded-xl border border-[#E2E8F0] bg-white hover:bg-slate-50 disabled:opacity-40 text-slate-700 text-sm font-semibold flex items-center justify-center transition-all cursor-pointer disabled:cursor-not-allowed shadow-2xs"
+                        >
+                          ›
+                        </button>
+
+                        {/* Load More Jobs from Server Button */}
+                        {hasMoreJobs && (
+                          <button
+                            type="button"
+                            onClick={handleLoadMoreJobs}
+                            disabled={isLoadingMore}
+                            className="h-9 px-4 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] disabled:bg-[#818CF8] text-white text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer active:scale-[0.98] disabled:cursor-not-allowed ml-2"
                           >
                             {isLoadingMore ? (
                               <>
-                                <svg className="animate-spin h-3.5 w-3.5 sm:h-4 sm:w-4 text-white" fill="none" viewBox="0 0 24 24">
-                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                                <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
                                 </svg>
                                 <span>Loading...</span>
                               </>
                             ) : (
-                              <span>Load Jobs</span>
+                              <>
+                                <span>Load Jobs</span>
+                                <span className="bg-white/20 px-1.5 py-0.5 rounded text-[10px] font-mono">
+                                  +{pageSize}
+                                </span>
+                              </>
                             )}
                           </button>
-                        </div>
-                      );
-                    })()}
+                        )}
+                      </div>
+
+                      <p className="text-[12px] text-[#94A3B8]">
+                        Showing {Math.min(20, filteredJobs.length - (activePage - 1) * 20)} of {filteredJobs.length} loaded jobs (Page {activePage} of {totalClientPages})
+                      </p>
+                    </div>
                   </>
                 )}
               </>
@@ -2278,7 +2243,7 @@ const BrowseJobs = () => {
         </main>
       </div>
 
-      {/* Job Details Modal Popup */}
+      {/* Job Details Modal Drawer (Right side slide-over) */}
       {selectedJobModal && (() => {
         const selectedJobId = getJobId(selectedJobModal);
         const activeAtsScore =
@@ -2308,7 +2273,7 @@ const BrowseJobs = () => {
 
         return (
           <div
-  className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[2px]"
+            className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[2px]"
             onClick={() => {
               setSelectedJobModal(null);
               setEnhanceError(null);
@@ -2316,19 +2281,21 @@ const BrowseJobs = () => {
             }}
           >
             <div
-  className="absolute top-0 right-0 h-full w-full sm:w-[520px] lg:w-[440px] bg-white shadow-2xl overflow-hidden flex flex-col min-h-0 animate-in slide-in-from-right duration-300"
+              className="absolute top-0 right-0 h-full w-full sm:w-[520px] lg:w-[440px] bg-white shadow-2xl overflow-hidden flex flex-col min-h-0 animate-in slide-in-from-right duration-300"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Modal Header */}
               <div className="p-5 sm:p-6 pb-4 border-b border-slate-100 flex items-start justify-between gap-4 shrink-0">
                 <div className="flex items-start gap-3.5 flex-1 min-w-0 pr-2">
-                  <div className="w-[44px] h-[44px] rounded-[12px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2 mt-0.5">
-                    <img
-                      src={selectedJobModal.logo || aiLogo}
-                      alt={selectedJobModal.company}
-                      className="w-full h-full object-contain"
-                    />
-                  </div>
+                  {selectedJobModal.logo ? (
+                    <div className="w-[44px] h-[44px] rounded-[12px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2 mt-0.5">
+                      <img
+                        src={selectedJobModal.logo}
+                        alt={selectedJobModal.company || "Company Logo"}
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                  ) : null}
 
                   <div className="flex flex-col flex-1 min-w-0">
                     <h2 className="text-[17px] font-bold text-[#0F172A] tracking-tight leading-snug break-words">
@@ -2721,26 +2688,26 @@ const BrowseJobs = () => {
                     <div className="flex items-center gap-2 text-[12.5px]">
                       <span className="text-[#64748B]">Experience</span>
                       <span className="font-semibold text-[#0F172A]">
-                        {selectedJobModal.experience}
+                        {selectedJobModal.experience || "Not specified"}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 text-[12.5px]">
                       <span className="text-[#64748B]">Work mode</span>
                       <span className="font-semibold text-[#0F172A]">
-                        {selectedJobModal.workMode}
+                        {selectedJobModal.workMode || "On-site"}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 text-[12.5px]">
                       <span className="text-[#64748B]">Employment type</span>
                       <span className="font-semibold text-[#0F172A]">
-                        {selectedJobModal.type}
+                        {selectedJobModal.type || "Full-time"}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 text-[12.5px]">
                       <span className="text-[#64748B]">Location</span>
                       <span className="font-semibold text-[#0F172A]">
                         {selectedJobModal.fullLocation ||
-                          selectedJobModal.location}
+                          selectedJobModal.location || "Remote / Flexible"}
                       </span>
                     </div>
                   </div>
