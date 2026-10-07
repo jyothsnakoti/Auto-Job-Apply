@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
+import EnhancedResumeViewer from "../components/EnhancedResumeViewer";
 import {
   getStoredUser,
   getOnboardingProfile,
@@ -16,6 +17,12 @@ import {
   getPrimaryResumeId,
   getBillingStatus,
   checkUserHasResume,
+  getDashboard,
+  getDashboardData,
+  getStoredDashboardData,
+  getJobs,
+  getResumeMatchesStatus,
+  refreshResumeMatches,
 } from "../services/api";
 
 import dashboard1Icon from "../assets/dashboard1.svg";
@@ -114,16 +121,22 @@ const extractCleanJobTitle = (rawTitle, rawText, index = 0) => {
   let title = cleanHtmlText(rawTitle || "");
   const text = cleanHtmlText(rawText || "");
 
+  // 1. If a title was explicitly provided and is a valid job title string
   if (
     title &&
-    title.length <= 55 &&
+    title.length <= 90 &&
     !title.toLowerCase().startsWith("the ") &&
     !title.toLowerCase().includes("is looking for") &&
     !title.toLowerCase().includes("we are looking") &&
-    !title.toLowerCase().includes("team is seeking") &&
-    !title.includes("\n")
+    !title.toLowerCase().includes("team is seeking")
   ) {
-    return title;
+    return title.split("\n")[0].trim();
+  }
+
+  // 2. If title exists even if slightly long, use the first line cleanly
+  if (title && title.length <= 160) {
+    const firstTitleLine = title.split("\n")[0].trim();
+    if (firstTitleLine) return firstTitleLine;
   }
 
   const candidateText = title || text;
@@ -135,7 +148,7 @@ const extractCleanJobTitle = (rawTitle, rawText, index = 0) => {
       lookingMatch &&
       lookingMatch[1] &&
       lookingMatch[1].trim().length >= 3 &&
-      lookingMatch[1].trim().length <= 60
+      lookingMatch[1].trim().length <= 100
     ) {
       return lookingMatch[1].trim();
     }
@@ -147,7 +160,7 @@ const extractCleanJobTitle = (rawTitle, rawText, index = 0) => {
       explicitMatch &&
       explicitMatch[1] &&
       explicitMatch[1].trim().length >= 3 &&
-      explicitMatch[1].trim().length <= 60
+      explicitMatch[1].trim().length <= 100
     ) {
       return explicitMatch[1].trim();
     }
@@ -170,6 +183,9 @@ const extractCleanJobTitle = (rawTitle, rawText, index = 0) => {
       /\b(Mobile\s+Developer(?:\s+[I|V|X\d]+)?)\b/i,
       /\b(iOS\s+Developer(?:\s+[I|V|X\d]+)?)\b/i,
       /\b(Android\s+Developer(?:\s+[I|V|X\d]+)?)\b/i,
+      /\b(Director[A-Za-z0-9\s\-/+(),&]+)\b/i,
+      /\b(Technician[A-Za-z0-9\s\-/+(),&]+)\b/i,
+      /\b(Manager[A-Za-z0-9\s\-/+(),&]+)\b/i,
     ];
 
     for (const pattern of knownRolePatterns) {
@@ -182,11 +198,15 @@ const extractCleanJobTitle = (rawTitle, rawText, index = 0) => {
     const firstLine = candidateText.split("\n")[0].replace(/^#+\s*/, "").trim();
     if (
       firstLine &&
-      firstLine.length <= 50 &&
+      firstLine.length <= 100 &&
       !firstLine.toLowerCase().includes("http")
     ) {
       return firstLine;
     }
+  }
+
+  if (rawTitle) {
+    return cleanHtmlText(rawTitle).slice(0, 100);
   }
 
   return `Position #${index + 1}`;
@@ -231,31 +251,32 @@ const extractCleanCompany = (rawCompany, rawText) => {
 const transformMatchToJob = (match, index = 0) => {
   if (!match) return null;
 
-  const rawText = match.full_jd_text || match.preview || match.description || "";
+  const rawText = match.full_jd_text || match.description || match.preview || "";
   const cleanedFullText = cleanHtmlText(rawText);
 
+  // Field 'preview' or 'title' or 'job_title' or 'role' from API payload contains the job title
   const title = extractCleanJobTitle(
-    match.title || match.job_title || match.role,
+    match.title || match.preview || match.job_title || match.role,
     rawText,
     index
   );
   const company = extractCleanCompany(
-    match.company || match.company_name,
+    match.companyName || match.company || match.company_name,
     rawText
   );
 
   const rawScore =
-    typeof match.overall_score === "number"
-      ? match.overall_score
-      : typeof match.score_data?.overall_score === "number"
-      ? match.score_data.overall_score
-      : typeof match.score === "number"
-      ? match.score
-      : typeof match.overall_score === "string" &&
-        !isNaN(Number(match.overall_score)) &&
-        match.overall_score.trim() !== ""
-      ? Number(match.overall_score)
-      : null;
+    typeof match.matchScore === "number"
+      ? match.matchScore
+      : typeof match.overall_score === "number"
+        ? match.overall_score
+        : typeof match.score_data?.overall_score === "number"
+          ? match.score_data.overall_score
+          : typeof match.score === "number"
+            ? match.score
+            : (typeof match.overall_score === "string" && !isNaN(Number(match.overall_score)) && match.overall_score.trim() !== "")
+              ? Number(match.overall_score)
+              : null;
 
   const matchPercent =
     rawScore !== null && !isNaN(rawScore)
@@ -269,7 +290,7 @@ const transformMatchToJob = (match, index = 0) => {
   else if (compLower.includes("amazon") || compLower.includes("luna")) logo = amazonLogo;
   else if (compLower.includes("shopify")) logo = shopifyLogo;
 
-  let location = cleanHtmlText(match.location || match.city || "");
+  let location = cleanHtmlText(match.location || match.city || match.country || "");
   if (!location && cleanedFullText) {
     const locMatch = cleanedFullText.match(
       /(?:location|place|city)\s*[:-]\s*([^\n\r]+)/i
@@ -310,8 +331,8 @@ const transformMatchToJob = (match, index = 0) => {
 
   let description = cleanHtmlText(
     match.description ||
-      match.preview ||
-      (match.full_jd_text ? match.full_jd_text.slice(0, 400) + "..." : "")
+    match.preview ||
+    (match.full_jd_text ? match.full_jd_text.slice(0, 400) + "..." : "")
   );
   if (!description) {
     description = "Job description available upon viewing details.";
@@ -336,7 +357,37 @@ const transformMatchToJob = (match, index = 0) => {
     }
   }
 
-  const jobId = match.job_id || match.JDid || match.jd_id || match.id || `match-${index + 1}`;
+  const jobId = match.jobId || match.job_id || match.JDid || match.jd_id || match.id || `match-${index + 1}`;
+
+  // Handle backend employmentType like FULL_TIME, PART_TIME, CONTRACT
+  let rawEmployment = match.employmentType || match.employment_type || match.type || "";
+  let employmentType = "";
+  if (rawEmployment) {
+    const rawEmp = String(rawEmployment).toUpperCase().replace(/_/g, "-");
+    if (rawEmp.includes("FULL")) employmentType = "Full-time";
+    else if (rawEmp.includes("PART")) employmentType = "Part-time";
+    else if (rawEmp.includes("CONTRACT")) employmentType = "Contract";
+    else if (rawEmp.includes("INTERN")) employmentType = "Internship";
+    else if (rawEmp.includes("FREELANCE")) employmentType = "Freelance";
+    else employmentType = cleanHtmlText(rawEmployment);
+  } else {
+    employmentType = "Full-time";
+  }
+
+  // Handle backend workplace like REMOTE, ONSITE, HYBRID
+  let rawWorkplace = match.workplace || match.workMode || match.work_mode || "";
+  let workMode = "";
+  if (rawWorkplace) {
+    const rawWp = String(rawWorkplace).toUpperCase();
+    if (rawWp.includes("REMOTE")) workMode = "Remote";
+    else if (rawWp.includes("ONSITE") || rawWp.includes("ON_SITE") || rawWp.includes("OFFICE")) workMode = "On-site";
+    else if (rawWp.includes("HYBRID")) workMode = "Hybrid";
+    else workMode = cleanHtmlText(rawWorkplace);
+  } else if (location.toLowerCase().includes("remote")) {
+    workMode = "Remote";
+  } else {
+    workMode = "On-site";
+  }
 
   return {
     id: jobId,
@@ -344,16 +395,17 @@ const transformMatchToJob = (match, index = 0) => {
     JDid: jobId,
     title,
     company,
+    companyDomain: match.companyDomain || "",
     location,
+    country: match.country || "",
     fullLocation: cleanHtmlText(match.fullLocation || location),
-    type: cleanHtmlText(match.type || match.employment_type || "Full-time"),
-    workMode: cleanHtmlText(
-      match.workMode ||
-        match.work_mode ||
-        (location.toLowerCase().includes("remote") ? "Remote" : "On-site")
-    ),
+    type: employmentType,
+    employmentType,
+    workMode,
+    workplace: workMode,
     department: cleanHtmlText(match.department || "Engineering"),
-    posted: cleanHtmlText(match.posted || "Recent match"),
+    posted: match.postedAt ? new Date(match.postedAt).toLocaleDateString() : cleanHtmlText(match.posted || "Recent match"),
+    postedAt: match.postedAt || null,
     match: matchText,
     matchPercent,
     rawScore,
@@ -371,26 +423,35 @@ const transformMatchToJob = (match, index = 0) => {
 };
 
 const getMatchPercent = (job) => {
+  if (job?.matchPercent !== undefined && job?.matchPercent !== null) {
+    const num = Number(job.matchPercent);
+    if (!isNaN(num)) return num;
+  }
+  if (job?.rawScore !== undefined && job?.rawScore !== null) {
+    const num = Number(job.rawScore);
+    if (!isNaN(num)) return num;
+  }
+  if (job?.matchScore !== undefined && job?.matchScore !== null) {
+    const num = Number(job.matchScore);
+    if (!isNaN(num)) return num;
+  }
   if (job?.overall_score !== undefined && job?.overall_score !== null) {
     const num = Number(job.overall_score);
-    return isNaN(num) ? 0 : num;
-  }
-  if (job?.matchPercent !== undefined && job?.matchPercent !== null) {
-    return Number(job.matchPercent);
+    if (!isNaN(num)) return num;
   }
   return 0;
 };
 
 const getMatchLabel = (job) => {
-  if (job?.overall_score !== undefined && job?.overall_score !== null) {
-    const num = Number(job.overall_score);
-    return `${Number.isInteger(num) ? num : num.toFixed(1)}% match`;
+  const percent = getMatchPercent(job);
+  if (percent > 0) {
+    return `${Number.isInteger(percent) ? percent : Math.round(percent)}% match`;
   }
-  return job?.match || `${getMatchPercent(job)}% match`;
+  return job?.match || "ATS Match";
 };
 
 const getMatchBadgeColor = (percent) => {
-  if (percent >= 90) return "bg-[#ECFDF5] text-[#059669]";
+  if (percent >= 85) return "bg-[#ECFDF5] text-[#059669]";
   if (percent >= 70) return "bg-[#EFF6FF] text-[#2563EB]";
   if (percent >= 50) return "bg-[#FFFBEB] text-[#D97706]";
   return "bg-[#FEF2F2] text-[#DC2626]";
@@ -421,6 +482,22 @@ const getMissingRequiredSkills = (job) => {
   return [];
 };
 
+const formatMatchTime = (isoString) => {
+  if (!isoString) return "";
+  try {
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return String(isoString);
+    return date.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return String(isoString);
+  }
+};
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const [userName, setUserName] = useState("");
@@ -431,12 +508,33 @@ const Dashboard = () => {
   const [isJobSaved, setIsJobSaved] = useState(false);
 
   // Dynamic Jobs & API Pagination State
-  const [jobs, setJobs] = useState([]);
+  const [jobs, setJobs] = useState(() => {
+    try {
+      const cachedDashboard = getStoredDashboardData();
+      if (Array.isArray(cachedDashboard?.topMatches) && cachedDashboard.topMatches.length > 0) {
+        return cachedDashboard.topMatches
+          .map((m, idx) => transformMatchToJob(m, idx))
+          .filter(Boolean);
+      }
+      const stored = getStoredJobMatches();
+      if (Array.isArray(stored) && stored.length > 0) {
+        return stored
+          .map((m, idx) => transformMatchToJob(m, idx))
+          .filter(Boolean);
+      }
+    } catch {
+      // ignore
+    }
+    return [];
+  });
   const [lastJobId, setLastJobId] = useState(null);
   const [isLoadingJobs, setIsLoadingJobs] = useState(true);
   const [jobError, setJobError] = useState(null);
   const [jobFeedbackMessage, setJobFeedbackMessage] = useState(null);
-  const [hasResume, setHasResume] = useState(false);
+  const [hasResume, setHasResume] = useState(() => {
+    const cachedDashboard = getStoredDashboardData();
+    return Boolean(cachedDashboard?.topMatches?.length > 0);
+  });
 
   // Dynamic Billing Information from API
   const [billingInfo, setBillingInfo] = useState(null);
@@ -470,7 +568,7 @@ const Dashboard = () => {
   const [updatedAtsScores, setUpdatedAtsScores] = useState({});
 
   // Filter States
-  const [selectedDate, setSelectedDate] = useState("Last 7 days");
+  const [selectedDate, setSelectedDate] = useState("All time");
   const [selectedLocations, setSelectedLocations] = useState([]);
   const [locationSearch, setLocationSearch] = useState("");
   const [selectedWorkplace, setSelectedWorkplace] = useState([]);
@@ -485,7 +583,228 @@ const Dashboard = () => {
 
   const dropdownRef = useRef(null);
 
-  // 1. Fetch Dynamic Billing Status from API
+  // Dynamic ATS Resume Matches Status from GET /api/resumes/matches/status
+  const [matchStatus, setMatchStatus] = useState({
+    hasPrimaryResume: null,
+    refreshing: false,
+    matchCount: 0,
+    lastComputedAt: null,
+    progress: null,
+    lastResult: null,
+  });
+  const [isLoadingMatchStatus, setIsLoadingMatchStatus] = useState(true);
+  const [isManualCheckingStatus, setIsManualCheckingStatus] = useState(false);
+  const prevRefreshingRef = useRef(false);
+  const pollingTimeoutRef = useRef(null);
+  const hasAutoRefreshedRef = useRef(false);
+
+  // Dynamic Dashboard Metrics from GET /api/dashboard
+  const [dashboardMetrics, setDashboardMetrics] = useState(() => {
+    return getStoredDashboardData() || null;
+  });
+  const [isLoadingDashboard, setIsLoadingDashboard] = useState(!dashboardMetrics);
+
+  // Reload jobs and dashboard data when matching finishes (refreshing transitions from true -> false)
+  const reloadJobsAndDashboard = useCallback(async () => {
+    try {
+      setIsLoadingJobs(true);
+      // 1. Reload dashboard stats
+      const dashData = await getDashboard().catch(() => null);
+      if (dashData) {
+        setDashboardMetrics(dashData);
+      }
+      // 2. Reload jobs list from GET /api/jobs
+      const jobsRes = await getJobs({ sort: "best_match", page: 0, size: 20 }).catch(() => null);
+      if (jobsRes && Array.isArray(jobsRes.items) && jobsRes.items.length > 0) {
+        const transformed = jobsRes.items
+          .map((m, idx) => transformMatchToJob(m, idx))
+          .filter(Boolean);
+        setJobs(transformed);
+        const last = transformed[transformed.length - 1];
+        if (last?.job_id || last?.id) {
+          setLastJobId(last.job_id || last.id);
+        }
+      } else if (Array.isArray(dashData?.topMatches) && dashData.topMatches.length > 0) {
+        const transformed = dashData.topMatches
+          .map((m, idx) => transformMatchToJob(m, idx))
+          .filter(Boolean);
+        setJobs(transformed);
+      }
+    } catch (err) {
+      console.warn("[Dashboard] Error reloading jobs/dashboard after match refresh:", err);
+    } finally {
+      setIsLoadingJobs(false);
+    }
+  }, []);
+
+  // Poll GET /api/resumes/matches/status (with automatic background refresh)
+  const fetchMatchStatus = useCallback(
+    async (isInitial = false) => {
+      try {
+        if (isInitial) setIsLoadingMatchStatus(true);
+        const status = await getResumeMatchesStatus();
+        if (!status) return;
+
+        setMatchStatus(status);
+
+        if (status.hasPrimaryResume === false) {
+          setHasResume(false);
+        } else if (status.hasPrimaryResume === true) {
+          setHasResume(true);
+        }
+
+        // Detect transition from refreshing=true to refreshing=false -> reload GET /api/jobs and GET /api/dashboard
+        if (prevRefreshingRef.current === true && status.refreshing === false) {
+          console.log("[Dashboard] ATS matching complete. Reloading GET /api/jobs and GET /api/dashboard...");
+          reloadJobsAndDashboard();
+        }
+
+        prevRefreshingRef.current = Boolean(status.refreshing);
+
+        // Automatic Refresh without manual user click:
+        // If user has a primary resume, matching is not already running, and we haven't auto-refreshed yet
+        if (
+          isInitial &&
+          status.hasPrimaryResume === true &&
+          !status.refreshing &&
+          !hasAutoRefreshedRef.current
+        ) {
+          hasAutoRefreshedRef.current = true;
+          console.log("[Dashboard] Automatically requesting fresh ATS matching on initial load...");
+          try {
+            await refreshResumeMatches();
+            setMatchStatus((prev) => ({
+              ...prev,
+              refreshing: true,
+              progress: "Initiating automatic ATS match refresh...",
+            }));
+            prevRefreshingRef.current = true;
+            if (pollingTimeoutRef.current) clearTimeout(pollingTimeoutRef.current);
+            pollingTimeoutRef.current = setTimeout(() => {
+              fetchMatchStatus(false);
+            }, 1000);
+            return;
+          } catch (autoErr) {
+            console.warn("[Dashboard] Auto-refresh match notice:", autoErr?.message);
+          }
+        }
+
+        // Polling: While matching runs (refreshing=true), poll every 3 seconds
+        if (status.refreshing) {
+          if (pollingTimeoutRef.current) clearTimeout(pollingTimeoutRef.current);
+          pollingTimeoutRef.current = setTimeout(() => {
+            fetchMatchStatus(false);
+          }, 3000);
+        }
+      } catch (err) {
+        console.warn("[Dashboard] Could not fetch resume matches status:", err);
+      } finally {
+        if (isInitial) setIsLoadingMatchStatus(false);
+        setIsManualCheckingStatus(false);
+      }
+    },
+    [reloadJobsAndDashboard]
+  );
+
+  // Initialize and clean up polling timer
+  useEffect(() => {
+    fetchMatchStatus(true);
+    return () => {
+      if (pollingTimeoutRef.current) {
+        clearTimeout(pollingTimeoutRef.current);
+      }
+    };
+  }, [fetchMatchStatus]);
+
+  const handleManualRefreshStatus = async () => {
+    setIsManualCheckingStatus(true);
+    await fetchMatchStatus(false);
+  };
+
+  const handleRequestMatchRefresh = async () => {
+    if (isManualCheckingStatus || matchStatus.refreshing) return;
+    if (matchStatus.hasPrimaryResume === false) {
+      navigate("/profile");
+      return;
+    }
+    try {
+      setIsManualCheckingStatus(true);
+      await refreshResumeMatches();
+      setMatchStatus((prev) => ({
+        ...prev,
+        refreshing: true,
+        progress: "Matching requested...",
+      }));
+      prevRefreshingRef.current = true;
+      setTimeout(() => {
+        fetchMatchStatus(false);
+      }, 500);
+    } catch (err) {
+      console.error("[Dashboard] Error requesting match refresh:", err);
+      setIsManualCheckingStatus(false);
+    }
+  };
+
+  // 1. Fetch Dynamic Dashboard Metrics & Top Matches from GET /api/dashboard
+  useEffect(() => {
+    let isMounted = true;
+    const loadDashboardMetrics = async () => {
+      try {
+        const data = await getDashboardData();
+        if (isMounted && data) {
+          setDashboardMetrics(data);
+
+          // Populate Top Matches dynamically from /api/dashboard
+          if (Array.isArray(data.topMatches) && data.topMatches.length > 0) {
+            const transformed = data.topMatches
+              .map((m, idx) => transformMatchToJob(m, idx))
+              .filter(Boolean);
+
+            if (transformed.length > 0) {
+              setJobs(transformed);
+              setHasResume(true);
+              const last = transformed[transformed.length - 1];
+              if (last?.job_id || last?.id) {
+                setLastJobId(last.job_id || last.id);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("[Dashboard] Could not fetch dashboard metrics:", err);
+      } finally {
+        if (isMounted) {
+          setIsLoadingDashboard(false);
+          setIsLoadingJobs(false);
+        }
+      }
+    };
+
+    loadDashboardMetrics();
+
+    const handleDashboardUpdated = (e) => {
+      if (isMounted && e?.detail) {
+        setDashboardMetrics(e.detail);
+        if (Array.isArray(e.detail.topMatches) && e.detail.topMatches.length > 0) {
+          const transformed = e.detail.topMatches
+            .map((m, idx) => transformMatchToJob(m, idx))
+            .filter(Boolean);
+          if (transformed.length > 0) {
+            setJobs(transformed);
+            setHasResume(true);
+          }
+        }
+      }
+    };
+
+    window.addEventListener("dashboardDataUpdated", handleDashboardUpdated);
+    return () => {
+      isMounted = false;
+      window.removeEventListener("dashboardDataUpdated", handleDashboardUpdated);
+    };
+  }, []);
+
+  // 2. Fetch Dynamic Billing Status from API
   useEffect(() => {
     let isMounted = true;
     const loadBilling = async () => {
@@ -524,7 +843,7 @@ const Dashboard = () => {
     };
   }, []);
 
-  // 2. Fetch Dynamic User Info & Matched Jobs from API
+  // 3. Fetch Dynamic User Info & Matched Jobs from API
   useEffect(() => {
     let isMounted = true;
 
@@ -573,7 +892,7 @@ const Dashboard = () => {
               sessionStorage.setItem("userFullName", resolvedName);
             }
           })
-          .catch(() => {});
+          .catch(() => { });
 
         // Check Resume Status
         let activeResumeId = null;
@@ -600,73 +919,103 @@ const Dashboard = () => {
           return;
         }
 
-        // Load Matched Jobs from API / Storage
-        const storedMatches = getStoredJobMatches();
-        let loadedMatches = [];
+        // 1. Fetch backend dashboard counters and top matches from GET /api/dashboard
+        let fetchedJobsCount = 0;
 
-        if (Array.isArray(storedMatches) && storedMatches.length > 0) {
-          loadedMatches = storedMatches;
-        } else if (
-          Array.isArray(onboardingState?.matches) &&
-          onboardingState.matches.length > 0
-        ) {
-          loadedMatches = onboardingState.matches;
+        try {
+          const dashData = await getDashboard();
+          if (dashData && isMounted) {
+            if (Array.isArray(dashData.topMatches) && dashData.topMatches.length > 0) {
+              const topJobs = dashData.topMatches.map((m, idx) => transformMatchToJob(m, idx)).filter(Boolean);
+              setJobs(topJobs);
+              fetchedJobsCount = topJobs.length;
+            }
+          }
+        } catch (dashErr) {
+          console.debug("[Dashboard] GET /api/dashboard fallback notice:", dashErr?.message);
         }
 
-        if (loadedMatches.length > 0) {
-          const transformed = loadedMatches
-            .map((m, idx) => transformMatchToJob(m, idx))
-            .filter(Boolean);
+        // 2. Fetch stored user jobs from GET /api/jobs
+        try {
+          const jobsRes = await getJobs({ sort: 'best_match', page: 0, size: 20 });
+          if (jobsRes && Array.isArray(jobsRes.items) && jobsRes.items.length > 0 && isMounted) {
+            const transformed = jobsRes.items.map((m, idx) => transformMatchToJob(m, idx)).filter(Boolean);
+            setJobs(transformed);
+            fetchedJobsCount = transformed.length;
+          }
+        } catch (jobsErr) {
+          console.debug("[Dashboard] GET /api/jobs fallback notice:", jobsErr?.message);
+        }
 
-          // Deduplicate jobs by unique ID
-          const uniqueJobs = [];
-          const seenIds = new Set();
-          for (const j of transformed) {
-            const jid = j.job_id || j.id;
-            if (jid && !seenIds.has(jid)) {
-              seenIds.add(jid);
-              uniqueJobs.push(j);
-            } else if (!jid) {
-              uniqueJobs.push(j);
-            }
+        // 3. Fallback to Local Storage or Ngrok API only if GET /api/jobs returned 0 items
+        if (fetchedJobsCount === 0) {
+          const storedMatches = getStoredJobMatches();
+          let loadedMatches = [];
+
+          if (Array.isArray(storedMatches) && storedMatches.length > 0) {
+            loadedMatches = storedMatches;
+          } else if (
+            Array.isArray(onboardingState?.matches) &&
+            onboardingState.matches.length > 0
+          ) {
+            loadedMatches = onboardingState.matches;
           }
 
-          if (isMounted) {
-            setJobs(uniqueJobs);
-            const last = uniqueJobs[uniqueJobs.length - 1];
-            if (last?.job_id || last?.id) {
-              setLastJobId(last.job_id || last.id);
+          if (loadedMatches.length > 0) {
+            const transformed = loadedMatches
+              .map((m, idx) => transformMatchToJob(m, idx))
+              .filter(Boolean);
+
+            // Deduplicate jobs by unique ID
+            const uniqueJobs = [];
+            const seenIds = new Set();
+            for (const j of transformed) {
+              const jid = j.job_id || j.id;
+              if (jid && !seenIds.has(jid)) {
+                seenIds.add(jid);
+                uniqueJobs.push(j);
+              } else if (!jid) {
+                uniqueJobs.push(j);
+              }
             }
-          }
-        } else {
-          // If user has a resume but no stored matches, fetch jobs dynamically from API
-          const resumeIdVal = activeResumeId || getStoredResumeId();
-          if (resumeIdVal) {
-            try {
-              const result = await getMoreJobsForResume({
-                N: 10,
-                LastJDid: "",
-                top_k: 1000,
-                ResumeID: resumeIdVal,
-              });
-              if (
-                result &&
-                Array.isArray(result.matches) &&
-                result.matches.length > 0
-              ) {
-                const transformed = result.matches
-                  .map((m, idx) => transformMatchToJob(m, idx))
-                  .filter(Boolean);
-                if (isMounted) {
-                  setJobs(transformed);
-                  const last = transformed[transformed.length - 1];
-                  if (last?.job_id || last?.id) {
-                    setLastJobId(last.job_id || last.id);
+
+            if (isMounted) {
+              setJobs(uniqueJobs);
+              const last = uniqueJobs[uniqueJobs.length - 1];
+              if (last?.job_id || last?.id) {
+                setLastJobId(last.job_id || last.id);
+              }
+            }
+          } else {
+            // If user has a resume but no stored matches, fetch jobs dynamically from Ngrok API
+            const resumeIdVal = activeResumeId || getStoredResumeId();
+            if (resumeIdVal) {
+              try {
+                const result = await getMoreJobsForResume({
+                  N: 10,
+                  LastJDid: "",
+                  top_k: 1000,
+                  ResumeID: resumeIdVal,
+                });
+                if (
+                  result &&
+                  Array.isArray(result.matches) &&
+                  result.matches.length > 0
+                ) {
+                  const transformed = result.matches
+                    .map((m, idx) => transformMatchToJob(m, idx))
+                    .filter(Boolean);
+                  if (isMounted) {
+                    setJobs(transformed);
+                    const last = transformed[transformed.length - 1];
+                    if (last?.job_id || last?.id) {
+                      setLastJobId(last.job_id || last.id);
+                    }
                   }
                 }
+              } catch (apiErr) {
+                console.warn("[Dashboard] Could not auto-fetch jobs:", apiErr);
               }
-            } catch (apiErr) {
-              console.warn("[Dashboard] Could not auto-fetch jobs:", apiErr);
             }
           }
         }
@@ -885,10 +1234,33 @@ const Dashboard = () => {
       if (selectedJobTypes.length > 0) {
         if (
           !selectedJobTypes.some((t) =>
-            job.type?.toLowerCase().includes(t.toLowerCase())
+            (job.type || "").toLowerCase().includes(t.toLowerCase())
           )
         ) {
           return false;
+        }
+      }
+
+      if (selectedEmploymentTypes.length > 0) {
+        if (
+          !selectedEmploymentTypes.some((t) =>
+            (job.type || job.employmentType || job.employment_type || "")
+              .toLowerCase()
+              .includes(t.toLowerCase())
+          )
+        ) {
+          return false;
+        }
+      }
+
+      if (sponsorsVisa) {
+        const visa = job.sponsorsVisa || job.visa_sponsorship || job.rawMatch?.sponsorsVisa;
+        if (!visa) {
+          // If visa requirement is toggled, check if description mentions visa/sponsorship
+          const desc = (job.description || job.fullJdText || "").toLowerCase();
+          if (!desc.includes("visa") && !desc.includes("sponsor")) {
+            return false;
+          }
         }
       }
 
@@ -902,80 +1274,100 @@ const Dashboard = () => {
     selectedLocations,
     selectedRoles,
     selectedJobTypes,
+    selectedEmploymentTypes,
+    sponsorsVisa,
   ]);
 
-  // Dynamic Dashboard Statistics Cards (Calculated From API Data)
+  // Dynamic Dashboard Statistics Cards (From GET /api/dashboard & GET /api/resumes/matches/status)
   const statsCards = useMemo(() => {
-    const totalJobs = jobs.length;
-    const qualifiedCount = jobs.filter(
-      (j) => (j.matchPercent || 0) >= 80
-    ).length;
+    // 1. Jobs Found
+    const jobsFoundVal =
+      typeof
+      typeof matchStatus?.matchCount === "number" && matchStatus.matchCount > 0
+        ? matchStatus.matchCount
+        : (dashboardMetrics?.jobsFound === "number"
+        ? dashboardMetrics.jobsFound
+        : jobs.length > 0
+        ? jobs.length
+        : 0);
 
-    const usedApps =
-      typeof billingInfo?.usedApplications === "number"
+    // 2. Qualified Matches
+    const qualifiedMatchesVal =
+      typeof dashboardMetrics?.qualifiedMatches === "number"
+        ? dashboardMetrics.qualifiedMatches
+        : jobs.filter((j) => (j.matchPercent || 0) >= 80).length;
+
+    // 3. Allowance (for supporting text & limits)
+    const allowanceVal =
+      typeof dashboardMetrics?.applicationAllowance === "number"
+        ? dashboardMetrics.applicationAllowance
+        : typeof billingInfo?.applicationAllowance === "number"
+        ? billingInfo.applicationAllowance
+        : typeof billingInfo?.applicationLimit === "number"
+        ? billingInfo.applicationLimit
+        : 100;
+
+    // 4. Applications Submitted
+    const submittedVal =
+      typeof dashboardMetrics?.applicationsSubmitted === "number"
+        ? dashboardMetrics.applicationsSubmitted
+        : typeof billingInfo?.usedApplications === "number"
         ? billingInfo.usedApplications
         : typeof billingInfo?.applicationsUsed === "number"
         ? billingInfo.applicationsUsed
         : applications.length;
 
-    const allowance =
-      typeof billingInfo?.applicationAllowance === "number"
-        ? billingInfo.applicationAllowance
-        : typeof billingInfo?.applicationLimit === "number"
-        ? billingInfo.applicationLimit
-        : null;
-
-    const remainingApps =
-      typeof billingInfo?.remainingApplications === "number"
+    // 5. Applications Remaining
+    const remainingVal =
+      typeof dashboardMetrics?.applicationsRemaining === "number"
+        ? dashboardMetrics.applicationsRemaining
+        : typeof billingInfo?.remainingApplications === "number"
         ? billingInfo.remainingApplications
-        : allowance !== null
-        ? Math.max(0, allowance - usedApps)
-        : 0;
+        : Math.max(0, allowanceVal - submittedVal);
 
     return [
       {
         id: "jobs-found",
         title: "Jobs Found",
-        value: totalJobs > 0 ? totalJobs.toLocaleString() : "0",
-        supportingText:
-          totalJobs > 0
-            ? `${totalJobs} matched jobs ready`
-            : hasResume
-            ? "No matches found"
-            : "Upload resume to find matches",
+        value: Number(jobsFoundVal).toLocaleString(),
+        supportingText: matchStatus?.lastComputedAt
+          ? `Computed ${formatMatchTime(matchStatus.lastComputedAt)}`
+          : jobsFoundVal > 0
+            ? "New jobs in the last 7 days"
+            : matchStatus?.hasPrimaryResume === false
+              ? "Primary resume required"
+              : hasResume
+                ? "No matches found"
+                : "Upload resume to find matches",
         iconBg: "#EFF6FF",
         icon: dashboard1Icon,
       },
       {
         id: "qualified-matches",
         title: "Qualified Matches",
-        value: qualifiedCount > 0 ? qualifiedCount.toLocaleString() : "0",
-        supportingText: "Jobs with ≥80% match",
+        value: Number(qualifiedMatchesVal).toLocaleString(),
+        supportingText: "Jobs with good ATS match",
         iconBg: "#ECFEFF",
         icon: dashboard2Icon,
       },
       {
         id: "applications-submitted",
         title: "Applications Submitted",
-        value: usedApps.toLocaleString(),
-        supportingText: allowance
-          ? `Out of ${allowance} monthly limit`
-          : "This billing cycle",
+        value: Number(submittedVal).toLocaleString(),
+        supportingText: `Out of ${allowanceVal} monthly limit`,
         iconBg: "#FAF5FF",
         icon: dashboard3Icon,
       },
       {
         id: "applications-remaining",
         title: "Applications Remaining",
-        value: remainingApps.toLocaleString(),
-        supportingText: allowance
-          ? `Out of ${allowance} monthly limit`
-          : "This billing cycle",
+        value: Number(remainingVal).toLocaleString(),
+        supportingText: "This month",
         iconBg: "#F0FDFA",
         icon: dashboard4Icon,
       },
     ];
-  }, [jobs, billingInfo, hasResume, applications]);
+  }, [matchStatus, dashboardMetrics, jobs, billingInfo, applications, hasResume]);
 
   // Dynamic Application Tabs with Counts
   const applicationTabs = useMemo(() => {
@@ -1016,45 +1408,42 @@ const Dashboard = () => {
     );
   }, [applications, selectedAppTab]);
 
-  // Enhance Resume Action Handler
+  // Enhance Resume Action Handler (POST /api/jobs/{jobId}/enhance -> GET /api/jobs/{jobId}/enhance)
   const handleEnhanceResume = async () => {
     if (isEnhancing || !selectedJobModal) return;
     setEnhanceError(null);
     setEnhanceSuccess(null);
 
-    const candidateId = getCandidateId();
-    const resumeId = getStoredResumeId();
     const selectedJobId = getJobId(selectedJobModal);
 
-    if (!selectedJobId || !candidateId || !resumeId) {
-      const missing = [];
-      if (!selectedJobId) missing.push("Job ID (JDid)");
-      if (!candidateId) missing.push("Candidate ID (Candidateid)");
-      if (!resumeId) missing.push("Resume ID (ResumeID)");
-
-      setEnhanceError(
-        `Required information is missing: ${missing.join(
-          ", "
-        )}. Please ensure you are logged in and have uploaded a resume.`
-      );
+    if (!selectedJobId) {
+      setEnhanceError("Job ID is missing. Please select a valid job to enhance.");
       return;
     }
 
     try {
       setIsEnhancing(true);
 
-      const payload = {
-        JDid: selectedJobId,
-        Candidateid: candidateId,
-        ResumeID: resumeId,
-      };
+      const result = await getEnhancedResume(selectedJobId);
+      console.log("[Dashboard] Enhance Resume Result:", result);
 
-      const result = await getEnhancedResume(payload);
-      setEnhancedResultsMap((prev) => ({
-        ...prev,
-        [selectedJobId]: result,
-      }));
-      setEnhanceSuccess("Resume successfully enhanced for this role!");
+      if (result?.status === "NO_BRIDGEABLE_GAPS") {
+        setEnhanceSuccess(
+          result?.message || "No bridgeable skill gaps identified for this role."
+        );
+      } else if (result?.status === "NOT_NEEDED") {
+        setEnhanceSuccess(
+          result?.message || "Resume enhancement is not needed for this role."
+        );
+      } else {
+        setEnhancedResultsMap((prev) => ({
+          ...prev,
+          [selectedJobId]: result,
+        }));
+        setEnhanceSuccess(
+          result?.message || "Resume successfully enhanced for this role!"
+        );
+      }
     } catch (err) {
       console.error("[Dashboard] Enhance Resume Error:", err);
       const errMsg =
@@ -1074,6 +1463,20 @@ const Dashboard = () => {
     navigator.clipboard.writeText(text);
     setCopiedResume(true);
     setTimeout(() => setCopiedResume(false), 2500);
+  };
+
+  const handleDownloadEnhancedResume = (text, job) => {
+    if (!text) return;
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const jobTitle = (job?.title || "Enhanced_Resume").replace(/[^a-zA-Z0-9_-]/g, "_");
+    link.href = url;
+    link.download = `${jobTitle}_Resume.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const handleGetUpdatedAts = async () => {
@@ -1146,15 +1549,141 @@ const Dashboard = () => {
 
         {/* Dashboard Main Content */}
         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-7 flex flex-col gap-6 w-full bg-[#F8FAFC]">
-          {/* Welcome Header */}
-          <div className="flex flex-col gap-1">
-            <h1 className="text-[20px] md:text-[22px] font-bold text-black tracking-tight">
-              Welcome back, {userName || "User"}!
-            </h1>
-            <p className="text-[13px] text-[#64748B]">
-              Your job search is running. We're finding, matching and applying to the best opportunities for you.
-            </p>
+
+          {/* Welcome Header & Match Status Indicator */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex flex-col gap-1">
+              <h1 className="text-[20px] md:text-[22px] font-bold text-black tracking-tight">
+                Welcome back, {userName || "User"}!
+              </h1>
+              <p className="text-[13px] text-[#64748B]">
+                Your job search is running. We're finding, matching and applying to the best opportunities for you.
+              </p>
+            </div>
+
+            {/* ATS Match Status Badge & Manual Refresh */}
+            {matchStatus.hasPrimaryResume && (
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-white border border-[#E2E8F0] shadow-xs text-[#334155]">
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      matchStatus.refreshing
+                        ? "bg-amber-500 animate-ping"
+                        : "bg-emerald-500"
+                    }`}
+                  />
+                  <span>
+                    {matchStatus.refreshing
+                      ? "ATS Matching Active"
+                      : matchStatus.lastComputedAt
+                        ? `Synced ${formatMatchTime(matchStatus.lastComputedAt)}`
+                        : "Matches Ready"}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRequestMatchRefresh}
+                  disabled={isManualCheckingStatus || matchStatus.refreshing}
+                  title="Request fresh ATS match run"
+                  className="px-3 py-1.5 rounded-xl bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] text-xs font-semibold text-[#0F172A] flex items-center gap-1.5 transition-all shadow-2xs disabled:opacity-60 cursor-pointer"
+                >
+                  <svg
+                    className={`w-3.5 h-3.5 ${
+                      isManualCheckingStatus || matchStatus.refreshing
+                        ? "animate-spin text-[#6366F1]"
+                        : "text-[#64748B]"
+                    }`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                  </svg>
+                  <span>
+                    {isManualCheckingStatus
+                      ? "Requesting..."
+                      : matchStatus.refreshing
+                        ? "Matching Active..."
+                        : "Refresh Matches"}
+                  </span>
+                </button>
+              </div>
+            )}
           </div>
+
+          {/* Conditional Match Status Banner: No Primary Resume */}
+          {matchStatus.hasPrimaryResume === false && (
+            <div className="w-full p-4 rounded-[16px] bg-amber-50 border border-amber-200/80 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in duration-300">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center shrink-0 text-amber-600 mt-0.5 sm:mt-0">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                    />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-amber-900">Primary Resume Required</h3>
+                  <p className="text-xs text-amber-700 mt-0.5">
+                    No primary resume detected. Please set or upload a primary resume in your profile to enable automated ATS matching and job recommendations.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate("/profile")}
+                className="px-4 py-2 text-xs font-semibold text-white bg-[#6366F1] hover:bg-[#4F46E5] rounded-xl shadow-xs transition-all whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                Go to Profile & Resumes
+              </button>
+            </div>
+          )}
+
+          {/* Conditional Match Status Banner: Live Refreshing Progress */}
+          {matchStatus.refreshing && (
+            <div className="w-full p-4.5 rounded-[18px] bg-gradient-to-r from-indigo-50/90 via-purple-50/80 to-blue-50/90 border border-indigo-200/80 shadow-xs flex flex-col gap-2.5 animate-in fade-in duration-300">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-9 h-9 rounded-xl bg-[#6366F1]/10 flex items-center justify-center text-[#6366F1] shrink-0">
+                    <svg className="w-4.5 h-4.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      />
+                    </svg>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-sm font-bold text-[#0F172A]">ATS Job Matching In Progress</h3>
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-100 text-indigo-700">
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-ping" />
+                        Scanning Live
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#64748B] mt-0.5 truncate">
+                      {matchStatus.progress || "Fetching and scoring matching jobs from ATS..."}
+                    </p>
+                  </div>
+                </div>
+                <div className="hidden sm:flex items-center text-xs font-medium text-indigo-600 bg-white/80 px-3 py-1.5 rounded-xl border border-indigo-100 shadow-xs shrink-0">
+                  Polling updates...
+                </div>
+              </div>
+              <div className="w-full bg-indigo-100/70 rounded-full h-1.5 overflow-hidden">
+                <div className="bg-[#6366F1] h-1.5 rounded-full animate-pulse w-3/4 transition-all duration-500" />
+              </div>
+            </div>
+          )}
 
           {/* 1. Dashboard Statistics Cards (Dynamic From API) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4.5 w-full">
@@ -1230,22 +1759,21 @@ const Dashboard = () => {
 
             {/* Second Row: Filter Buttons */}
             <div className="flex items-center gap-2 flex-wrap pt-0.5 relative">
-              {/* Date Dropdown */}
+
+              {/* 1. Date Dropdown */}
               <div className="relative">
                 <button
                   type="button"
                   onClick={() => toggleDropdown("date")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "date" || selectedDate !== "All time"
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "date" || selectedDate !== "All time"
+                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                    }`}
                 >
                   <span>Date</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "date" ? "rotate-180" : ""
-                    }`}
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "date" ? "rotate-180" : ""
+                      }`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1266,18 +1794,16 @@ const Dashboard = () => {
                             setSelectedDate(opt);
                             setActiveDropdown(null);
                           }}
-                          className={`flex items-center gap-2.5 px-3 py-2 rounded-[8px] cursor-pointer text-[13px] transition-colors ${
-                            isSelected
-                              ? "bg-slate-50 text-[#0F172A] font-medium"
-                              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                          }`}
+                          className={`flex items-center gap-2.5 px-3 py-2 rounded-[8px] cursor-pointer text-[13px] transition-colors ${isSelected
+                            ? "bg-slate-50 text-[#0F172A] font-medium"
+                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                            }`}
                         >
                           <div
-                            className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${
-                              isSelected
-                                ? "bg-[#0F4C3A] text-white"
-                                : "border border-slate-300"
-                            }`}
+                            className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${isSelected
+                              ? "bg-[#0F4C3A] text-white"
+                              : "border border-slate-300"
+                              }`}
                           >
                             {isSelected && (
                               <svg
@@ -1304,17 +1830,15 @@ const Dashboard = () => {
                 <button
                   type="button"
                   onClick={() => toggleDropdown("location")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "location" || selectedLocations.length > 0
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "location" || selectedLocations.length > 0
+                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                    }`}
                 >
                   <span>Location</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "location" ? "rotate-180" : ""
-                    }`}
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "location" ? "rotate-180" : ""
+                      }`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1350,10 +1874,10 @@ const Dashboard = () => {
                       LOCATIONS
                     </div>
 
-                    <div className="flex flex-col gap-1 max-h-[200px] overflow-y-auto">
+                    <div className="flex flex-col gap-1 max-h-[220px] overflow-y-auto">
                       {dynamicLocationOptions.length === 0 ? (
                         <div className="text-xs text-slate-400 px-2 py-1">
-                          No locations available yet
+                          No locations available
                         </div>
                       ) : (
                         dynamicLocationOptions
@@ -1375,11 +1899,10 @@ const Dashboard = () => {
                                 className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
                               >
                                 <div
-                                  className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${
-                                    isChecked
+                                  className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
                                       ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
                                       : "border-slate-300 bg-white"
-                                  }`}
+                                    }`}
                                 >
                                   {isChecked && (
                                     <svg
@@ -1393,7 +1916,7 @@ const Dashboard = () => {
                                     </svg>
                                   )}
                                 </div>
-                                <span className="truncate">{loc}</span>
+                                <span className="flex-1 truncate">{loc}</span>
                               </div>
                             );
                           })
@@ -1408,17 +1931,15 @@ const Dashboard = () => {
                 <button
                   type="button"
                   onClick={() => toggleDropdown("role")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "role" || selectedRoles.length > 0
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "role" || selectedRoles.length > 0
+                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                    }`}
                 >
                   <span>Role</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "role" ? "rotate-180" : ""
-                    }`}
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "role" ? "rotate-180" : ""
+                      }`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1432,7 +1953,7 @@ const Dashboard = () => {
                   <div className="absolute top-full left-0 mt-2 w-[220px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2.5 z-50 flex flex-col gap-1 max-h-[220px] overflow-y-auto">
                     {dynamicRoleOptions.length === 0 ? (
                       <div className="text-xs text-slate-400 px-2 py-1">
-                        No roles available yet
+                        No roles available
                       </div>
                     ) : (
                       dynamicRoleOptions.map((role) => {
@@ -1446,11 +1967,10 @@ const Dashboard = () => {
                             className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
                           >
                             <div
-                              className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${
-                                isChecked
+                              className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
                                   ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
                                   : "border-slate-300 bg-white"
-                              }`}
+                                }`}
                             >
                               {isChecked && (
                                 <svg
@@ -1478,17 +1998,15 @@ const Dashboard = () => {
                 <button
                   type="button"
                   onClick={() => toggleDropdown("jobType")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "jobType" || selectedJobTypes.length > 0
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "jobType" || selectedJobTypes.length > 0
+                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                    }`}
                 >
                   <span>Job Type</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "jobType" ? "rotate-180" : ""
-                    }`}
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "jobType" ? "rotate-180" : ""
+                      }`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1515,11 +2033,10 @@ const Dashboard = () => {
                           className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
                         >
                           <div
-                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${
-                              isChecked
-                                ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                                : "border-slate-300 bg-white"
-                            }`}
+                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
+                              ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
+                              : "border-slate-300 bg-white"
+                              }`}
                           >
                             {isChecked && (
                               <svg
@@ -1546,17 +2063,15 @@ const Dashboard = () => {
                 <button
                   type="button"
                   onClick={() => toggleDropdown("workplace")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "workplace" || selectedWorkplace.length > 0
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "workplace" || selectedWorkplace.length > 0
+                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                    }`}
                 >
                   <span>Workplace</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "workplace" ? "rotate-180" : ""
-                    }`}
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "workplace" ? "rotate-180" : ""
+                      }`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1583,11 +2098,10 @@ const Dashboard = () => {
                           className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
                         >
                           <div
-                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${
-                              isChecked
-                                ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                                : "border-slate-300 bg-white"
-                            }`}
+                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
+                              ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
+                              : "border-slate-300 bg-white"
+                              }`}
                           >
                             {isChecked && (
                               <svg
@@ -1609,22 +2123,98 @@ const Dashboard = () => {
                 )}
               </div>
 
-              {/* Companies Dropdown */}
+              {/* Sponsors Visa Button */}
+              <button
+                type="button"
+                onClick={() => setSponsorsVisa(!sponsorsVisa)}
+                className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${sponsorsVisa
+                  ? "border-slate-400 bg-slate-100 text-[#0F172A] font-medium"
+                  : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                  }`}
+              >
+                <span>Sponsors Visa</span>
+              </button>
+
+              {/* Employment Type Dropdown */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => toggleDropdown("employmentType")}
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "employmentType" ||
+                    selectedEmploymentTypes.length > 0
+                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                    }`}
+                >
+                  <span>Employment Type</span>
+                  <svg
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "employmentType" ? "rotate-180" : ""
+                      }`}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                  >
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </button>
+
+                {activeDropdown === "employmentType" && (
+                  <div className="absolute top-full left-0 mt-2 w-[170px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2.5 z-50 flex flex-col gap-1">
+                    {employmentTypeOptions.map((type) => {
+                      const isChecked = selectedEmploymentTypes.includes(type);
+                      return (
+                        <div
+                          key={type}
+                          onClick={() =>
+                            toggleCheckbox(
+                              selectedEmploymentTypes,
+                              setSelectedEmploymentTypes,
+                              type
+                            )
+                          }
+                          className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
+                        >
+                          <div
+                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
+                              ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
+                              : "border-slate-300 bg-white"
+                              }`}
+                          >
+                            {isChecked && (
+                              <svg
+                                className="w-2.5 h-2.5"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="3.5"
+                              >
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                            )}
+                          </div>
+                          <span>{type}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* 4. Companies Dropdown */}
               <div className="relative">
                 <button
                   type="button"
                   onClick={() => toggleDropdown("companies")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "companies" || selectedCompanies.length > 0
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "companies" || selectedCompanies.length > 0
+                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                    }`}
                 >
                   <span>Companies</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "companies" ? "rotate-180" : ""
-                    }`}
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "companies" ? "rotate-180" : ""
+                      }`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1660,10 +2250,10 @@ const Dashboard = () => {
                       COMPANIES
                     </div>
 
-                    <div className="flex flex-col gap-1 max-h-[200px] overflow-y-auto">
+                    <div className="flex flex-col gap-1 max-h-[220px] overflow-y-auto">
                       {dynamicCompanyOptions.length === 0 ? (
                         <div className="text-xs text-slate-400 px-2 py-1">
-                          No companies available yet
+                          No companies available
                         </div>
                       ) : (
                         dynamicCompanyOptions
@@ -1685,11 +2275,10 @@ const Dashboard = () => {
                                 className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
                               >
                                 <div
-                                  className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${
-                                    isChecked
-                                      ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                                      : "border-slate-300 bg-white"
-                                  }`}
+                                  className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
+                                    ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
+                                    : "border-slate-300 bg-white"
+                                    }`}
                                 >
                                   {isChecked && (
                                     <svg
@@ -1718,17 +2307,15 @@ const Dashboard = () => {
                 <button
                   type="button"
                   onClick={() => toggleDropdown("degree")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "degree" || selectedDegrees.length > 0
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "degree" || selectedDegrees.length > 0
+                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                    }`}
                 >
                   <span>Degree Level</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "degree" ? "rotate-180" : ""
-                    }`}
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "degree" ? "rotate-180" : ""
+                      }`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1755,11 +2342,10 @@ const Dashboard = () => {
                           className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
                         >
                           <div
-                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${
-                              isChecked
-                                ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                                : "border-slate-300 bg-white"
-                            }`}
+                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
+                              ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
+                              : "border-slate-300 bg-white"
+                              }`}
                           >
                             {isChecked && (
                               <svg
@@ -1786,17 +2372,15 @@ const Dashboard = () => {
                 <button
                   type="button"
                   onClick={() => toggleDropdown("experience")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "experience" || selectedExperience !== ""
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "experience" || selectedExperience !== ""
+                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                    }`}
                 >
                   <span>Max Experience</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "experience" ? "rotate-180" : ""
-                    }`}
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "experience" ? "rotate-180" : ""
+                      }`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1819,18 +2403,16 @@ const Dashboard = () => {
                             );
                             setActiveDropdown(null);
                           }}
-                          className={`flex items-center gap-2.5 px-3 py-1.5 rounded-[6px] cursor-pointer text-[13px] transition-colors ${
-                            isSelected
-                              ? "bg-slate-50 text-[#0F172A] font-medium"
-                              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                          }`}
+                          className={`flex items-center gap-2.5 px-3 py-1.5 rounded-[6px] cursor-pointer text-[13px] transition-colors ${isSelected
+                            ? "bg-slate-50 text-[#0F172A] font-medium"
+                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                            }`}
                         >
                           <div
-                            className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${
-                              isSelected
-                                ? "bg-[#0F4C3A] text-white"
-                                : "border border-slate-300"
-                            }`}
+                            className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${isSelected
+                              ? "bg-[#0F4C3A] text-white"
+                              : "border border-slate-300"
+                              }`}
                           >
                             {isSelected && (
                               <svg
@@ -1852,87 +2434,6 @@ const Dashboard = () => {
                 )}
               </div>
 
-              {/* Sponsors Visa Button */}
-              <button
-                type="button"
-                onClick={() => setSponsorsVisa(!sponsorsVisa)}
-                className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                  sponsorsVisa
-                    ? "border-slate-400 bg-slate-100 text-[#0F172A] font-medium"
-                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                }`}
-              >
-                <span>Sponsors Visa</span>
-              </button>
-
-              {/* Employment Type Dropdown */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => toggleDropdown("employmentType")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "employmentType" ||
-                    selectedEmploymentTypes.length > 0
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
-                >
-                  <span>Employment Type</span>
-                  <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "employmentType" ? "rotate-180" : ""
-                    }`}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                  >
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
-                </button>
-
-                {activeDropdown === "employmentType" && (
-                  <div className="absolute top-full left-0 mt-2 w-[170px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2.5 z-50 flex flex-col gap-1">
-                    {employmentTypeOptions.map((type) => {
-                      const isChecked = selectedEmploymentTypes.includes(type);
-                      return (
-                        <div
-                          key={type}
-                          onClick={() =>
-                            toggleCheckbox(
-                              selectedEmploymentTypes,
-                              setSelectedEmploymentTypes,
-                              type
-                            )
-                          }
-                          className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
-                        >
-                          <div
-                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${
-                              isChecked
-                                ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                                : "border-slate-300 bg-white"
-                            }`}
-                          >
-                            {isChecked && (
-                              <svg
-                                className="w-2.5 h-2.5"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="3.5"
-                              >
-                                <polyline points="20 6 9 17 4 12" />
-                              </svg>
-                            )}
-                          </div>
-                          <span>{type}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
             </div>
           </div>
 
@@ -1954,11 +2455,10 @@ const Dashboard = () => {
                   type="button"
                   onClick={() => filteredJobs.length > 0 && navigate("/auto-apply")}
                   disabled={filteredJobs.length === 0}
-                  className={`h-[38px] px-4 rounded-[10px] text-[13px] font-medium flex items-center gap-1.5 shadow-xs transition-all whitespace-nowrap ${
-                    filteredJobs.length > 0
-                      ? "bg-[#4F46E5] hover:bg-[#4338CA] text-white active:scale-[0.99] cursor-pointer"
-                      : "bg-slate-200 text-slate-400 cursor-not-allowed"
-                  }`}
+                  className={`h-[38px] px-4 rounded-[10px] text-[13px] font-medium flex items-center gap-1.5 shadow-xs transition-all whitespace-nowrap ${filteredJobs.length > 0
+                    ? "bg-[#4F46E5] hover:bg-[#4338CA] text-white active:scale-[0.99] cursor-pointer"
+                    : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                    }`}
                 >
                   <span>Auto Apply to all ({filteredJobs.length})</span>
                   <span>→</span>
@@ -2053,14 +2553,14 @@ const Dashboard = () => {
                   No Job Matches Yet
                 </h3>
                 <p className="text-xs text-[#64748B] max-w-md">
-                  Upload your resume in Resume Setup to automatically discover top job matches tailored specifically to your skills and experience.
+                  Upload your resume in Profile to automatically discover top job matches tailored specifically to your skills and experience.
                 </p>
                 <button
                   type="button"
-                  onClick={() => navigate("/resume-setup")}
+                  onClick={() => navigate("/profile")}
                   className="mt-2 px-5 py-2.5 text-xs font-semibold text-white bg-[#4F46E5] hover:bg-[#4338CA] rounded-[10px] shadow-xs transition-colors cursor-pointer"
                 >
-                  Upload Resume
+                  Upload Resume in Profile
                 </button>
               </div>
             ) : filteredJobs.length === 0 ? (
@@ -2095,152 +2595,169 @@ const Dashboard = () => {
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4.5 w-full">
-                {filteredJobs.map((job, idx) => {
-                  const scoreVal = getMatchPercent(job);
-                  const matchLabel = getMatchLabel(job);
-                  const matchColorClass = getMatchBadgeColor(scoreVal);
-                  const matchedSkills = getMatchedSkills(job);
-                  const missingRequired = getMissingRequiredSkills(job);
-                  const displayTitle = job.title || `Job Match #${idx + 1}`;
-                  const displayCompany =
-                    job.company ||
-                    (job.job_id
-                      ? `ID: ${
-                          job.job_id.length > 14
-                            ? `${job.job_id.slice(0, 8)}...${job.job_id.slice(-4)}`
-                            : job.job_id
-                        }`
-                      : "Verified Match");
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4.5 w-full">
+                  {filteredJobs.slice(0, 4).map((job, idx) => {
+                    const scoreVal = getMatchPercent(job);
+                    const matchLabel = getMatchLabel(job);
+                    const matchColorClass = getMatchBadgeColor(scoreVal);
+                    const matchedSkills = getMatchedSkills(job);
+                    const missingRequired = getMissingRequiredSkills(job);
+                    const displayTitle = job.title || `Job Match #${idx + 1}`;
+                    const displayCompany =
+                      job.company ||
+                      (job.job_id
+                        ? `ID: ${
+                            job.job_id.length > 14
+                              ? `${job.job_id.slice(0, 8)}...${job.job_id.slice(-4)}`
+                              : job.job_id
+                          }`
+                        : "Verified Match");
 
-                  return (
-                    <div
-                      key={job.job_id || job.id || `job-card-${idx}`}
-                      onClick={() => setSelectedJobModal(job)}
-                      className="bg-white rounded-[20px] border border-[#E2E8F0] p-5 flex flex-col justify-between shadow-[0_1px_3px_rgba(15,23,42,0.02)] hover:shadow-md hover:border-slate-300 transition-all duration-200 min-h-[230px] cursor-pointer group"
-                    >
-                      <div>
-                        {/* Top Header: Logo + Match Badge */}
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="w-[40px] h-[40px] rounded-[10px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2">
-                            {job.logo ? (
-                              <img
-                                src={job.logo}
-                                alt={job.company || "Job Logo"}
-                                className="w-full h-full object-contain"
-                              />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-[#4F46E5]">
-                                <svg
-                                  className="w-5 h-5"
-                                  fill="none"
-                                  viewBox="0 0 24 24"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                                  />
-                                </svg>
-                              </div>
-                            )}
-                          </div>
-                          <span
-                            className={`text-[12px] font-semibold px-2.5 py-0.5 rounded-full ${matchColorClass}`}
-                          >
-                            {matchLabel}
-                          </span>
-                        </div>
-
-                        {/* Job Title & Company */}
-                        <div className="mt-3.5">
-                          <h3 className="text-[15px] font-bold text-[#0F172A] tracking-tight leading-snug group-hover:text-[#4F46E5] transition-colors line-clamp-1">
-                            {displayTitle}
-                          </h3>
-                          <div
-                            className="flex items-center gap-1 text-[13px] text-[#64748B] font-normal mt-1 truncate"
-                            title={job.job_id || job.company}
-                          >
-                            <span className="truncate">{displayCompany}</span>
-                            {job.company && <VerifiedTick />}
-                          </div>
-                        </div>
-
-                        {/* Skills / Match Highlights or Location */}
-                        {matchedSkills.length > 0 ? (
-                          <div className="mt-3 flex flex-col gap-1.5">
-                            <div className="flex items-center gap-1 flex-wrap">
-                              {matchedSkills.slice(0, 3).map((skill, sIdx) => (
-                                <span
-                                  key={`${skill}-${sIdx}`}
-                                  className="text-[11px] font-medium bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md truncate max-w-[110px]"
-                                >
-                                  {skill}
-                                </span>
-                              ))}
-                              {matchedSkills.length > 3 && (
-                                <span className="text-[11px] font-medium text-[#64748B] bg-slate-50 px-1.5 py-0.5 rounded-md">
-                                  +{matchedSkills.length - 3}
-                                </span>
+                    return (
+                      <div
+                        key={job.job_id || job.id || `job-card-${idx}`}
+                        onClick={() => setSelectedJobModal(job)}
+                        className="bg-white rounded-[20px] border border-[#E2E8F0] p-5 flex flex-col justify-between shadow-[0_1px_3px_rgba(15,23,42,0.02)] hover:shadow-md hover:border-slate-300 transition-all duration-200 min-h-[230px] cursor-pointer group"
+                      >
+                        <div>
+                          {/* Top Header: Logo + Match Badge */}
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="w-[40px] h-[40px] rounded-[10px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2">
+                              {job.logo ? (
+                                <img
+                                  src={job.logo}
+                                  alt={job.company || "Job Logo"}
+                                  className="w-full h-full object-contain"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-[#4F46E5]">
+                                  <svg
+                                    className="w-5 h-5"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                                    />
+                                  </svg>
+                                </div>
                               )}
                             </div>
-                            {missingRequired.length > 0 && (
-                              <div className="text-[11.5px] text-[#DC2626] font-medium truncate">
-                                Missing: {missingRequired.slice(0, 2).join(", ")}
-                              </div>
-                            )}
+                            <span
+                              className={`text-[12px] font-semibold px-2.5 py-0.5 rounded-full ${matchColorClass}`}
+                            >
+                              {matchLabel}
+                            </span>
                           </div>
-                        ) : (
-                          <div className="mt-3 flex flex-col gap-1">
-                            <div className="flex items-center gap-1.5 text-[12.5px] text-[#64748B]">
-                              <img
-                                src={mapIcon}
-                                alt=""
-                                className="w-[10px] h-[12px] object-contain shrink-0"
-                              />
-                              <span className="truncate">{job.location}</span>
-                            </div>
-                            <div className="text-[12px] text-[#94A3B8]">
-                              {job.posted}
-                            </div>
-                          </div>
-                        )}
-                      </div>
 
-                      {/* Action Buttons */}
-                      <div className="flex items-center gap-2.5 pt-4 mt-auto">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedJobModal(job);
-                          }}
-                          className="flex-1 h-[36px] rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] font-medium text-[#334155] hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-center"
-                        >
-                          View Details
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedJobModal(job);
-                          }}
-                          className="flex-1 h-[36px] rounded-[10px] bg-[#4F46E5] hover:bg-[#4338CA] text-[13px] font-medium text-white shadow-xs transition-colors cursor-pointer flex items-center justify-center active:scale-[0.99]"
-                        >
-                          Apply Now
-                        </button>
+                          {/* Job Title & Company */}
+                          <div className="mt-3.5">
+                            <h3 className="text-[15px] font-bold text-[#0F172A] tracking-tight leading-snug group-hover:text-[#4F46E5] transition-colors line-clamp-1">
+                              {displayTitle}
+                            </h3>
+                            <div
+                              className="flex items-center gap-1 text-[13px] text-[#64748B] font-normal mt-1 truncate"
+                              title={job.job_id || job.company}
+                            >
+                              <span className="truncate">{displayCompany}</span>
+                              {job.company && <VerifiedTick />}
+                            </div>
+                          </div>
+
+                          {/* Skills / Match Highlights or Location */}
+                          {matchedSkills.length > 0 ? (
+                            <div className="mt-3 flex flex-col gap-1.5">
+                              <div className="flex items-center gap-1 flex-wrap">
+                                {matchedSkills.slice(0, 3).map((skill, sIdx) => (
+                                  <span
+                                    key={`${skill}-${sIdx}`}
+                                    className="text-[11px] font-medium bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md truncate max-w-[110px]"
+                                  >
+                                    {skill}
+                                  </span>
+                                ))}
+                                {matchedSkills.length > 3 && (
+                                  <span className="text-[11px] font-medium text-[#64748B] bg-slate-50 px-1.5 py-0.5 rounded-md">
+                                    +{matchedSkills.length - 3}
+                                  </span>
+                                )}
+                              </div>
+                              {missingRequired.length > 0 && (
+                                <div className="text-[11.5px] text-[#DC2626] font-medium truncate">
+                                  Missing: {missingRequired.slice(0, 2).join(", ")}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="mt-3 flex flex-col gap-1">
+                              <div className="flex items-center gap-1.5 text-[12.5px] text-[#64748B]">
+                                <img
+                                  src={mapIcon}
+                                  alt=""
+                                  className="w-[10px] h-[12px] object-contain shrink-0"
+                                />
+                                <span className="truncate">{job.location}</span>
+                              </div>
+                              <div className="text-[12px] text-[#94A3B8]">
+                                {job.posted}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex items-center gap-2.5 pt-4 mt-auto">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedJobModal(job);
+                            }}
+                            className="flex-1 h-[36px] rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] font-medium text-[#334155] hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-center"
+                          >
+                            View Details
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedJobModal(job);
+                            }}
+                            className="flex-1 h-[36px] rounded-[10px] bg-[#4F46E5] hover:bg-[#4338CA] text-[13px] font-medium text-white shadow-xs transition-colors cursor-pointer flex items-center justify-center active:scale-[0.99]"
+                          >
+                            Apply Now
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+
+                {filteredJobs.length > 4 && (
+                  <div className="flex items-center justify-between pt-1 text-xs text-[#64748B]">
+                    <span>Showing 4 of {filteredJobs.length} top matches</span>
+                    <button
+                      type="button"
+                      onClick={() => navigate("/browse-jobs")}
+                      className="text-[#4F46E5] hover:text-[#4338CA] font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      <span>Browse all {filteredJobs.length} matching jobs</span>
+                      <span>→</span>
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
           {/* 4. Recent Applications Section (Dynamic From API / Applications State) */}
           <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-6 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col gap-5 w-full mt-2">
+
             {/* Header: Title + View all applications */}
             <div className="flex items-center justify-between flex-wrap gap-2">
               <h2 className="text-[18px] md:text-[20px] font-bold text-[#0F172A] tracking-tight">
@@ -2266,11 +2783,10 @@ const Dashboard = () => {
                     key={tab.name}
                     type="button"
                     onClick={() => setSelectedAppTab(tab.name)}
-                    className={`h-[34px] px-3.5 rounded-full text-[12.5px] font-medium flex items-center gap-1.5 transition-all cursor-pointer ${
-                      isActive
-                        ? "bg-[#0F172A] text-white shadow-xs"
-                        : "bg-[#F1F5F9] text-[#64748B] hover:bg-slate-200"
-                    }`}
+                    className={`h-[34px] px-3.5 rounded-full text-[12.5px] font-medium flex items-center gap-1.5 transition-all cursor-pointer ${isActive
+                      ? "bg-[#0F172A] text-white shadow-xs"
+                      : "bg-[#F1F5F9] text-[#64748B] hover:bg-slate-200"
+                      }`}
                   >
                     <span>{tab.name}</span>
                     <span
@@ -2376,13 +2892,12 @@ const Dashboard = () => {
                         {/* ATS Match */}
                         <td className="py-4 px-3">
                           <span
-                            className={`text-[13px] font-bold ${
-                              (app.matchPercent || 0) >= 80
+                            className={`text-[13px] font-bold ${(app.matchPercent || 0) >= 80
                                 ? "text-[#059669]"
                                 : (app.matchPercent || 0) >= 60
-                                ? "text-[#D97706]"
-                                : "text-[#4F46E5]"
-                            }`}
+                                  ? "text-[#D97706]"
+                                  : "text-[#4F46E5]"
+                              }`}
                           >
                             {app.atsMatch || `${app.matchPercent || 0}%`}
                           </span>
@@ -2402,26 +2917,24 @@ const Dashboard = () => {
                         <td className="py-4 px-3">
                           <div className="flex items-center gap-2">
                             <span
-                              className={`w-2 h-2 rounded-full ${
-                                app.status === "Submitted"
+                              className={`w-2 h-2 rounded-full ${app.status === "Submitted"
                                   ? "bg-[#059669]"
                                   : app.status === "In Progress"
-                                  ? "bg-[#2563EB]"
-                                  : app.status === "Failed"
-                                  ? "bg-[#DC2626]"
-                                  : "bg-[#D97706]"
-                              }`}
+                                    ? "bg-[#2563EB]"
+                                    : app.status === "Failed"
+                                      ? "bg-[#DC2626]"
+                                      : "bg-[#D97706]"
+                                }`}
                             />
                             <span
-                              className={`text-[13px] font-medium ${
-                                app.status === "Submitted"
+                              className={`text-[13px] font-medium ${app.status === "Submitted"
                                   ? "text-[#059669]"
                                   : app.status === "In Progress"
-                                  ? "text-[#2563EB]"
-                                  : app.status === "Failed"
-                                  ? "text-[#DC2626]"
-                                  : "text-[#D97706]"
-                              }`}
+                                    ? "text-[#2563EB]"
+                                    : app.status === "Failed"
+                                      ? "text-[#DC2626]"
+                                      : "text-[#D97706]"
+                                }`}
                             >
                               {app.status || "Submitted"}
                             </span>
@@ -2468,25 +2981,23 @@ const Dashboard = () => {
           typeof currentMatch?.overall_score === "number"
             ? currentMatch.overall_score
             : typeof currentMatch?.score_data?.overall_score === "number"
-            ? currentMatch.score_data.overall_score
-            : typeof currentMatch?.score === "number"
-            ? currentMatch.score
-            : typeof currentMatch?.overall_score === "string" &&
-              !isNaN(Number(currentMatch.overall_score)) &&
-              currentMatch.overall_score.trim() !== ""
-            ? Number(currentMatch.overall_score)
-            : typeof selectedJobModal.rawScore === "number"
-            ? selectedJobModal.rawScore
-            : typeof selectedJobModal.matchPercent === "number"
-            ? selectedJobModal.matchPercent
-            : null;
+              ? currentMatch.score_data.overall_score
+              : typeof currentMatch?.score === "number"
+                ? currentMatch.score
+                : (typeof currentMatch?.overall_score === "string" && !isNaN(Number(currentMatch.overall_score)) && currentMatch.overall_score.trim() !== "")
+                  ? Number(currentMatch.overall_score)
+                  : typeof selectedJobModal.rawScore === "number"
+                    ? selectedJobModal.rawScore
+                    : typeof selectedJobModal.matchPercent === "number"
+                      ? selectedJobModal.matchPercent
+                      : null;
 
         const activeAtsScore =
           selectedJobId && updatedAtsScores[selectedJobId] !== undefined
             ? updatedAtsScores[selectedJobId]
             : rawInitialScore !== null && !isNaN(rawInitialScore)
-            ? Math.min(100, Math.max(1, Math.round(Number(rawInitialScore))))
-            : null;
+              ? Math.min(100, Math.max(1, Math.round(Number(rawInitialScore))))
+              : null;
 
         const scoreData =
           currentMatch?.score_data || selectedJobModal.scoreData || null;
@@ -2515,6 +3026,7 @@ const Dashboard = () => {
             {/* Side Drawer Container */}
             <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
               <div className="w-screen max-w-[490px] bg-white shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-200">
+
                 {/* Drawer Header */}
                 <div className="p-6 pb-4 border-b border-slate-100 flex items-start justify-between gap-4 shrink-0 bg-white">
                   <div className="flex items-start gap-3.5 flex-1 min-w-0 pr-2">
@@ -2542,7 +3054,7 @@ const Dashboard = () => {
                           {extractCleanCompany(
                             selectedJobModal.company,
                             selectedJobModal.description ||
-                              selectedJobModal.fullJdText
+                            selectedJobModal.fullJdText
                           )}
                         </span>
                         <VerifiedTick />
@@ -2552,7 +3064,7 @@ const Dashboard = () => {
                         <span>
                           {cleanHtmlText(
                             selectedJobModal.fullLocation ||
-                              selectedJobModal.location
+                            selectedJobModal.location
                           )}
                         </span>
                         <span className="text-slate-300">•</span>
@@ -2605,11 +3117,10 @@ const Dashboard = () => {
                       type="button"
                       onClick={handleEnhanceResume}
                       disabled={isEnhancing}
-                      className={`mt-2 text-white text-[13px] font-medium px-4 py-2 rounded-lg transition-all cursor-pointer shadow-sm shrink-0 whitespace-nowrap flex items-center gap-1.5 ${
-                        isEnhancing
-                          ? "bg-indigo-300 cursor-not-allowed"
-                          : "bg-[#4F46E5] hover:bg-[#4338CA]"
-                      }`}
+                      className={`mt-2 text-white text-[13px] font-medium px-4 py-2 rounded-lg transition-all cursor-pointer shadow-sm shrink-0 whitespace-nowrap flex items-center gap-1.5 ${isEnhancing
+                        ? "bg-indigo-300 cursor-not-allowed"
+                        : "bg-[#4F46E5] hover:bg-[#4338CA]"
+                        }`}
                     >
                       {isEnhancing ? (
                         <>
@@ -2748,14 +3259,14 @@ const Dashboard = () => {
                             {Array.isArray(
                               enhancedResultsMap[selectedJobId].bridgeable_gaps
                             ) && (
-                              <span className="text-[11px] font-semibold text-[#4F46E5] bg-[#EEF2FF] border border-[#C7D2FE] px-2 py-0.5 rounded-full">
-                                {
-                                  enhancedResultsMap[selectedJobId]
-                                    .bridgeable_gaps.length
-                                }{" "}
-                                Skills Optimized
-                              </span>
-                            )}
+                                <span className="text-[11px] font-semibold text-[#4F46E5] bg-[#EEF2FF] border border-[#C7D2FE] px-2 py-0.5 rounded-full">
+                                  {
+                                    enhancedResultsMap[selectedJobId]
+                                      .bridgeable_gaps.length
+                                  }{" "}
+                                  Skills Optimized
+                                </span>
+                              )}
                           </div>
                           <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
                             {Array.isArray(
@@ -2809,13 +3320,12 @@ const Dashboard = () => {
                                       </div>
                                       {severity && (
                                         <span
-                                          className={`text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 border ${
-                                            severity === "CRITICAL"
-                                              ? "bg-amber-50 text-amber-700 border-amber-200"
-                                              : severity === "PREFERRED"
+                                          className={`text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 border ${severity === "CRITICAL"
+                                            ? "bg-amber-50 text-amber-700 border-amber-200"
+                                            : severity === "PREFERRED"
                                               ? "bg-blue-50 text-blue-700 border-blue-200"
                                               : "bg-indigo-50 text-[#4F46E5] border-indigo-200"
-                                          }`}
+                                            }`}
                                         >
                                           {severity}
                                         </span>
@@ -2830,7 +3340,7 @@ const Dashboard = () => {
                                 );
                               })
                             ) : typeof enhancedResultsMap[selectedJobId]
-                                .bridgeable_gaps === "object" ? (
+                              .bridgeable_gaps === "object" ? (
                               Object.entries(
                                 enhancedResultsMap[selectedJobId].bridgeable_gaps
                               ).map(([k, v], i) => (
@@ -2867,33 +3377,36 @@ const Dashboard = () => {
                       {(enhancedResultsMap[selectedJobId]?.EnhResume ||
                         enhancedResultsMap[selectedJobId]?.enhResume ||
                         enhancedResultsMap[selectedJobId]?.enhanced_resume) && (
-                        <div>
-                          <div className="flex items-center justify-between mb-1.5">
-                            <span className="text-[12px] font-semibold text-slate-700">
-                              Enhanced Resume Preview:
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleCopyEnhancedResume(
-                                  enhancedResultsMap[selectedJobId]?.EnhResume ||
+                          <div>
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="text-[12px] font-semibold text-slate-700">Enhanced Resume Preview:</span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleCopyEnhancedResume(
+                                    enhancedResultsMap[selectedJobId]?.EnhResume ||
                                     enhancedResultsMap[selectedJobId]?.enhResume ||
-                                    enhancedResultsMap[selectedJobId]
-                                      ?.enhanced_resume
-                                )
-                              }
-                              className="text-[11.5px] font-medium text-[#4F46E5] hover:text-[#3730A3] flex items-center gap-1 cursor-pointer"
-                            >
-                              {copiedResume ? "✓ Copied" : "Copy Text"}
-                            </button>
+                                    enhancedResultsMap[selectedJobId]?.enhanced_resume
+                                  )
+                                }
+                                className="text-[11.5px] font-medium text-[#4F46E5] hover:text-[#3730A3] flex items-center gap-1 cursor-pointer"
+                              >
+                                {copiedResume ? "✓ Copied" : "Copy Text"}
+                              </button>
+                            </div>
+                            <div className="max-h-[220px] overflow-y-auto pr-0.5">
+                              <EnhancedResumeViewer
+                                resumeText={
+                                  enhancedResultsMap[selectedJobId]?.EnhResume ||
+                                  enhancedResultsMap[selectedJobId]?.enhResume ||
+                                  enhancedResultsMap[selectedJobId]?.enhanced_resume ||
+                                  enhancedResultsMap[selectedJobId]?.enhancedResume
+                                }
+                                compact={true}
+                              />
+                            </div>
                           </div>
-                          <div className="bg-white rounded-lg border border-slate-200 p-3 max-h-[160px] overflow-y-auto text-[11.5px] text-slate-700 whitespace-pre-wrap font-mono leading-relaxed">
-                            {enhancedResultsMap[selectedJobId]?.EnhResume ||
-                              enhancedResultsMap[selectedJobId]?.enhResume ||
-                              enhancedResultsMap[selectedJobId]?.enhanced_resume}
-                          </div>
-                        </div>
-                      )}
+                        )}
 
                       <button
                         type="button"
@@ -2904,6 +3417,7 @@ const Dashboard = () => {
                       </button>
                     </div>
                   )}
+
 
                   {/* ATS Match Box */}
                   <div className="rounded-[16px] border border-slate-200/80 bg-[#F8FAFC]/70 p-4.5 flex items-center justify-between gap-4">
@@ -2953,8 +3467,8 @@ const Dashboard = () => {
                             ? activeAtsScore >= 80
                               ? "Strong match based on your profile, skills, experience and preferences."
                               : activeAtsScore >= 60
-                              ? "Moderate match. Enhancing your resume can bridge key skill and keyword gaps."
-                              : "Lower match. Review identified gaps below or click Enhance Resume."
+                                ? "Moderate match. Enhancing your resume can bridge key skill and keyword gaps."
+                                : "Lower match. Review identified gaps below or click Enhance Resume."
                             : "ATS score unavailable for this job."}
                         </p>
                       </div>
@@ -3002,79 +3516,79 @@ const Dashboard = () => {
                   {(missingRequiredSkills.length > 0 ||
                     missingPreferredSkills.length > 0 ||
                     missingKeywords.length > 0) && (
-                    <div className="rounded-[16px] border border-amber-200/80 bg-gradient-to-br from-amber-50/60 to-orange-50/30 p-4 space-y-3 shadow-2xs">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="w-5 h-5 rounded-md bg-amber-100 text-amber-800 text-[11px] font-bold flex items-center justify-center">
-                            !
+                      <div className="rounded-[16px] border border-amber-200/80 bg-gradient-to-br from-amber-50/60 to-orange-50/30 p-4 space-y-3 shadow-2xs">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="w-5 h-5 rounded-md bg-amber-100 text-amber-800 text-[11px] font-bold flex items-center justify-center">
+                              !
+                            </span>
+                            <h4 className="text-[13px] font-bold text-amber-950">
+                              ATS Identified Gaps
+                            </h4>
+                          </div>
+                          <span className="text-[10.5px] font-semibold text-amber-800 bg-amber-100/80 border border-amber-200 px-2 py-0.5 rounded-full">
+                            {missingRequiredSkills.length +
+                              missingPreferredSkills.length +
+                              missingKeywords.length}{" "}
+                            Gaps
                           </span>
-                          <h4 className="text-[13px] font-bold text-amber-950">
-                            ATS Identified Gaps
-                          </h4>
                         </div>
-                        <span className="text-[10.5px] font-semibold text-amber-800 bg-amber-100/80 border border-amber-200 px-2 py-0.5 rounded-full">
-                          {missingRequiredSkills.length +
-                            missingPreferredSkills.length +
-                            missingKeywords.length}{" "}
-                          Gaps
-                        </span>
+
+                        {missingRequiredSkills.length > 0 && (
+                          <div>
+                            <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">
+                              Missing Required Skills:
+                            </span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {missingRequiredSkills.map((skill, i) => (
+                                <span
+                                  key={i}
+                                  className="bg-white border border-amber-200 text-amber-900 text-[11.5px] font-medium px-2.5 py-0.5 rounded-md shadow-2xs"
+                                >
+                                  • {skill}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {missingPreferredSkills.length > 0 && (
+                          <div>
+                            <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">
+                              Missing Preferred Skills:
+                            </span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {missingPreferredSkills.map((skill, i) => (
+                                <span
+                                  key={i}
+                                  className="bg-white border border-amber-200 text-amber-900 text-[11.5px] font-medium px-2.5 py-0.5 rounded-md shadow-2xs"
+                                >
+                                  • {skill}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {missingKeywords.length > 0 && (
+                          <div>
+                            <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">
+                              Missing Keywords:
+                            </span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {missingKeywords.map((kw, i) => (
+                                <span
+                                  key={i}
+                                  className="bg-white border border-amber-200 text-slate-700 text-[11px] font-normal px-2 py-0.5 rounded-md"
+                                >
+                                  {kw}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
-
-                      {missingRequiredSkills.length > 0 && (
-                        <div>
-                          <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">
-                            Missing Required Skills:
-                          </span>
-                          <div className="flex flex-wrap gap-1.5">
-                            {missingRequiredSkills.map((skill, i) => (
-                              <span
-                                key={i}
-                                className="bg-white border border-amber-200 text-amber-900 text-[11.5px] font-medium px-2.5 py-0.5 rounded-md shadow-2xs"
-                              >
-                                • {skill}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {missingPreferredSkills.length > 0 && (
-                        <div>
-                          <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">
-                            Missing Preferred Skills:
-                          </span>
-                          <div className="flex flex-wrap gap-1.5">
-                            {missingPreferredSkills.map((skill, i) => (
-                              <span
-                                key={i}
-                                className="bg-white border border-amber-200 text-amber-900 text-[11.5px] font-medium px-2.5 py-0.5 rounded-md shadow-2xs"
-                              >
-                                • {skill}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {missingKeywords.length > 0 && (
-                        <div>
-                          <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">
-                            Missing Keywords:
-                          </span>
-                          <div className="flex flex-wrap gap-1.5">
-                            {missingKeywords.map((kw, i) => (
-                              <span
-                                key={i}
-                                className="bg-white border border-amber-200 text-slate-700 text-[11px] font-normal px-2 py-0.5 rounded-md"
-                              >
-                                {kw}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                    )}
 
                   {/* Job Description */}
                   <div>
@@ -3084,8 +3598,8 @@ const Dashboard = () => {
                     <div className="text-[12.5px] text-[#475569] leading-relaxed mt-1.5 whitespace-pre-line">
                       {cleanHtmlText(
                         selectedJobModal.description ||
-                          selectedJobModal.fullJdText ||
-                          selectedJobModal.preview
+                        selectedJobModal.fullJdText ||
+                        selectedJobModal.preview
                       )}
                     </div>
                   </div>
@@ -3183,11 +3697,10 @@ const Dashboard = () => {
                   <button
                     type="button"
                     onClick={() => setIsJobSaved(!isJobSaved)}
-                    className={`flex-1 h-[42px] rounded-[10px] border text-[13px] font-medium flex items-center justify-center gap-2 transition-colors cursor-pointer ${
-                      isJobSaved
-                        ? "border-[#A5B4FC] bg-indigo-50 text-[#4F46E5]"
-                        : "border-[#C7D2FE] bg-white text-[#4F46E5] hover:bg-indigo-50/50"
-                    }`}
+                    className={`flex-1 h-[42px] rounded-[10px] border text-[13px] font-medium flex items-center justify-center gap-2 transition-colors cursor-pointer ${isJobSaved
+                      ? "border-[#A5B4FC] bg-indigo-50 text-[#4F46E5]"
+                      : "border-[#C7D2FE] bg-white text-[#4F46E5] hover:bg-indigo-50/50"
+                      }`}
                   >
                     <svg
                       className="w-4 h-4"
@@ -3242,13 +3755,12 @@ const Dashboard = () => {
                   <button
                     type="button"
                     onClick={() =>
-                      handleCopyEnhancedResume(
-                        enhancedResultsMap[getJobId(selectedJobModal)]
-                          ?.EnhResume ||
-                          enhancedResultsMap[getJobId(selectedJobModal)]
-                            ?.enhResume ||
-                          enhancedResultsMap[getJobId(selectedJobModal)]
-                            ?.enhanced_resume
+                      handleDownloadEnhancedResume(
+                        enhancedResultsMap[getJobId(selectedJobModal)]?.EnhResume ||
+                        enhancedResultsMap[getJobId(selectedJobModal)]?.enhResume ||
+                        enhancedResultsMap[getJobId(selectedJobModal)]?.enhanced_resume ||
+                        enhancedResultsMap[getJobId(selectedJobModal)]?.enhancedResume,
+                        selectedJobModal
                       )
                     }
                     className="px-3.5 py-1.5 bg-[#EEF2FF] hover:bg-[#E0E7FF] text-[#4F46E5] text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
@@ -3258,15 +3770,15 @@ const Dashboard = () => {
                       fill="none"
                       viewBox="0 0 24 24"
                       stroke="currentColor"
+                      strokeWidth="2"
                     >
                       <path
                         strokeLinecap="round"
                         strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
                       />
                     </svg>
-                    <span>{copiedResume ? "Copied!" : "Copy Resume"}</span>
+                    <span>Download</span>
                   </button>
 
                   <button
@@ -3296,143 +3808,133 @@ const Dashboard = () => {
                 {/* Bridged Gaps Summary */}
                 {enhancedResultsMap[getJobId(selectedJobModal)]
                   ?.bridgeable_gaps && (
-                  <div className="bg-[#EEF2FF]/70 border border-[#C7D2FE] rounded-xl p-4.5 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-xs font-bold text-[#312E81] uppercase tracking-wide">
-                        Bridged Skills & Qualifications
-                      </h4>
-                      {Array.isArray(
-                        enhancedResultsMap[getJobId(selectedJobModal)]
-                          .bridgeable_gaps
-                      ) && (
-                        <span className="text-[11px] font-semibold text-[#4F46E5] bg-white border border-[#C7D2FE] px-2 py-0.5 rounded-full">
-                          {
-                            enhancedResultsMap[getJobId(selectedJobModal)]
-                              .bridgeable_gaps.length
-                          }{" "}
-                          Tailored Improvements
-                        </span>
-                      )}
-                    </div>
-                    <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
-                      {Array.isArray(
-                        enhancedResultsMap[getJobId(selectedJobModal)]
-                          .bridgeable_gaps
-                      ) ? (
-                        enhancedResultsMap[
-                          getJobId(selectedJobModal)
-                        ].bridgeable_gaps.map((gap, i) => {
-                          if (typeof gap === "string") {
-                            return (
-                              <div
-                                key={i}
-                                className="flex items-center gap-2 bg-white text-slate-800 border border-[#E0E7FF] rounded-lg p-2.5 shadow-2xs"
-                              >
-                                <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">
-                                  ✓
-                                </span>
-                                <span className="text-xs font-semibold text-slate-900">
-                                  {gap}
-                                </span>
-                              </div>
-                            );
-                          }
-
-                          const skill =
-                            gap?.skill || gap?.name || gap?.title || "";
-                          const severity =
-                            gap?.severity ||
-                            (gap?.source ? String(gap.source).toUpperCase() : "");
-                          const rationale =
-                            gap?.rationale ||
-                            gap?.description ||
-                            gap?.reason ||
-                            "";
-
-                          return (
-                            <div
-                              key={i}
-                              className="bg-white text-slate-800 border border-[#E0E7FF] rounded-xl p-3 shadow-2xs space-y-1.5"
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2">
+                    <div className="bg-[#EEF2FF]/70 border border-[#C7D2FE] rounded-xl p-4.5 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-bold text-[#312E81] uppercase tracking-wide">
+                          Bridged Skills & Qualifications
+                        </h4>
+                        {Array.isArray(
+                          enhancedResultsMap[getJobId(selectedJobModal)]
+                            .bridgeable_gaps
+                        ) && (
+                            <span className="text-[11px] font-semibold text-[#4F46E5] bg-white border border-[#C7D2FE] px-2 py-0.5 rounded-full">
+                              {
+                                enhancedResultsMap[getJobId(selectedJobModal)]
+                                  .bridgeable_gaps.length
+                              }{" "}
+                              Tailored Improvements
+                            </span>
+                          )}
+                      </div>
+                      <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
+                        {Array.isArray(
+                          enhancedResultsMap[getJobId(selectedJobModal)]
+                            .bridgeable_gaps
+                        ) ? (
+                          enhancedResultsMap[
+                            getJobId(selectedJobModal)
+                          ].bridgeable_gaps.map((gap, i) => {
+                            if (typeof gap === "string") {
+                              return (
+                                <div
+                                  key={i}
+                                  className="flex items-center gap-2 bg-white text-slate-800 border border-[#E0E7FF] rounded-lg p-2.5 shadow-2xs"
+                                >
                                   <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">
                                     ✓
                                   </span>
-                                  <span className="text-xs font-bold text-slate-900">
-                                    {skill || "Optimized Skill"}
+                                  <span className="text-xs font-semibold text-slate-900">
+                                    {gap}
                                   </span>
                                 </div>
-                                {severity && (
-                                  <span
-                                    className={`text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
-                                      severity === "CRITICAL"
+                              );
+                            }
+
+                            const skill =
+                              gap?.skill || gap?.name || gap?.title || "";
+                            const severity =
+                              gap?.severity ||
+                              (gap?.source ? String(gap.source).toUpperCase() : "");
+                            const rationale =
+                              gap?.rationale ||
+                              gap?.description ||
+                              gap?.reason ||
+                              "";
+
+                            return (
+                              <div
+                                key={i}
+                                className="bg-white text-slate-800 border border-[#E0E7FF] rounded-xl p-3 shadow-2xs space-y-1.5"
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">✓</span>
+                                    <span className="text-xs font-bold text-slate-900">
+                                      {skill || "Optimized Skill"}
+                                    </span>
+                                  </div>
+                                  {severity && (
+                                    <span
+                                      className={`text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${severity === "CRITICAL"
                                         ? "bg-amber-50 text-amber-700 border-amber-200"
                                         : severity === "PREFERRED"
-                                        ? "bg-blue-50 text-blue-700 border-blue-200"
-                                        : "bg-indigo-50 text-[#4F46E5] border-indigo-200"
-                                    }`}
-                                  >
-                                    {severity}
-                                  </span>
+                                          ? "bg-blue-50 text-blue-700 border-blue-200"
+                                          : "bg-indigo-50 text-[#4F46E5] border-indigo-200"
+                                        }`}
+                                    >
+                                      {severity}
+                                    </span>
+                                  )}
+                                </div>
+                                {rationale && (
+                                  <p className="text-xs text-slate-600 leading-relaxed pl-6 font-normal">
+                                    {rationale}
+                                  </p>
                                 )}
                               </div>
-                              {rationale && (
-                                <p className="text-xs text-slate-600 leading-relaxed pl-6 font-normal">
-                                  {rationale}
-                                </p>
-                              )}
+                            );
+                          })
+                        ) : typeof enhancedResultsMap[getJobId(selectedJobModal)].bridgeable_gaps === "object" ? (
+                          Object.entries(enhancedResultsMap[getJobId(selectedJobModal)].bridgeable_gaps).map(([k, v], i) => (
+                            <div
+                              key={i}
+                              className="bg-white text-slate-800 border border-[#E0E7FF] rounded-xl p-3 shadow-2xs space-y-1"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">✓</span>
+                                <span className="text-xs font-bold text-slate-900">{k}</span>
+                              </div>
+                              <p className="text-xs text-slate-600 leading-relaxed pl-6 font-normal">
+                                {String(v)}
+                              </p>
                             </div>
-                          );
-                        })
-                      ) : typeof enhancedResultsMap[getJobId(selectedJobModal)]
-                          .bridgeable_gaps === "object" ? (
-                        Object.entries(
-                          enhancedResultsMap[getJobId(selectedJobModal)]
-                            .bridgeable_gaps
-                        ).map(([k, v], i) => (
-                          <div
-                            key={i}
-                            className="bg-white text-slate-800 border border-[#E0E7FF] rounded-xl p-3 shadow-2xs space-y-1"
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">
-                                ✓
-                              </span>
-                              <span className="text-xs font-bold text-slate-900">
-                                {k}
-                              </span>
-                            </div>
-                            <p className="text-xs text-slate-600 leading-relaxed pl-6 font-normal">
-                              {String(v)}
-                            </p>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-xs text-[#4F46E5]">
-                          {String(
-                            enhancedResultsMap[getJobId(selectedJobModal)]
-                              .bridgeable_gaps
-                          )}
-                        </p>
-                      )}
+                          ))
+                        ) : (
+                          <p className="text-xs text-[#4F46E5]">{String(enhancedResultsMap[getJobId(selectedJobModal)].bridgeable_gaps)}</p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {/* Enhanced Resume Content */}
+                {/* Professional Enhanced Resume Content */}
                 <div>
-                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
-                    Enhanced Resume Text
-                  </h4>
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 text-xs text-slate-800 font-mono whitespace-pre-wrap leading-relaxed select-text">
-                    {enhancedResultsMap[getJobId(selectedJobModal)]?.EnhResume ||
-                      enhancedResultsMap[getJobId(selectedJobModal)]
-                        ?.enhResume ||
-                      enhancedResultsMap[getJobId(selectedJobModal)]
-                        ?.enhanced_resume ||
-                      "No enhanced resume text content returned."}
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+                      Professional Formatted Resume
+                    </h4>
+                    <span className="text-[11px] text-[#4F46E5] font-semibold bg-[#EEF2FF] border border-[#C7D2FE] px-2.5 py-0.5 rounded-full">
+                      Dynamically Formatted
+                    </span>
                   </div>
+                  <EnhancedResumeViewer
+                    resumeText={
+                      enhancedResultsMap[getJobId(selectedJobModal)]?.EnhResume ||
+                      enhancedResultsMap[getJobId(selectedJobModal)]?.enhResume ||
+                      enhancedResultsMap[getJobId(selectedJobModal)]?.enhanced_resume ||
+                      enhancedResultsMap[getJobId(selectedJobModal)]?.enhancedResume
+                    }
+                    compact={false}
+                  />
                 </div>
               </div>
 

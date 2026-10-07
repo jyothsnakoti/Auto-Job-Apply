@@ -157,13 +157,13 @@ export const RESUME_API_BASE_URL =
    ========================================================= */
 
 export const RESUME_ENDPOINTS = {
-  // OLD RESUME UPLOAD ENDPOINT
-  // UPLOAD: `${API_BASE_URL}/api/resumes`,
-
-  // NEW NGROK RESUME UPLOAD & JD MATCHING ENDPOINT
-  UPLOAD: `${RESUME_API_BASE_URL}/api/v1/Get_N_JDs_for_Res`,
-
+  // Standard Resume Upload Endpoint
+  UPLOAD: `${API_BASE_URL}/api/resumes`,
+  // Ngrok Endpoint Reference
+  UPLOAD_NGROK: `${RESUME_API_BASE_URL}/api/v1/Get_N_JDs_for_Res`,
   GET: `${API_BASE_URL}/api/resumes`,
+  MATCHES_STATUS: `${API_BASE_URL}/api/resumes/matches/status`,
+  MATCHES_REFRESH: `${API_BASE_URL}/api/resumes/matches/refresh`,
 
   DOWNLOAD: (id) =>
     `${API_BASE_URL}/api/resumes/${id}/download`,
@@ -176,6 +176,9 @@ export const RESUME_ENDPOINTS = {
 };
 
 export const ENHANCE_RESUME_ENDPOINTS = {
+  // API 1 (POST) & API 2 (GET): /api/jobs/{jobId}/enhance
+  POST_ENHANCE: (jobId) => `${API_BASE_URL}/api/jobs/${jobId}/enhance`,
+  GET_ENHANCED: (jobId) => `${API_BASE_URL}/api/jobs/${jobId}/enhance`,
   GET_ENHANCED_RESUME: `${RESUME_API_BASE_URL}/api/v1/Get_EnhancedResume_for_PoorJDScore`,
   GET_SCORE_FOR_ENHANCED_RESUME: `${RESUME_API_BASE_URL}/api/v1/Get_Score_for_EnhancedResume`,
 };
@@ -183,6 +186,18 @@ export const ENHANCE_RESUME_ENDPOINTS = {
 export const MORE_JOBS_ENDPOINTS = {
   GET_MORE_JDS: `${RESUME_API_BASE_URL}/api/v1/Get_N_moreJDs_for_Res`,
 };
+
+export const DASHBOARD_ENDPOINTS = {
+  GET: `${API_BASE_URL}/api/dashboard`,
+};
+
+export const JOB_ENDPOINTS = {
+  LIST: `${API_BASE_URL}/api/jobs`,
+  GET: `${API_BASE_URL}/api/jobs`,
+  ENHANCE: (jobId) => `${API_BASE_URL}/api/jobs/${jobId}/enhance`,
+};
+
+
 
 export const ENDPOINTS = {
   BASE_URL: API_BASE_URL,
@@ -198,7 +213,12 @@ export const ENDPOINTS = {
   RESUME: RESUME_ENDPOINTS,
   ENHANCE_RESUME: ENHANCE_RESUME_ENDPOINTS,
   MORE_JOBS: MORE_JOBS_ENDPOINTS,
+  DASHBOARD: DASHBOARD_ENDPOINTS,
+  JOBS: JOB_ENDPOINTS,
+  JOB: JOB_ENDPOINTS,
+  DASHBOARD: DASHBOARD_ENDPOINTS,
 };
 
 export default ENDPOINTS;
+
 

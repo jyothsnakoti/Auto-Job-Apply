@@ -51,7 +51,7 @@ const ResumeSetup = () => {
         setFileError('');
         if (!file) return;
 
-       
+
         const fileExtension = file.name.split('.').pop().toLowerCase();
         const isValidExtension = ['pdf', 'doc', 'docx'].includes(fileExtension);
         const isValidMime = allowedTypes.includes(file.type);
@@ -626,7 +626,7 @@ const ResumeSetup = () => {
 
                 {/* Right: Email */}
                 <div style={styles.userArea}>
-                    <span style={styles.userEmail}>{userEmail || 'nareshpulluri79@gmail.com'}</span>
+                    <span style={styles.userEmail}>{userEmail}</span>
                 </div>
             </header>
 

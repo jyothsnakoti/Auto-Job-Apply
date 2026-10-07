@@ -380,12 +380,26 @@ export const getBillingStatus = async (
    * Preserve any additional backend fields
    * using ...data.
    */
+  const isPlanActive = Boolean(
+    data === true ||
+    data?.hasPlan === true ||
+    data?.has_plan === true ||
+    data?.status === true ||
+    data?.isSubscribed === true ||
+    data?.active === true ||
+    data?.planActive === true ||
+    data?.subscriptionActive === true ||
+    (typeof data?.status === 'string' &&
+      ['active', 'true', 'subscribed', 'paid'].includes(data.status.toLowerCase()))
+  );
+
   const billingInfo = {
-    hasPlan: Boolean(data?.hasPlan),
+    hasPlan: isPlanActive,
+    status: isPlanActive,
 
     planName:
       data?.planName ||
-      (data?.hasPlan
+      (isPlanActive
         ? 'Active Plan'
         : 'No active plan'),
 

@@ -963,10 +963,10 @@ const Payment = () => {
     }, [paymentState]);
 
     const handlePaymentSuccessContinue = () => {
-        if (!hasUserResume) {
-            navigate('/resume-setup', { state: { plan } });
-        } else {
+        if (hasUserResume) {
             navigate('/dashboard');
+        } else {
+            navigate('/resume-setup');
         }
     };
 
