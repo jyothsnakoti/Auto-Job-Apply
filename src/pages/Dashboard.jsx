@@ -2664,27 +2664,7 @@ const Dashboard = () => {
                 <div className="p-5 border-t border-slate-100 bg-white shrink-0 flex items-center gap-3">
                   <button
                     type="button"
-                    onClick={() => setIsJobSaved(!isJobSaved)}
-                    className={`flex-1 h-[42px] rounded-[10px] border text-[13px] font-medium flex items-center justify-center gap-2 transition-colors cursor-pointer ${isJobSaved
-                      ? "border-[#A5B4FC] bg-indigo-50 text-[#4F46E5]"
-                      : "border-[#C7D2FE] bg-white text-[#4F46E5] hover:bg-indigo-50/50"
-                      }`}
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill={isJobSaved ? "currentColor" : "none"}
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-                    </svg>
-                    <span>{isJobSaved ? "Saved" : "Save job"}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    className="flex-1 h-[42px] rounded-[10px] bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-[13px] font-medium flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.99] transition-all cursor-pointer"
+                    className="w-full h-[42px] rounded-[10px] bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-[13px] font-medium flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.99] transition-all cursor-pointer"
                   >
                     <span>Apply now</span>
                     <span>→</span>

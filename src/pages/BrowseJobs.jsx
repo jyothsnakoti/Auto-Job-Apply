@@ -1723,18 +1723,6 @@ const BrowseJobs = () => {
                 )}
               </div>
 
-              {/* Sponsors Visa Toggle Button */}
-              <button
-                type="button"
-                onClick={() => setSponsorsVisa(!sponsorsVisa)}
-                className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${sponsorsVisa
-                  ? "border-slate-400 bg-slate-100 text-[#0F172A] font-medium"
-                  : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
-              >
-                <span>Sponsors Visa</span>
-              </button>
-
               {/* Companies Dropdown */}
               <div className="relative">
                 <button
@@ -1828,71 +1816,6 @@ const BrowseJobs = () => {
                           })
                       )}
                     </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Max Experience Dropdown */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => toggleDropdown("experience")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "experience" || selectedExperience !== ""
-                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                    }`}
-                >
-                  <span>Max Experience</span>
-                  <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "experience" ? "rotate-180" : ""
-                      }`}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                  >
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
-                </button>
-
-                {activeDropdown === "experience" && (
-                  <div className="absolute top-full left-0 mt-2 w-[220px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2.5 z-50 flex flex-col gap-1">
-                    {experienceOptions.map((exp) => {
-                      const isSelected = selectedExperience === exp;
-                      return (
-                        <div
-                          key={exp}
-                          onClick={() => {
-                            setSelectedExperience(isSelected ? "" : exp);
-                            setActiveDropdown(null);
-                          }}
-                          className={`flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] ${isSelected
-                            ? "font-semibold text-[#0F172A] bg-slate-50"
-                            : "text-slate-700"
-                            }`}
-                        >
-                          <div
-                            className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${isSelected
-                              ? "bg-[#0F4C3A] text-white"
-                              : "border border-slate-300"
-                              }`}
-                          >
-                            {isSelected && (
-                              <svg
-                                className="w-2.5 h-2.5"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="3.5"
-                              >
-                                <polyline points="20 6 9 17 4 12" />
-                              </svg>
-                            )}
-                          </div>
-                          <span>{exp}</span>
-                        </div>
-                      );
-                    })}
                   </div>
                 )}
               </div>
@@ -2720,35 +2643,13 @@ const BrowseJobs = () => {
 
               {/* Modal Footer */}
               <div className="p-4 sm:p-5 border-t border-slate-100 bg-white shrink-0 flex flex-col gap-2.5">
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setIsJobSaved(!isJobSaved)}
-                    className={`flex-1 h-[44px] rounded-[12px] border text-[13.5px] font-medium flex items-center justify-center gap-2 transition-colors cursor-pointer ${isJobSaved
-                      ? "border-indigo-300 bg-indigo-50 text-[#4F46E5]"
-                      : "border-[#C7D2FE] bg-white text-[#4F46E5] hover:bg-indigo-50/50"
-                      }`}
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill={isJobSaved ? "currentColor" : "none"}
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-                    </svg>
-                    <span>{isJobSaved ? "Saved" : "Save job"}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    className="flex-1 h-[44px] rounded-[12px] bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-[13.5px] font-medium flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.99] transition-all cursor-pointer"
-                  >
-                    <span>Apply now</span>
-                    <span>→</span>
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  className="w-full h-[44px] rounded-[12px] bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-[13.5px] font-medium flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.99] transition-all cursor-pointer"
+                >
+                  <span>Apply now</span>
+                  <span>→</span>
+                </button>
 
                 <p className="text-[11.5px] text-[#94A3B8] text-center">
                   Your application quota will be reserved before submission.

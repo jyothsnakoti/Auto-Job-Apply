@@ -22,13 +22,13 @@ const navigationItems = [
     activeIcon: dashboardActiveIcon,
   },
   {
-    name: "Browse Jobs",
+    name: "Browse & Apply",
     path: "/browse-jobs",
     icon: browseJobsIcon,
     activeIcon: browseJobsActiveIcon,
   },
   {
-    name: "Auto Apply",
+    name: "Bulk Apply",
     path: "/auto-apply",
     icon: autoApplyIcon,
     activeIcon: autoApplyActiveIcon,
@@ -40,7 +40,7 @@ const navigationItems = [
     activeIcon: profileActiveIcon,
   },
   {
-    name: "Subscriptions",
+    name: "My Subscriptions",
     path: "/subscriptions",
     icon: subscriptionIcon,
     activeIcon: subscriptionActiveIcon,
