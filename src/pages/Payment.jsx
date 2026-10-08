@@ -245,13 +245,23 @@ const PaymentFormContent = ({
 
                 // Retrieve user details from stored user state for billing details
                 const user = getStoredUser();
+                const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                const rawEmail = (user?.email || '').trim();
+                const isValidUserEmail = EMAIL_REGEX.test(rawEmail);
+
                 const billingName =
                     formData.nameOnCard.trim() ||
                     user?.fullName ||
                     user?.name ||
-                    (user?.email ? user.email.split('@')[0] : '') ||
+                    (isValidUserEmail ? rawEmail.split('@')[0] : '') ||
                     'Cardholder';
-                const billingEmail = user?.email || '';
+
+                const billingDetails = {
+                    name: billingName,
+                };
+                if (isValidUserEmail) {
+                    billingDetails.email = rawEmail;
+                }
 
                 const { error: confirmError, paymentIntent } = await stripe.confirmPayment({
                     elements,
@@ -259,10 +269,7 @@ const PaymentFormContent = ({
                     confirmParams: {
                         return_url: `${window.location.origin}/dashboard`,
                         payment_method_data: {
-                            billing_details: {
-                                name: billingName,
-                                email: billingEmail,
-                            },
+                            billing_details: billingDetails,
                         },
                     },
                     redirect: 'if_required',

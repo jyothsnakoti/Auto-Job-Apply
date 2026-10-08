@@ -192,6 +192,53 @@ export const saveAuthTokens = ({ accessToken, refreshToken }, rememberMe = null)
 };
 
 /**
+ * Email validation helper
+ */
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export const isValidEmail = (val) => typeof val === 'string' && EMAIL_REGEX.test(val.trim());
+
+/**
+ * Safely extract valid email address from a JWT access token
+ * @param {string} token - JWT string
+ * @returns {string} Email address if found, or empty string
+ */
+export const extractEmailFromJwt = (token) => {
+  if (!token || typeof token !== 'string') return '';
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return '';
+    const base64Url = parts[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    const decoded = JSON.parse(jsonPayload);
+    const candidates = [
+      decoded.email,
+      decoded.emailAddress,
+      decoded.email_address,
+      decoded.userEmail,
+      decoded.user_email,
+      decoded.email_id,
+      decoded.upn,
+      decoded.preferred_username,
+      decoded.sub,
+    ];
+    for (const c of candidates) {
+      if (isValidEmail(c)) {
+        return c.trim();
+      }
+    }
+  } catch {
+    // ignore decode errors
+  }
+  return '';
+};
+
+/**
  * Retrieve saved user info from localStorage or sessionStorage
  */
 export const getStoredUser = () => {
@@ -210,36 +257,74 @@ export const getStoredUser = () => {
       sessionStorage.getItem('pendingFullName') ||
       '';
 
+    let email = '';
+    let parsedObj = null;
+
     if (raw) {
-      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-      if (parsed) {
-        const email =
-          parsed.email ||
-          parsed.userEmail ||
-          localStorage.getItem('userEmail') ||
-          sessionStorage.getItem('userEmail') ||
-          '';
-        const name =
-          parsed.name ||
-          parsed.fullName ||
-          storedFullName ||
-          (email ? email.split('@')[0] : '');
-        return { email, name, fullName: name, ...parsed };
+      try {
+        parsedObj = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        if (parsedObj && typeof parsedObj === 'object') {
+          const candidates = [
+            parsedObj.email,
+            parsedObj.emailAddress,
+            parsedObj.email_address,
+            parsedObj.userEmail,
+            parsedObj.user_email,
+            parsedObj.email_id,
+            parsedObj.profile?.email,
+            parsedObj.profile?.emailAddress,
+          ];
+          for (const c of candidates) {
+            if (isValidEmail(c)) {
+              email = c.trim();
+              break;
+            }
+          }
+        }
+      } catch {
+        // ignore JSON parse errors
       }
     }
 
-    const email =
-      localStorage.getItem('userEmail') ||
-      sessionStorage.getItem('userEmail') ||
-      sessionStorage.getItem('pendingVerificationEmail') ||
-      '';
+    if (!email) {
+      const candidates = [
+        localStorage.getItem('userEmail'),
+        sessionStorage.getItem('userEmail'),
+        sessionStorage.getItem('pendingVerificationEmail'),
+      ];
+      for (const c of candidates) {
+        if (isValidEmail(c)) {
+          email = c.trim();
+          break;
+        }
+      }
+    }
 
-    const name = storedFullName || (email ? email.split('@')[0] : '');
+    if (!email) {
+      const { accessToken } = getStoredTokens();
+      if (accessToken) {
+        const jwtEmail = extractEmailFromJwt(accessToken);
+        if (isValidEmail(jwtEmail)) {
+          email = jwtEmail;
+          try {
+            localStorage.setItem('userEmail', email);
+          } catch {}
+        }
+      }
+    }
+
+    const name =
+      parsedObj?.name ||
+      parsedObj?.fullName ||
+      storedFullName ||
+      (email ? email.split('@')[0] : '');
 
     return {
       email,
       name,
       fullName: name,
+      ...(parsedObj || {}),
+      ...(email ? { email } : {}),
     };
   } catch {
     return { email: '', name: '', fullName: '' };
@@ -505,22 +590,58 @@ export const loginWithLinkedIn = async ({ code, redirectUri, rememberMe = true }
       data.data?.refreshToken ||
       '';
 
-    let user = data.user || data.data?.user || (data.email ? { email: data.email } : null);
-    if (!user && accessToken) {
-      try {
-        const parts = accessToken.split('.');
-        if (parts.length === 3) {
-          const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-          const email = payload.sub || payload.email || payload.username || '';
-          const name = payload.name || payload.fullName || '';
-          if (email) {
-            user = { email, name };
-          }
-        }
-      } catch (e) {
-        console.debug('Could not decode JWT payload for user info', e);
+    const extractEmailFromResponse = (resObj) => {
+      if (!resObj || typeof resObj !== 'object') return '';
+      const candidates = [
+        resObj.email,
+        resObj.emailAddress,
+        resObj.email_address,
+        resObj.userEmail,
+        resObj.user_email,
+        resObj.email_id,
+        resObj.user?.email,
+        resObj.user?.emailAddress,
+        resObj.user?.email_address,
+        resObj.user?.userEmail,
+        resObj.data?.email,
+        resObj.data?.emailAddress,
+        resObj.data?.email_address,
+        resObj.data?.user?.email,
+        resObj.data?.user?.emailAddress,
+        resObj.profile?.email,
+        resObj.profile?.emailAddress,
+      ];
+      for (const c of candidates) {
+        if (isValidEmail(c)) return c.trim();
       }
+      return '';
+    };
+
+    let extractedEmail = extractEmailFromResponse(data);
+    if (!extractedEmail && accessToken) {
+      extractedEmail = extractEmailFromJwt(accessToken);
     }
+
+    let user = data.user || data.data?.user || {};
+    if (typeof user !== 'object' || !user) {
+      user = {};
+    }
+
+    if (extractedEmail) {
+      user.email = extractedEmail;
+    }
+
+    const extractedName =
+      user.name ||
+      user.fullName ||
+      data.name ||
+      data.fullName ||
+      data.data?.name ||
+      data.data?.user?.name ||
+      (extractedEmail ? extractedEmail.split('@')[0] : '');
+
+    if (!user.name) user.name = extractedName;
+    if (!user.fullName) user.fullName = extractedName;
 
     // Clean up any stale session data before saving new authenticated user
     clearAuthTokens();
@@ -528,13 +649,12 @@ export const loginWithLinkedIn = async ({ code, redirectUri, rememberMe = true }
     saveAuthTokens({ accessToken, refreshToken }, rememberMe);
 
     const storage = rememberMe ? localStorage : sessionStorage;
-    if (user) {
-      storage.setItem('authUser', JSON.stringify(user));
-      storage.setItem('user', JSON.stringify(user));
-      if (user.email) {
-        storage.setItem('userEmail', user.email);
-      }
+    if (extractedEmail) {
+      storage.setItem('userEmail', extractedEmail);
+      localStorage.setItem('userEmail', extractedEmail);
     }
+    storage.setItem('authUser', JSON.stringify(user));
+    storage.setItem('user', JSON.stringify(user));
 
     return { ...data, accessToken, refreshToken, user };
   } catch (error) {

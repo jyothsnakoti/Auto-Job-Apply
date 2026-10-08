@@ -16,6 +16,11 @@ import {
   getScoreForEnhancedResume,
   checkUserHasResume,
 } from "../services/api";
+import {
+  getResumes,
+  setPrimaryResume,
+  refreshResumeMatches,
+} from "../services/resumeService";
 
 import aiLogo from "../assets/ai.svg";
 import mapIcon from "../assets/map.svg";
@@ -505,6 +510,14 @@ const BrowseJobs = () => {
   const [sponsorsVisa, setSponsorsVisa] = useState(false);
 
   const dropdownRef = useRef(null);
+  const resumeDropdownRef = useRef(null);
+
+  // Resume Selector States & Logic
+  const [userResumes, setUserResumes] = useState([]);
+  const [isLoadingResumes, setIsLoadingResumes] = useState(false);
+  const [selectedResume, setSelectedResume] = useState(null);
+  const [isResumeDropdownOpen, setIsResumeDropdownOpen] = useState(false);
+  const [isSettingPrimary, setIsSettingPrimary] = useState(false);
 
   /**
    * Main function to fetch stored job matches from GET /api/jobs
@@ -516,6 +529,7 @@ const BrowseJobs = () => {
       customQuery = null,
       customSort = null,
       overrideFilters = null,
+      customResumeId = null,
     } = {}) => {
       if (resetList) {
         setIsLoadingJobs(true);
@@ -525,12 +539,19 @@ const BrowseJobs = () => {
       setLoadMoreError(null);
       setFetchError(null);
 
-      // Check whether user has an uploaded resume
-      let resumeIdVal = null;
-      try {
-        resumeIdVal = await getPrimaryResumeId();
-      } catch {
-        // fallback
+      // Extract target resumeId for GET /api/jobs?resumeId=...
+      let resumeIdVal = customResumeId;
+      if (resumeIdVal === null || resumeIdVal === undefined) {
+        resumeIdVal = selectedResume
+          ? (selectedResume.id ?? selectedResume.resumeId ?? selectedResume._id ?? selectedResume.fileId ?? selectedResume.uuid ?? selectedResume.resume_id)
+          : activeResumeId;
+      }
+      if (!resumeIdVal) {
+        try {
+          resumeIdVal = await getPrimaryResumeId();
+        } catch {
+          // fallback
+        }
       }
       const onboardingState = getOnboardingState();
       if (!resumeIdVal && onboardingState?.resumeId) {
@@ -542,7 +563,9 @@ const BrowseJobs = () => {
       const userHasResume =
         Boolean(resumeIdVal) || (await checkUserHasResume().catch(() => false));
       setHasResume(userHasResume);
-      setActiveResumeId(resumeIdVal);
+      if (resumeIdVal) {
+        setActiveResumeId(String(resumeIdVal));
+      }
 
       try {
         const q = customQuery !== null ? customQuery : searchQuery;
@@ -567,6 +590,7 @@ const BrowseJobs = () => {
         }
 
         const params = {
+          resumeId: resumeIdVal || undefined,
           q: q ? q.trim() : undefined,
           location: activeLocs.length > 0 ? activeLocs[0] : undefined,
           role: activeRoles.length > 0 ? activeRoles[0] : undefined,
@@ -650,10 +674,60 @@ const BrowseJobs = () => {
     ]
   );
 
-  // Trigger GET /api/jobs immediately when component mounts
+  // Fetch user resumes from GET /api/resumes
+  const fetchUserResumes = useCallback(async () => {
+    try {
+      setIsLoadingResumes(true);
+      const data = await getResumes();
+      let list = [];
+      if (Array.isArray(data)) {
+        list = data;
+      } else if (data && Array.isArray(data.resumes)) {
+        list = data.resumes;
+      } else if (data && Array.isArray(data.data)) {
+        list = data.data;
+      } else if (data && (data.id !== undefined || data.fileName || data.name)) {
+        list = [data];
+      }
+
+      setUserResumes(list);
+      let targetResumeId = null;
+      if (list.length > 0) {
+        setHasResume(true);
+        // Find primary resume or default to the first one in raw data
+        const primary = list.find((r) => r.isPrimary === true) || list[0];
+        setSelectedResume(primary);
+        targetResumeId = primary?.id ?? primary?.resumeId ?? primary?._id ?? primary?.fileId ?? primary?.uuid ?? primary?.resume_id;
+        if (targetResumeId !== undefined && targetResumeId !== null) {
+          setActiveResumeId(String(targetResumeId));
+        }
+      }
+      fetchJobsData({ page: 0, resetList: true, customResumeId: targetResumeId });
+    } catch (err) {
+      console.error("[BrowseJobs] Error fetching resumes list:", err);
+      fetchJobsData({ page: 0, resetList: true });
+    } finally {
+      setIsLoadingResumes(false);
+    }
+  }, [fetchJobsData]);
+
+  // Handle selecting a resume from the dropdown (fetches GET /api/jobs?resumeId=...)
+  const handleSelectResume = (resume) => {
+    if (!resume) return;
+    setSelectedResume(resume);
+    setIsResumeDropdownOpen(false);
+    const resumeId = resume.id ?? resume.resumeId ?? resume._id ?? resume.fileId ?? resume.uuid ?? resume.resume_id;
+
+    if (resumeId !== undefined && resumeId !== null) {
+      setActiveResumeId(String(resumeId));
+      fetchJobsData({ page: 0, resetList: true, customResumeId: resumeId });
+    }
+  };
+
+  // Initial load on mount & event listeners
   useEffect(() => {
     let isMounted = true;
-    fetchJobsData({ page: 0, resetList: true });
+    fetchUserResumes();
 
     const handleJobMatchesUpdated = () => {
       if (isMounted) fetchJobsData({ page: 0, resetList: true });
@@ -665,6 +739,22 @@ const BrowseJobs = () => {
       isMounted = false;
       window.removeEventListener("jobMatchesUpdated", handleJobMatchesUpdated);
       window.removeEventListener("storage", handleJobMatchesUpdated);
+    };
+  }, []);
+
+  // Click outside listener to close resume dropdown
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        resumeDropdownRef.current &&
+        !resumeDropdownRef.current.contains(event.target)
+      ) {
+        setIsResumeDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
 
@@ -997,14 +1087,180 @@ const BrowseJobs = () => {
         {/* Browse Jobs Main Content */}
         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-7 flex flex-col gap-6 w-full bg-[#F8FAFC]">
           {/* Page Heading & Actions */}
-          {/* Page Heading */}
-          <div className="flex flex-col gap-1">
-            <h1 className="text-[20px] md:text-[22px] font-bold text-black tracking-tight">
-              Browse Jobs
-            </h1>
-            <p className="text-[13px] text-[#64748B]">
-              Discover and browse all job opportunities matched to your resume from our live matching engine.
-            </p>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 w-full">
+            {/* Page Heading */}
+            <div className="flex flex-col gap-1 min-w-0">
+              <h1 className="text-[20px] md:text-[22px] font-bold text-black tracking-tight">
+                Browse Jobs
+              </h1>
+              <p className="text-[13px] text-[#64748B]">
+                Discover and browse all job opportunities matched to your resume from our live matching engine.
+              </p>
+            </div>
+
+            {/* Select Resume Dropdown (Aligned Right) */}
+            <div className="relative shrink-0 self-start sm:self-center" ref={resumeDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setIsResumeDropdownOpen((prev) => !prev)}
+                className="h-[42px] px-3.5 rounded-[12px] bg-white border border-[#E2E8F0] hover:border-[#4F46E5]/40 hover:shadow-xs transition-all flex items-center gap-2.5 text-[#0F172A] cursor-pointer"
+              >
+                {/* Document / Resume Icon */}
+                <div className="w-6 h-6 rounded-lg bg-[#EEF2FF] text-[#4F46E5] flex items-center justify-center shrink-0">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="16" y1="13" x2="8" y2="13" />
+                    <line x1="16" y1="17" x2="8" y2="17" />
+                  </svg>
+                </div>
+
+                {/* Selected Resume Info */}
+                <div className="flex flex-col text-left max-w-[150px] sm:max-w-[190px] leading-tight">
+                  <span className="text-[9.5px] uppercase font-bold text-[#64748B] tracking-wider">
+                    {isSettingPrimary ? "Updating..." : "Active Resume"}
+                  </span>
+                  <span className="text-[12.5px] font-semibold text-[#0F172A] truncate">
+                    {isLoadingResumes ? (
+                      "Loading resumes..."
+                    ) : selectedResume ? (
+                      selectedResume.fileName || selectedResume.name || selectedResume.originalName || "Selected Resume"
+                    ) : (
+                      "Select Resume"
+                    )}
+                  </span>
+                </div>
+
+                {/* Primary Tag if selected resume is primary */}
+                {selectedResume?.isPrimary && !isSettingPrimary && (
+                  <span className="hidden sm:inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#EEF2FF] text-[#4F46E5] border border-indigo-200/80 shrink-0">
+                    <svg className="w-2.5 h-2.5 text-[#4F46E5]" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                    Primary
+                  </span>
+                )}
+
+                {/* Chevron Icon */}
+                <svg
+                  className={`w-4 h-4 text-[#64748B] transition-transform duration-200 shrink-0 ${
+                    isResumeDropdownOpen ? "rotate-180" : ""
+                  }`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {/* Dropdown Menu Popup */}
+              {isResumeDropdownOpen && (
+                <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-white rounded-[16px] border border-[#E2E8F0] shadow-xl z-50 overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="px-3.5 py-2.5 border-b border-[#F1F5F9] flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-[#0F172A] uppercase tracking-wider">
+                      Select Resume
+                    </span>
+                    <span className="text-[11px] font-medium text-[#64748B]">
+                      {userResumes.length} {userResumes.length === 1 ? "resume" : "resumes"}
+                    </span>
+                  </div>
+
+                  <div className="max-h-[260px] overflow-y-auto p-1.5 space-y-1">
+                    {isLoadingResumes ? (
+                      <div className="p-4 text-center text-xs text-[#64748B]">
+                        Loading resumes...
+                      </div>
+                    ) : userResumes.length === 0 ? (
+                      <div className="p-4 text-center">
+                        <p className="text-xs text-[#64748B] mb-2">No uploaded resumes found</p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsResumeDropdownOpen(false);
+                            navigate("/profile");
+                          }}
+                          className="px-3 py-1.5 bg-[#4F46E5] text-white text-xs font-semibold rounded-lg hover:bg-[#4338CA] transition-colors cursor-pointer"
+                        >
+                          Upload in Profile
+                        </button>
+                      </div>
+                    ) : (
+                      userResumes.map((resume, idx) => {
+                        const resumeId = resume.id ?? resume.resumeId ?? resume._id ?? resume.fileId ?? resume.uuid;
+                        const selectedId = selectedResume?.id ?? selectedResume?.resumeId ?? selectedResume?._id ?? selectedResume?.fileId ?? selectedResume?.uuid;
+                        const isSelected = String(resumeId) === String(selectedId);
+                        const resumeName = resume.fileName || resume.name || resume.originalName || `Resume ${idx + 1}`;
+                        const isPrimary = Boolean(resume.isPrimary === true);
+
+                        return (
+                          <button
+                            key={resumeId || idx}
+                            type="button"
+                            onClick={() => handleSelectResume(resume)}
+                            className={`w-full p-2.5 rounded-[10px] text-left transition-all flex items-center justify-between gap-2 cursor-pointer ${
+                              isSelected
+                                ? "bg-[#EEF2FF] border border-indigo-200/80"
+                                : "hover:bg-[#F8FAFC] border border-transparent"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                              <div className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 ${
+                                isSelected ? "bg-[#4F46E5] text-white" : "bg-slate-100 text-slate-500"
+                              }`}>
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                  <polyline points="14 2 14 8 20 8" />
+                                </svg>
+                              </div>
+                              <div className="flex flex-col min-w-0">
+                                <span className={`text-[12.5px] font-semibold truncate ${
+                                  isSelected ? "text-[#4F46E5]" : "text-[#0F172A]"
+                                }`}>
+                                  {resumeName}
+                                </span>
+                                {resume.createdAt && (
+                                  <span className="text-[10px] text-[#94A3B8]">
+                                    Uploaded {new Date(resume.createdAt).toLocaleDateString()}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {isPrimary && (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#EEF2FF] text-[#4F46E5] border border-indigo-200/60">
+                                  Primary
+                                </span>
+                              )}
+                              {isSelected && (
+                                <svg className="w-4 h-4 text-[#4F46E5]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  <div className="p-2 border-t border-[#F1F5F9] bg-[#F8FAFC] flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsResumeDropdownOpen(false);
+                        navigate("/profile");
+                      }}
+                      className="text-[11.5px] font-semibold text-[#4F46E5] hover:text-[#4338CA] transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>+ Manage / Upload Resumes</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Search & Filter Container */}

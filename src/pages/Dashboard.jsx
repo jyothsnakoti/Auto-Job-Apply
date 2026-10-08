@@ -8,12 +8,11 @@ import {
   getOnboardingProfile,
   getStoredJobMatches,
   getOnboardingState,
-  getStoredResumeId,
-  getJobId,
   getEnhancedResume,
-  downloadEnhancedResume,
   getScoreForEnhancedResume,
   getCandidateId,
+  getStoredResumeId,
+  getJobId,
   getMoreJobsForResume,
   getPrimaryResumeId,
   getBillingStatus,
@@ -22,6 +21,9 @@ import {
   getDashboardData,
   getStoredDashboardData,
   getJobs,
+  getJobById,
+  getResumeMatchesStatus,
+  refreshResumeMatches,
 } from "../services/api";
 
 import dashboard1Icon from "../assets/dashboard1.svg";
@@ -89,13 +91,7 @@ const experienceOptions = [
   "Up to 7 years",
 ];
 
-const jobTypeOptions = [
-  "Full-time",
-  "Part-time",
-  "Contract",
-  "Internship",
-  "Freelance",
-];
+const jobTypeOptions = ["Full-time", "Part-time", "Contract", "Internship"];
 const employmentTypeOptions = [
   "Full-time",
   "Part-time",
@@ -327,11 +323,7 @@ const transformMatchToJob = (match, index = 0) => {
       ? match.preferredSkills.map(cleanHtmlText)
       : [];
 
-  const displayScore =
-    rawScore !== null && !Number.isInteger(rawScore)
-      ? Number(rawScore).toFixed(1)
-      : matchPercent;
-  let matchText = matchPercent !== null ? `${displayScore}% match` : "ATS Match";
+  let matchText = matchPercent !== null ? `${matchPercent}% match` : "ATS Match";
   let matchColor = "bg-[#EEF2FF] text-[#4F46E5]";
   if (matchPercent !== null) {
     if (matchPercent < 70) {
@@ -422,9 +414,7 @@ const transformMatchToJob = (match, index = 0) => {
     postedAt: match.postedAt || null,
     match: matchText,
     matchPercent,
-    displayScore,
     rawScore,
-    matchScore: rawScore,
     matchColor,
     logo: match.logo || logo,
     description,
@@ -459,18 +449,9 @@ const getMatchPercent = (job) => {
 };
 
 const getMatchLabel = (job) => {
-  if (job?.displayScore !== undefined && job?.displayScore !== null) {
-    return `${job.displayScore}% match`;
-  }
-  const raw = job?.rawScore ?? job?.matchScore ?? job?.overall_score;
-  if (raw !== undefined && raw !== null && !isNaN(Number(raw))) {
-    const num = Number(raw);
-    const scoreStr = !Number.isInteger(num) ? num.toFixed(1) : num;
-    return `${scoreStr}% match`;
-  }
   const percent = getMatchPercent(job);
   if (percent > 0) {
-    return `${percent}% match`;
+    return `${Number.isInteger(percent) ? percent : Math.round(percent)}% match`;
   }
   return job?.match || "ATS Match";
 };
@@ -505,6 +486,22 @@ const getMissingRequiredSkills = (job) => {
     return job.score_data.missing_required_skills;
   }
   return [];
+};
+
+const formatMatchTime = (isoString) => {
+  if (!isoString) return "";
+  try {
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return String(isoString);
+    return date.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return String(isoString);
+  }
 };
 
 const Dashboard = () => {
@@ -627,7 +624,6 @@ const Dashboard = () => {
 
   // Enhance Resume States
   const [isEnhancing, setIsEnhancing] = useState(false);
-  const [isDownloadingResume, setIsDownloadingResume] = useState(false);
   const [enhanceError, setEnhanceError] = useState(null);
   const [enhanceSuccess, setEnhanceSuccess] = useState(null);
   const [enhancedResultsMap, setEnhancedResultsMap] = useState({});
@@ -652,11 +648,167 @@ const Dashboard = () => {
 
   const dropdownRef = useRef(null);
 
+  // Dynamic ATS Resume Matches Status from GET /api/resumes/matches/status
+  const [matchStatus, setMatchStatus] = useState({
+    hasPrimaryResume: null,
+    refreshing: false,
+    matchCount: 0,
+    lastComputedAt: null,
+    progress: null,
+    lastResult: null,
+  });
+  const [isLoadingMatchStatus, setIsLoadingMatchStatus] = useState(true);
+  const [isManualCheckingStatus, setIsManualCheckingStatus] = useState(false);
+  const prevRefreshingRef = useRef(false);
+  const pollingTimeoutRef = useRef(null);
+  const hasAutoRefreshedRef = useRef(false);
+
   // Dynamic Dashboard Metrics from GET /api/dashboard
   const [dashboardMetrics, setDashboardMetrics] = useState(() => {
     return getStoredDashboardData() || null;
   });
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(!dashboardMetrics);
+
+  // Reload jobs and dashboard data when matching finishes (refreshing transitions from true -> false)
+  const reloadJobsAndDashboard = useCallback(async () => {
+    try {
+      setIsLoadingJobs(true);
+      // 1. Reload dashboard stats
+      const dashData = await getDashboard().catch(() => null);
+      if (dashData) {
+        setDashboardMetrics(dashData);
+      }
+      // 2. Reload jobs list from GET /api/jobs
+      const jobsRes = await getJobs({ sort: "best_match", page: 0, size: 20 }).catch(() => null);
+      if (jobsRes && Array.isArray(jobsRes.items) && jobsRes.items.length > 0) {
+        const transformed = jobsRes.items
+          .map((m, idx) => transformMatchToJob(m, idx))
+          .filter(Boolean);
+        setJobs(transformed);
+        const last = transformed[transformed.length - 1];
+        if (last?.job_id || last?.id) {
+          setLastJobId(last.job_id || last.id);
+        }
+      } else if (Array.isArray(dashData?.topMatches) && dashData.topMatches.length > 0) {
+        const transformed = dashData.topMatches
+          .map((m, idx) => transformMatchToJob(m, idx))
+          .filter(Boolean);
+        setJobs(transformed);
+      }
+    } catch (err) {
+      console.warn("[Dashboard] Error reloading jobs/dashboard after match refresh:", err);
+    } finally {
+      setIsLoadingJobs(false);
+    }
+  }, []);
+
+  // Poll GET /api/resumes/matches/status (with automatic background refresh)
+  const fetchMatchStatus = useCallback(
+    async (isInitial = false) => {
+      try {
+        if (isInitial) setIsLoadingMatchStatus(true);
+        const status = await getResumeMatchesStatus();
+        if (!status) return;
+
+        setMatchStatus(status);
+
+        if (status.hasPrimaryResume === false) {
+          setHasResume(false);
+        } else if (status.hasPrimaryResume === true) {
+          setHasResume(true);
+        }
+
+        // Detect transition from refreshing=true to refreshing=false -> reload GET /api/jobs and GET /api/dashboard
+        if (prevRefreshingRef.current === true && status.refreshing === false) {
+          console.log("[Dashboard] ATS matching complete. Reloading GET /api/jobs and GET /api/dashboard...");
+          reloadJobsAndDashboard();
+        }
+
+        prevRefreshingRef.current = Boolean(status.refreshing);
+
+        // Automatic Refresh without manual user click:
+        // If user has a primary resume, matching is not already running, and we haven't auto-refreshed yet
+        if (
+          isInitial &&
+          status.hasPrimaryResume === true &&
+          !status.refreshing &&
+          !hasAutoRefreshedRef.current
+        ) {
+          hasAutoRefreshedRef.current = true;
+          console.log("[Dashboard] Automatically requesting fresh ATS matching on initial load...");
+          try {
+            await refreshResumeMatches();
+            setMatchStatus((prev) => ({
+              ...prev,
+              refreshing: true,
+              progress: "Initiating automatic ATS match refresh...",
+            }));
+            prevRefreshingRef.current = true;
+            if (pollingTimeoutRef.current) clearTimeout(pollingTimeoutRef.current);
+            pollingTimeoutRef.current = setTimeout(() => {
+              fetchMatchStatus(false);
+            }, 1000);
+            return;
+          } catch (autoErr) {
+            console.warn("[Dashboard] Auto-refresh match notice:", autoErr?.message);
+          }
+        }
+
+        // Polling: While matching runs (refreshing=true), poll every 3 seconds
+        if (status.refreshing) {
+          if (pollingTimeoutRef.current) clearTimeout(pollingTimeoutRef.current);
+          pollingTimeoutRef.current = setTimeout(() => {
+            fetchMatchStatus(false);
+          }, 3000);
+        }
+      } catch (err) {
+        console.warn("[Dashboard] Could not fetch resume matches status:", err);
+      } finally {
+        if (isInitial) setIsLoadingMatchStatus(false);
+        setIsManualCheckingStatus(false);
+      }
+    },
+    [reloadJobsAndDashboard]
+  );
+
+  // Initialize and clean up polling timer
+  useEffect(() => {
+    fetchMatchStatus(true);
+    return () => {
+      if (pollingTimeoutRef.current) {
+        clearTimeout(pollingTimeoutRef.current);
+      }
+    };
+  }, [fetchMatchStatus]);
+
+  const handleManualRefreshStatus = async () => {
+    setIsManualCheckingStatus(true);
+    await fetchMatchStatus(false);
+  };
+
+  const handleRequestMatchRefresh = async () => {
+    if (isManualCheckingStatus || matchStatus.refreshing) return;
+    if (matchStatus.hasPrimaryResume === false) {
+      navigate("/profile");
+      return;
+    }
+    try {
+      setIsManualCheckingStatus(true);
+      await refreshResumeMatches();
+      setMatchStatus((prev) => ({
+        ...prev,
+        refreshing: true,
+        progress: "Matching requested...",
+      }));
+      prevRefreshingRef.current = true;
+      setTimeout(() => {
+        fetchMatchStatus(false);
+      }, 500);
+    } catch (err) {
+      console.error("[Dashboard] Error requesting match refresh:", err);
+      setIsManualCheckingStatus(false);
+    }
+  };
 
   // 1. Fetch Dynamic Dashboard Metrics & Top Matches from GET /api/dashboard
   useEffect(() => {
@@ -1042,7 +1194,6 @@ const Dashboard = () => {
     setSelectedJobTypes([]);
     setSponsorsVisa(false);
     setSelectedEmploymentTypes([]);
-    setActiveDropdown(null);
   };
 
   const toggleDropdown = (name) => {
@@ -1196,11 +1347,14 @@ const Dashboard = () => {
   const statsCards = useMemo(() => {
     // 1. Jobs Found
     const jobsFoundVal =
-      typeof dashboardMetrics?.jobsFound === "number"
+      typeof
+      typeof matchStatus?.matchCount === "number" && matchStatus.matchCount > 0
+        ? matchStatus.matchCount
+        : (dashboardMetrics?.jobsFound === "number"
         ? dashboardMetrics.jobsFound
         : jobs.length > 0
         ? jobs.length
-        : 0;
+        : 0);
 
     // 2. Qualified Matches
     const qualifiedMatchesVal =
@@ -1239,12 +1393,15 @@ const Dashboard = () => {
         id: "jobs-found",
         title: "Jobs Found",
         value: Number(jobsFoundVal).toLocaleString(),
-        supportingText:
-          jobsFoundVal > 0
+        supportingText: matchStatus?.lastComputedAt
+          ? `Computed ${formatMatchTime(matchStatus.lastComputedAt)}`
+          : jobsFoundVal > 0
             ? "New jobs in the last 7 days"
-            : hasResume
-              ? "No matches found"
-              : "Upload resume to find matches",
+            : matchStatus?.hasPrimaryResume === false
+              ? "Primary resume required"
+              : hasResume
+                ? "No matches found"
+                : "Upload resume to find matches",
         iconBg: "#EFF6FF",
         icon: dashboard1Icon,
       },
@@ -1273,7 +1430,7 @@ const Dashboard = () => {
         icon: dashboard4Icon,
       },
     ];
-  }, [dashboardMetrics, jobs, billingInfo, applications, hasResume]);
+  }, [matchStatus, dashboardMetrics, jobs, billingInfo, applications, hasResume]);
 
   // Dynamic Application Tabs with Counts
   const applicationTabs = useMemo(() => {
@@ -1371,28 +1528,12 @@ const Dashboard = () => {
     setTimeout(() => setCopiedResume(false), 2500);
   };
 
-  const handleDownloadEnhancedResume = async (text, job) => {
-    const targetJob = job || selectedJobModal;
-    const jobId = getJobId(targetJob);
-    const jobTitle = (targetJob?.title || "Enhanced_Resume").replace(/[^a-zA-Z0-9_-]/g, "_");
-    const fallbackFilename = `${jobTitle}_Resume.docx`;
-
-    if (jobId) {
-      try {
-        setIsDownloadingResume(true);
-        await downloadEnhancedResume(jobId, fallbackFilename);
-        setIsDownloadingResume(false);
-        return;
-      } catch (err) {
-        console.warn("[Dashboard] API download enhanced resume failed, fallback to text blob:", err);
-        setIsDownloadingResume(false);
-      }
-    }
-
+  const handleDownloadEnhancedResume = (text, job) => {
     if (!text) return;
     const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
+    const jobTitle = (job?.title || "Enhanced_Resume").replace(/[^a-zA-Z0-9_-]/g, "_");
     link.href = url;
     link.download = `${jobTitle}_Resume.txt`;
     document.body.appendChild(link);
@@ -1472,15 +1613,88 @@ const Dashboard = () => {
         {/* Dashboard Main Content */}
         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-7 flex flex-col gap-6 w-full bg-[#F8FAFC]">
 
-          {/* Welcome Header */}
-          <div className="flex flex-col gap-1">
-            <h1 className="text-[20px] md:text-[22px] font-bold text-black tracking-tight">
-              Welcome back, {userName || "User"}!
-            </h1>
-            <p className="text-[13px] text-[#64748B]">
-              Your job search is running. We're finding, matching and applying to the best opportunities for you.
-            </p>
+          {/* Welcome Header & Match Status Indicator */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex flex-col gap-1">
+              <h1 className="text-[20px] md:text-[22px] font-bold text-black tracking-tight">
+                Welcome back, {userName || "User"}!
+              </h1>
+              <p className="text-[13px] text-[#64748B]">
+                Your job search is running. We're finding, matching and applying to the best opportunities for you.
+              </p>
+            </div>
+
+
           </div>
+
+          {/* Conditional Match Status Banner: No Primary Resume */}
+          {matchStatus.hasPrimaryResume === false && (
+            <div className="w-full p-4 rounded-[16px] bg-amber-50 border border-amber-200/80 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in duration-300">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center shrink-0 text-amber-600 mt-0.5 sm:mt-0">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                    />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-amber-900">Primary Resume Required</h3>
+                  <p className="text-xs text-amber-700 mt-0.5">
+                    No primary resume detected. Please set or upload a primary resume in your profile to enable automated ATS matching and job recommendations.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate("/profile")}
+                className="px-4 py-2 text-xs font-semibold text-white bg-[#6366F1] hover:bg-[#4F46E5] rounded-xl shadow-xs transition-all whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                Go to Profile & Resumes
+              </button>
+            </div>
+          )}
+
+          {/* Conditional Match Status Banner: Live Refreshing Progress */}
+          {matchStatus.refreshing && (
+            <div className="w-full p-4.5 rounded-[18px] bg-gradient-to-r from-indigo-50/90 via-purple-50/80 to-blue-50/90 border border-indigo-200/80 shadow-xs flex flex-col gap-2.5 animate-in fade-in duration-300">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-9 h-9 rounded-xl bg-[#6366F1]/10 flex items-center justify-center text-[#6366F1] shrink-0">
+                    <svg className="w-4.5 h-4.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      />
+                    </svg>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-sm font-bold text-[#0F172A]">ATS Job Matching In Progress</h3>
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-100 text-indigo-700">
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-ping" />
+                        Scanning Live
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#64748B] mt-0.5 truncate">
+                      {matchStatus.progress || "Fetching and scoring matching jobs from ATS..."}
+                    </p>
+                  </div>
+                </div>
+                <div className="hidden sm:flex items-center text-xs font-medium text-indigo-600 bg-white/80 px-3 py-1.5 rounded-xl border border-indigo-100 shadow-xs shrink-0">
+                  Polling updates...
+                </div>
+              </div>
+              <div className="w-full bg-indigo-100/70 rounded-full h-1.5 overflow-hidden">
+                <div className="bg-[#6366F1] h-1.5 rounded-full animate-pulse w-3/4 transition-all duration-500" />
+              </div>
+            </div>
+          )}
 
           {/* 1. Dashboard Statistics Cards (Dynamic From API) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4.5 w-full">
@@ -1932,6 +2146,72 @@ const Dashboard = () => {
                 <span>Sponsors Visa</span>
               </button>
 
+              {/* Employment Type Dropdown */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => toggleDropdown("employmentType")}
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "employmentType" ||
+                    selectedEmploymentTypes.length > 0
+                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                    }`}
+                >
+                  <span>Employment Type</span>
+                  <svg
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "employmentType" ? "rotate-180" : ""
+                      }`}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                  >
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </button>
+
+                {activeDropdown === "employmentType" && (
+                  <div className="absolute top-full left-0 mt-2 w-[170px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2.5 z-50 flex flex-col gap-1">
+                    {employmentTypeOptions.map((type) => {
+                      const isChecked = selectedEmploymentTypes.includes(type);
+                      return (
+                        <div
+                          key={type}
+                          onClick={() =>
+                            toggleCheckbox(
+                              selectedEmploymentTypes,
+                              setSelectedEmploymentTypes,
+                              type
+                            )
+                          }
+                          className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
+                        >
+                          <div
+                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
+                              ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
+                              : "border-slate-300 bg-white"
+                              }`}
+                          >
+                            {isChecked && (
+                              <svg
+                                className="w-2.5 h-2.5"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="3.5"
+                              >
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                            )}
+                          </div>
+                          <span>{type}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               {/* 4. Companies Dropdown */}
               <div className="relative">
                 <button
@@ -2182,6 +2462,19 @@ const Dashboard = () => {
               </div>
 
               <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => filteredJobs.length > 0 && navigate("/auto-apply")}
+                  disabled={filteredJobs.length === 0}
+                  className={`h-[38px] px-4 rounded-[10px] text-[13px] font-medium flex items-center gap-1.5 shadow-xs transition-all whitespace-nowrap ${filteredJobs.length > 0
+                    ? "bg-[#4F46E5] hover:bg-[#4338CA] text-white active:scale-[0.99] cursor-pointer"
+                    : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                    }`}
+                >
+                  <span>Auto Apply to all ({filteredJobs.length})</span>
+                  <span>→</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => navigate("/browse-jobs")}
@@ -2439,6 +2732,20 @@ const Dashboard = () => {
                     );
                   })}
                 </div>
+
+                {filteredJobs.length > 4 && (
+                  <div className="flex items-center justify-between pt-1 text-xs text-[#64748B]">
+                    <span>Showing 4 of {filteredJobs.length} top matches</span>
+                    <button
+                      type="button"
+                      onClick={() => navigate("/browse-jobs")}
+                      className="text-[#4F46E5] hover:text-[#4338CA] font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      <span>Browse all {filteredJobs.length} matching jobs</span>
+                      <span>→</span>
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -2683,12 +2990,9 @@ const Dashboard = () => {
         const activeAtsScore =
           selectedJobId && updatedAtsScores[selectedJobId] !== undefined
             ? updatedAtsScores[selectedJobId]
-            : (selectedJobModal.displayScore ??
-               (rawInitialScore !== null && !isNaN(rawInitialScore)
-                 ? (!Number.isInteger(Number(rawInitialScore))
-                     ? Number(rawInitialScore).toFixed(1)
-                     : Math.min(100, Math.max(1, Math.round(Number(rawInitialScore)))))
-                 : (selectedJobModal.matchPercent ?? null)));
+            : rawInitialScore !== null && !isNaN(rawInitialScore)
+              ? Math.min(100, Math.max(1, Math.round(Number(rawInitialScore))))
+              : null;
 
         const scoreData =
           currentMatch?.score_data || selectedJobModal.scoreData || null;
@@ -3128,7 +3432,7 @@ const Dashboard = () => {
                           {activeAtsScore !== null && (
                             <path
                               className="text-[#4F46E5]"
-                              strokeDasharray={`${Number(activeAtsScore) || 0}, 100`}
+                              strokeDasharray={`${activeAtsScore}, 100`}
                               strokeWidth="3.2"
                               strokeLinecap="round"
                               stroke="currentColor"
@@ -3155,9 +3459,9 @@ const Dashboard = () => {
                         </h3>
                         <p className="text-[12px] text-[#64748B] mt-0.5 leading-snug">
                           {activeAtsScore !== null
-                            ? Number(activeAtsScore) >= 80
+                            ? activeAtsScore >= 80
                               ? "Strong match based on your profile, skills, experience and preferences."
-                              : Number(activeAtsScore) >= 60
+                              : activeAtsScore >= 60
                                 ? "Moderate match. Enhancing your resume can bridge key skill and keyword gaps."
                                 : "Lower match. Review identified gaps below or click Enhance Resume."
                             : "ATS score unavailable for this job."}
@@ -3454,35 +3758,22 @@ const Dashboard = () => {
                         selectedJobModal
                       )
                     }
-                    disabled={isDownloadingResume}
-                    className="px-3.5 py-1.5 bg-[#EEF2FF] hover:bg-[#E0E7FF] disabled:bg-slate-100 text-[#4F46E5] disabled:text-slate-400 text-xs font-semibold rounded-lg transition-colors cursor-pointer disabled:cursor-not-allowed flex items-center gap-1.5"
+                    className="px-3.5 py-1.5 bg-[#EEF2FF] hover:bg-[#E0E7FF] text-[#4F46E5] text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
                   >
-                    {isDownloadingResume ? (
-                      <>
-                        <svg className="animate-spin w-3.5 h-3.5 text-[#4F46E5]" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                        </svg>
-                        <span>Downloading...</span>
-                      </>
-                    ) : (
-                      <>
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                          />
-                        </svg>
-                        <span>Download</span>
-                      </>
-                    )}
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                      />
+                    </svg>
+                    <span>Download</span>
                   </button>
 
                   <button

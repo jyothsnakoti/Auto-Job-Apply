@@ -770,17 +770,6 @@ const Profile = () => {
                 ) : (
                   /* List of Resumes */
                   <div className="mt-4 flex flex-col gap-3 max-h-[360px] overflow-y-auto pr-0.5">
-                    {/* Notice if no resume is marked primary by backend */}
-                    {!resumes.some((r) => r.isPrimary === true) && (
-                      <div className="p-3 rounded-xl bg-amber-50 border border-amber-200/80 text-amber-800 text-[12px] font-medium flex items-center gap-2">
-                        <svg className="w-4 h-4 text-amber-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                          <circle cx="12" cy="12" r="10" />
-                          <line x1="12" y1="8" x2="12" y2="12" />
-                          <line x1="12" y1="16" x2="12.01" y2="16" />
-                        </svg>
-                        <span>No primary resume selected. Click "Set as Primary" on a resume below.</span>
-                      </div>
-                    )}
 
                     {resumes.map((resume, idx) => {
                       const realResumeId = resume.id ?? resume.resumeId ?? resume.fileId ?? resume._id ?? resume.uuid;
@@ -850,40 +839,6 @@ const Profile = () => {
 
                           {/* Action Buttons Toolbar */}
                           <div className="flex items-center gap-1.5 shrink-0 justify-end self-end md:self-center">
-                            {/* Set as Primary Button (if not already primary) */}
-                            {!isPrimary && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleSetPrimary({
-                                    ...resume,
-                                    id: realResumeId,
-                                    fileName: resumeName,
-                                  })
-                                }
-                                disabled={isDownloading || isDeleting || isSettingPrimary}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-[#E2E8F0] hover:bg-indigo-50 hover:border-indigo-200 hover:text-[#4F46E5] text-slate-600 text-[11.5px] sm:text-[12px] font-medium transition-all cursor-pointer shadow-2xs disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
-                                title="Set as Primary Resume"
-                              >
-                                {isSettingPrimary ? (
-                                  <>
-                                    <svg className="w-3.5 h-3.5 text-[#4F46E5] animate-spin" fill="none" viewBox="0 0 24 24">
-                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                    </svg>
-                                    <span>Updating...</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <svg className="w-3.5 h-3.5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                                    </svg>
-                                    <span>Set as Primary</span>
-                                  </>
-                                )}
-                              </button>
-                            )}
-
                             {/* Download Button */}
                             <button
                               type="button"
