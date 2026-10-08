@@ -480,16 +480,23 @@ const BrowseJobs = () => {
     }
   };
 
-  // Dynamic Jobs State (purely live data from backend)
-  const [jobsList, setJobsList] = useState([]);
+  // Dynamic Jobs State with Page-based Cache { [pageNumber]: [jobs] }
+  const [jobsCache, setJobsCache] = useState({});
+  const jobsCacheRef = useRef({});
+  const [activePage, setActivePage] = useState(1);
+  const [pageSize] = useState(20);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [sortOption, setSortOption] = useState("best_match"); // 'best_match' or 'newest'
 
   const [isLoadingJobs, setIsLoadingJobs] = useState(true);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [isLoadingPage, setIsLoadingPage] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState(null);
   const [fetchError, setFetchError] = useState(null);
   const [hasMoreJobs, setHasMoreJobs] = useState(true);
   const [hasResume, setHasResume] = useState(false);
   const [activeResumeId, setActiveResumeId] = useState(null);
+  const fetchingPagesRef = useRef(new Set());
 
   // Dynamic ATS Resume Matches Status & Refresh
   const [matchStatus, setMatchStatus] = useState({
@@ -506,14 +513,6 @@ const BrowseJobs = () => {
   const prevRefreshingRef = useRef(false);
   const pollingTimeoutRef = useRef(null);
   const hasAutoRefreshedRef = useRef(false);
-
-  // Pagination & Sorting State for GET /api/jobs
-  const [currentPage, setCurrentPage] = useState(0);
-  const [activePage, setActivePage] = useState(1);
-  const [pageSize] = useState(20);
-  const [totalItems, setTotalItems] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
-  const [sortOption, setSortOption] = useState("best_match"); // 'best_match' or 'newest'
 
   // Enhance Resume States
   const [isEnhancing, setIsEnhancing] = useState(false);
@@ -541,20 +540,29 @@ const BrowseJobs = () => {
   const dropdownRef = useRef(null);
 
   /**
-   * Main function to fetch stored job matches from GET /api/jobs
+   * Main function to load jobs for a specific page with Page-based Cache.
+   * If the page is already cached (and not forcing refresh), returns cached data without API call.
    */
-  const fetchJobsData = useCallback(
-    async ({
-      page = 0,
-      resetList = true,
-      customQuery = null,
-      customSort = null,
-      overrideFilters = null,
-    } = {}) => {
-      if (resetList) {
+  const loadPage = useCallback(
+    async (pageNumber, { forceRefresh = false, customQuery = null, customSort = null, overrideFilters = null } = {}) => {
+      // 1. Check cache first (unless forceRefresh is requested)
+      if (!forceRefresh && jobsCacheRef.current[pageNumber]) {
+        console.log(`[BrowseJobs] Page ${pageNumber} found in cache. Using cached data (NO API CALL).`);
+        setActivePage(pageNumber);
+        return jobsCacheRef.current[pageNumber];
+      }
+
+      // 2. Prevent duplicate concurrent requests for the same page
+      if (fetchingPagesRef.current.has(pageNumber)) {
+        console.log(`[BrowseJobs] Request for page ${pageNumber} is already in flight. Skipping duplicate call.`);
+        return;
+      }
+
+      fetchingPagesRef.current.add(pageNumber);
+      if (pageNumber === 1 && (forceRefresh || Object.keys(jobsCacheRef.current).length === 0)) {
         setIsLoadingJobs(true);
       } else {
-        setIsLoadingMore(true);
+        setIsLoadingPage(true);
       }
       setLoadMoreError(null);
       setFetchError(null);
@@ -563,9 +571,7 @@ const BrowseJobs = () => {
       let resumeIdVal = null;
       try {
         resumeIdVal = await getPrimaryResumeId();
-      } catch {
-        // fallback
-      }
+      } catch {}
       const onboardingState = getOnboardingState();
       if (!resumeIdVal && onboardingState?.resumeId) {
         resumeIdVal = String(onboardingState.resumeId);
@@ -588,7 +594,6 @@ const BrowseJobs = () => {
         const activeJobTypes = overrideFilters?.jobTypes ?? selectedJobTypes;
         const activeDate = overrideFilters?.date ?? selectedDate;
 
-        // Convert activeDate to postedWithinDays
         let postedWithinDays = undefined;
         if (activeDate === "Last 6 hours" || activeDate === "Last 24 hours") {
           postedWithinDays = 1;
@@ -600,6 +605,8 @@ const BrowseJobs = () => {
           postedWithinDays = 30;
         }
 
+        const apiPage = Math.max(0, pageNumber - 1); // 0-indexed for GET /api/jobs
+
         const params = {
           q: q ? q.trim() : undefined,
           location: activeLocs.length > 0 ? activeLocs[0] : undefined,
@@ -608,68 +615,70 @@ const BrowseJobs = () => {
           employmentType: activeJobTypes.length > 0 ? activeJobTypes[0].toLowerCase() : undefined,
           postedWithinDays,
           sort: sort || "best_match",
-          page,
+          page: apiPage,
           size: pageSize || 20,
         };
 
-        console.log("[BrowseJobs] Fetching jobs via GET /api/jobs with params:", params);
+        console.log(`[BrowseJobs] Fetching Page ${pageNumber} (apiPage ${apiPage}) via GET /api/jobs with params:`, params);
         const res = await getJobs(params);
 
         const items = res?.items || [];
-        const transformed = items.map((m, idx) => transformMatchToJob(m, page * pageSize + idx)).filter(Boolean);
+        const transformed = items.map((m, idx) => transformMatchToJob(m, apiPage * pageSize + idx)).filter(Boolean);
 
-        const resPage = res?.page ?? page;
-        const resTotalItems = res?.totalItems ?? items.length;
-        const resTotalPages = res?.totalPages ?? Math.max(1, Math.ceil(resTotalItems / (pageSize || 20)));
+        const resTotalItems =
+          typeof res?.totalItems === "number" && res.totalItems >= 0
+            ? res.totalItems
+            : (items.length >= pageSize ? (apiPage + 2) * pageSize : (apiPage * pageSize + items.length));
 
-        setCurrentPage(resPage);
+        const resTotalPages =
+          typeof res?.totalPages === "number" && res.totalPages > 0
+            ? res.totalPages
+            : Math.max(1, Math.ceil(resTotalItems / (pageSize || 20)));
+
+        const hasMore = (apiPage + 1) < resTotalPages && items.length > 0;
+        setHasMoreJobs(hasMore);
         setTotalItems(resTotalItems);
         setTotalPages(resTotalPages);
 
-        if (resetList) {
-          setActivePage(1);
-          if (transformed.length > 0) {
-            setJobsList(transformed);
-          } else {
-            // Check fallback stored matches if GET /api/jobs returns empty on initial load
-            const stored = getStoredJobMatches();
-            if (Array.isArray(stored) && stored.length > 0) {
-              const fallback = stored.map((m, idx) => transformMatchToJob(m, idx)).filter(Boolean);
-              setJobsList(fallback);
-            } else {
-              setJobsList([]);
-            }
-          }
-        } else {
-          setJobsList((prev) => {
-            const existingIds = new Set(prev.map((j) => j.job_id || j.jobId || j.id || j.JDid));
-            const fresh = transformed.filter((j) => !existingIds.has(j.job_id || j.jobId || j.id || j.JDid));
-            return [...prev, ...fresh];
-          });
-          // Switch activePage to the newly loaded page
-          const newlyLoadedPage = resPage + 1;
-          setActivePage(newlyLoadedPage);
-        }
-
-        const hasMore = resPage + 1 < resTotalPages && items.length > 0;
-        setHasMoreJobs(hasMore);
-      } catch (err) {
-        console.error("[BrowseJobs] Error fetching jobs from GET /api/jobs:", err);
-        const msg = err?.response?.data?.message || err?.message || "Unable to load jobs. Please try again.";
-        setFetchError(msg);
-        if (!resetList) {
-          setLoadMoreError(msg);
-        } else {
-          // Fallback to stored job matches
+        if (transformed.length === 0 && pageNumber === 1 && (forceRefresh || Object.keys(jobsCacheRef.current).length === 0)) {
           const stored = getStoredJobMatches();
           if (Array.isArray(stored) && stored.length > 0) {
             const fallback = stored.map((m, idx) => transformMatchToJob(m, idx)).filter(Boolean);
-            setJobsList(fallback);
+            jobsCacheRef.current[1] = fallback;
+            setJobsCache({ 1: fallback });
+            setActivePage(1);
+            return fallback;
+          }
+        }
+
+        // Cache page data
+        jobsCacheRef.current[pageNumber] = transformed;
+        setJobsCache((prev) => ({
+          ...(forceRefresh ? {} : prev),
+          [pageNumber]: transformed,
+        }));
+        setActivePage(pageNumber);
+
+        return transformed;
+      } catch (err) {
+        console.error(`[BrowseJobs] Error fetching Page ${pageNumber} from GET /api/jobs:`, err);
+        const msg = err?.response?.data?.message || err?.message || "Unable to load jobs. Please try again.";
+        setFetchError(msg);
+        setLoadMoreError(msg);
+
+        if (pageNumber === 1 && Object.keys(jobsCacheRef.current).length === 0) {
+          const stored = getStoredJobMatches();
+          if (Array.isArray(stored) && stored.length > 0) {
+            const fallback = stored.map((m, idx) => transformMatchToJob(m, idx)).filter(Boolean);
+            jobsCacheRef.current[1] = fallback;
+            setJobsCache({ 1: fallback });
+            setActivePage(1);
           }
         }
       } finally {
+        fetchingPagesRef.current.delete(pageNumber);
         setIsLoadingJobs(false);
-        setIsLoadingMore(false);
+        setIsLoadingPage(false);
       }
     },
     [
@@ -703,7 +712,9 @@ const BrowseJobs = () => {
         // When matching completes (refreshing transitions from true -> false), reload stored jobs from GET /api/jobs!
         if (prevRefreshingRef.current === true && status.refreshing === false) {
           console.log("[BrowseJobs] ATS matching complete. Reloading stored jobs from GET /api/jobs...");
-          fetchJobsData({ page: 0, resetList: true });
+          jobsCacheRef.current = {};
+          setJobsCache({});
+          loadPage(1, { forceRefresh: true });
           setRefreshSuccessMessage("ATS matching complete! Fresh jobs loaded.");
           setTimeout(() => setRefreshSuccessMessage(null), 5000);
         }
@@ -751,7 +762,7 @@ const BrowseJobs = () => {
         setIsRequestingRefresh(false);
       }
     },
-    [fetchJobsData]
+    [loadPage]
   );
 
   // Initialize status on mount & cleanup timer
@@ -798,13 +809,17 @@ const BrowseJobs = () => {
     }
   };
 
-  // Trigger GET /api/jobs immediately when component mounts
+  // Trigger initial Page 1 fetch immediately when component mounts
   useEffect(() => {
     let isMounted = true;
-    fetchJobsData({ page: 0, resetList: true });
+    loadPage(1, { forceRefresh: true });
 
     const handleJobMatchesUpdated = () => {
-      if (isMounted) fetchJobsData({ page: 0, resetList: true });
+      if (isMounted) {
+        jobsCacheRef.current = {};
+        setJobsCache({});
+        loadPage(1, { forceRefresh: true });
+      }
     };
 
     window.addEventListener("jobMatchesUpdated", handleJobMatchesUpdated);
@@ -814,13 +829,14 @@ const BrowseJobs = () => {
       window.removeEventListener("jobMatchesUpdated", handleJobMatchesUpdated);
       window.removeEventListener("storage", handleJobMatchesUpdated);
     };
-  }, []);
+  }, [loadPage]);
 
-  // Handle Load More Jobs (increments page for GET /api/jobs)
-  const handleLoadMoreJobs = async () => {
-    if (isLoadingMore || !hasMoreJobs) return;
-    const nextPage = currentPage + 1;
-    await fetchJobsData({ page: nextPage, resetList: false });
+  // Handle Page Change with Cache Checking
+  const handlePageChange = (targetPage) => {
+    if (targetPage < 1 || targetPage === activePage || (totalPages > 0 && targetPage > totalPages)) {
+      return;
+    }
+    loadPage(targetPage);
   };
 
   // Enhance Resume Action Handler (POST /api/jobs/{jobId}/enhance -> GET /api/jobs/{jobId}/enhance)
@@ -1007,10 +1023,11 @@ const BrowseJobs = () => {
     setSponsorsVisa(false);
     setSortOption("best_match");
     setActiveDropdown(null);
+    jobsCacheRef.current = {};
+    setJobsCache({});
     setActivePage(1);
-    fetchJobsData({
-      page: 0,
-      resetList: true,
+    loadPage(1, {
+      forceRefresh: true,
       customQuery: "",
       customSort: "best_match",
       overrideFilters: {
@@ -1035,40 +1052,46 @@ const BrowseJobs = () => {
     }
   };
 
-  // Dynamically extract filter options from live API jobsList
+  // Flatten all cached jobs across pages for options extraction
+  const allCachedJobs = useMemo(() => {
+    return Object.values(jobsCache).flat();
+  }, [jobsCache]);
+
+  // Dynamically extract filter options from cached jobs
   const dynamicCompanyOptions = useMemo(() => {
     const set = new Set();
-    jobsList.forEach((j) => {
+    allCachedJobs.forEach((j) => {
       if (j.company && j.company !== "Hiring Organization") {
         set.add(j.company);
       }
     });
     return Array.from(set);
-  }, [jobsList]);
+  }, [allCachedJobs]);
 
   const dynamicRoleOptions = useMemo(() => {
     const set = new Set();
-    jobsList.forEach((j) => {
+    allCachedJobs.forEach((j) => {
       if (j.title && !j.title.startsWith("Position #")) {
         set.add(j.title);
       }
     });
     return Array.from(set);
-  }, [jobsList]);
+  }, [allCachedJobs]);
 
   const dynamicLocationOptions = useMemo(() => {
     const set = new Set();
-    jobsList.forEach((j) => {
+    allCachedJobs.forEach((j) => {
       if (j.location && j.location !== "Remote / Flexible") {
         set.add(j.location);
       }
     });
     return Array.from(set);
-  }, [jobsList]);
+  }, [allCachedJobs]);
 
-  // Filter jobs based on active search and filter options
+  // Filter jobs for the active page
   const filteredJobs = useMemo(() => {
-    return jobsList.filter((job) => {
+    const pageJobs = jobsCache[activePage] || [];
+    return pageJobs.filter((job) => {
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const matchTitle = (job.title || "").toLowerCase().includes(q);
@@ -1120,7 +1143,8 @@ const BrowseJobs = () => {
       return true;
     });
   }, [
-    jobsList,
+    jobsCache,
+    activePage,
     searchQuery,
     selectedLocations,
     selectedCompanies,
@@ -1129,8 +1153,27 @@ const BrowseJobs = () => {
     selectedJobTypes,
   ]);
 
-  // Derived total pages for local page switching
-  const totalClientPages = Math.max(1, Math.ceil(filteredJobs.length / 20));
+  // Determine dynamic visible pages for pagination controls
+  const visiblePages = useMemo(() => {
+    const highestPage = Math.max(
+      1,
+      totalPages,
+      ...Object.keys(jobsCache).map(Number)
+    );
+    if (highestPage <= 5) {
+      return Array.from({ length: highestPage }, (_, i) => i + 1);
+    }
+    let start = Math.max(1, activePage - 2);
+    let end = Math.min(highestPage, start + 4);
+    if (end - start < 4) {
+      start = Math.max(1, end - 4);
+    }
+    const pages = [];
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+    return pages;
+  }, [totalPages, jobsCache, activePage]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#F8FAFC]">
@@ -1319,7 +1362,9 @@ const BrowseJobs = () => {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
-                      fetchJobsData({ page: 0, resetList: true });
+                      jobsCacheRef.current = {};
+                      setJobsCache({});
+                      loadPage(1, { forceRefresh: true });
                     }
                   }}
                   placeholder="Search by title, keyword, company or skills..."
@@ -1864,68 +1909,87 @@ const BrowseJobs = () => {
                 )}
               </div>
 
-              {/* Sort Dropdown (Best Match vs Newest) */}
-              <div className="relative sm:ml-auto">
+              {/* Sort & Auto Apply Actions */}
+              <div className="relative sm:ml-auto flex items-center gap-2.5 flex-wrap">
+                {/* Sort Dropdown (Best Match vs Newest) */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => toggleDropdown("sort")}
+                    className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "sort" || sortOption !== "best_match"
+                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+                      }`}
+                  >
+                    <span className="text-[#64748B]">Sort:</span>
+                    <span className="font-semibold text-[#0F172A]">
+                      {sortOption === "newest" ? "Newest First" : "Best ATS Match"}
+                    </span>
+                    <svg
+                      className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "sort" ? "rotate-180" : ""
+                        }`}
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                    >
+                      <path d="m6 9 6 6 6-6" />
+                    </svg>
+                  </button>
+
+                  {activeDropdown === "sort" && (
+                    <div className="absolute top-full right-0 mt-2 w-[190px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2 z-50 flex flex-col gap-0.5">
+                      <div
+                        onClick={() => {
+                          setSortOption("best_match");
+                          setActiveDropdown(null);
+                          jobsCacheRef.current = {};
+                          setJobsCache({});
+                          loadPage(1, { forceRefresh: true, customSort: "best_match" });
+                        }}
+                        className={`flex items-center justify-between px-3 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] ${sortOption === "best_match"
+                          ? "font-semibold text-[#0F172A] bg-slate-50"
+                          : "text-slate-700"
+                          }`}
+                      >
+                        <span>Best ATS Match</span>
+                        {sortOption === "best_match" && (
+                          <span className="text-[#4F46E5] text-xs font-bold">✓</span>
+                        )}
+                      </div>
+                      <div
+                        onClick={() => {
+                          setSortOption("newest");
+                          setActiveDropdown(null);
+                          jobsCacheRef.current = {};
+                          setJobsCache({});
+                          loadPage(1, { forceRefresh: true, customSort: "newest" });
+                        }}
+                        className={`flex items-center justify-between px-3 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] ${sortOption === "newest"
+                          ? "font-semibold text-[#0F172A] bg-slate-50"
+                          : "text-slate-700"
+                          }`}
+                      >
+                        <span>Newest First</span>
+                        {sortOption === "newest" && (
+                          <span className="text-[#4F46E5] text-xs font-bold">✓</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Auto Apply All Button */}
                 <button
                   type="button"
-                  onClick={() => toggleDropdown("sort")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "sort" || sortOption !== "best_match"
-                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                    }`}
+                  onClick={() => navigate("/auto-apply")}
+                  className="h-[34px] px-4 rounded-[10px] bg-[#4F46E5] hover:bg-[#4338CA] text-white text-[13px] font-semibold flex items-center gap-1.5 transition-all shadow-xs hover:shadow-md cursor-pointer whitespace-nowrap active:scale-[0.99]"
                 >
-                  <span className="text-[#64748B]">Sort:</span>
-                  <span className="font-semibold text-[#0F172A]">
-                    {sortOption === "newest" ? "Newest First" : "Best ATS Match"}
-                  </span>
-                  <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "sort" ? "rotate-180" : ""
-                      }`}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                  >
-                    <path d="m6 9 6 6 6-6" />
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
+                  <span>Auto Apply All</span>
                 </button>
-
-                {activeDropdown === "sort" && (
-                  <div className="absolute top-full right-0 mt-2 w-[190px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2 z-50 flex flex-col gap-0.5">
-                    <div
-                      onClick={() => {
-                        setSortOption("best_match");
-                        setActiveDropdown(null);
-                        fetchJobsData({ page: 0, resetList: true, customSort: "best_match" });
-                      }}
-                      className={`flex items-center justify-between px-3 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] ${sortOption === "best_match"
-                        ? "font-semibold text-[#0F172A] bg-slate-50"
-                        : "text-slate-700"
-                        }`}
-                    >
-                      <span>Best ATS Match</span>
-                      {sortOption === "best_match" && (
-                        <span className="text-[#4F46E5] text-xs font-bold">✓</span>
-                      )}
-                    </div>
-                    <div
-                      onClick={() => {
-                        setSortOption("newest");
-                        setActiveDropdown(null);
-                        fetchJobsData({ page: 0, resetList: true, customSort: "newest" });
-                      }}
-                      className={`flex items-center justify-between px-3 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] ${sortOption === "newest"
-                        ? "font-semibold text-[#0F172A] bg-slate-50"
-                        : "text-slate-700"
-                        }`}
-                    >
-                      <span>Newest First</span>
-                      {sortOption === "newest" && (
-                        <span className="text-[#4F46E5] text-xs font-bold">✓</span>
-                      )}
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           </div>
@@ -1939,7 +2003,7 @@ const BrowseJobs = () => {
               </div>
               <button
                 type="button"
-                onClick={() => fetchJobsData({ page: 0, resetList: true })}
+                onClick={() => loadPage(activePage, { forceRefresh: true })}
                 className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold cursor-pointer shrink-0 transition-colors"
               >
                 Retry
@@ -1959,7 +2023,7 @@ const BrowseJobs = () => {
                     </svg>
                     <p className="text-[14px] font-medium text-slate-700">Loading stored job matches from server...</p>
                   </div>
-                ) : jobsList.length === 0 ? (
+                ) : allCachedJobs.length === 0 ? (
                   <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-12 text-center flex flex-col items-center justify-center gap-3">
                     <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center text-[#4F46E5] mb-1">
                       {matchStatus.refreshing ? (
@@ -2051,9 +2115,7 @@ const BrowseJobs = () => {
                 ) : (
                   <>
                     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4.5 w-full">
-                      {filteredJobs
-                        .slice((activePage - 1) * 20, activePage * 20)
-                        .map((job, idx) => (
+                      {filteredJobs.map((job, idx) => (
                           <div
                             key={job.id || job.job_id || job.jobId || `job-${idx}`}
                             onClick={() => handleOpenJobModal(job)}
@@ -2149,91 +2211,91 @@ const BrowseJobs = () => {
                         ))}
                     </div>
 
-                    {/* Pagination Bar with Page Numbers and Load More Button */}
-                    <div className="flex flex-col items-center justify-center pt-6 pb-8 gap-3">
-                      {loadMoreError && (
-                        <div className="text-[13px] text-rose-600 bg-rose-50 border border-rose-200 px-4 py-2 rounded-lg flex items-center gap-2">
-                          <span>{loadMoreError}</span>
-                          <button
-                            type="button"
-                            onClick={handleLoadMoreJobs}
-                            className="underline text-rose-700 font-medium hover:text-rose-900 cursor-pointer ml-1"
-                          >
-                            Retry
-                          </button>
-                        </div>
-                      )}
+                    {/* Bottom Pagination Card (Image 2 Design) */}
+                    <div className="bg-white rounded-[16px] border border-[#E2E8F0] px-5 py-3.5 flex items-center justify-between flex-wrap gap-4 shadow-[0_1px_3px_rgba(15,23,42,0.02)] mt-2 mb-8">
+                      {/* Left Side: Dynamic Loaded Jobs Count Text */}
+                      <span className="text-[13px] sm:text-[13.5px] font-medium text-[#475569]">
+                        {(() => {
+                          const currentCount = filteredJobs.length;
+                          const startIdx = currentCount > 0 ? (activePage - 1) * pageSize + 1 : 0;
+                          const endIdx = currentCount > 0 ? (activePage - 1) * pageSize + currentCount : 0;
+                          const totalLoadedJobs = Object.values(jobsCache).reduce(
+                            (sum, list) => sum + (list?.length || 0),
+                            0
+                          );
+                          const displayTotal = totalItems > 0 ? totalItems : totalLoadedJobs;
+                          const displayTotalPages = totalPages > 0 ? totalPages : Math.max(1, Object.keys(jobsCache).length);
 
-                      <div className="flex items-center gap-2 flex-wrap justify-center">
-                        {/* Prev Page Button */}
+                          if (totalItems > 0 && totalItems !== totalLoadedJobs) {
+                            return `Showing ${startIdx}–${endIdx} of ${displayTotal} jobs (Page ${activePage} of ${displayTotalPages})`;
+                          }
+                          return `Showing ${startIdx}–${endIdx} of ${totalLoadedJobs} loaded jobs (Page ${activePage} of ${displayTotalPages})`;
+                        })()}
+                      </span>
+
+                      {/* Right Side: Pagination Controls (< 1 2 3 >) */}
+                      <div className="flex items-center gap-1.5">
+                        {/* Previous Button */}
                         <button
                           type="button"
-                          onClick={() => setActivePage((p) => Math.max(1, p - 1))}
-                          disabled={activePage === 1}
-                          className="w-9 h-9 rounded-xl border border-[#E2E8F0] bg-white hover:bg-slate-50 disabled:opacity-40 text-slate-700 text-sm font-semibold flex items-center justify-center transition-all cursor-pointer disabled:cursor-not-allowed shadow-2xs"
+                          onClick={() => handlePageChange(activePage - 1)}
+                          disabled={activePage <= 1 || isLoadingPage}
+                          className="w-8 h-8 rounded-lg border border-[#E2E8F0] bg-white hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed text-slate-700 text-sm flex items-center justify-center transition-colors cursor-pointer"
+                          aria-label="Previous Page"
                         >
-                          ‹
+                          <svg
+                            className="w-4 h-4 text-slate-600"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                          </svg>
                         </button>
 
                         {/* Page Numbers */}
-                        {Array.from({ length: totalClientPages }, (_, i) => i + 1).map((pg) => {
+                        {visiblePages.map((pg) => {
                           const isActive = activePage === pg;
                           return (
                             <button
                               key={pg}
                               type="button"
-                              onClick={() => setActivePage(pg)}
-                              className={`w-9 h-9 rounded-xl text-xs font-semibold flex items-center justify-center transition-all cursor-pointer ${isActive
-                                ? "bg-[#4F46E5] text-white shadow-xs scale-105"
-                                : "bg-white border border-[#E2E8F0] text-slate-700 hover:bg-slate-50 shadow-2xs"
-                                }`}
+                              onClick={() => handlePageChange(pg)}
+                              disabled={isLoadingPage && isActive}
+                              className={`w-8 h-8 rounded-lg text-sm font-semibold flex items-center justify-center transition-colors cursor-pointer ${
+                                isActive
+                                  ? "bg-[#4F46E5] text-white shadow-xs"
+                                  : "border border-[#E2E8F0] bg-white text-slate-700 hover:bg-slate-50"
+                              }`}
                             >
                               {pg}
                             </button>
                           );
                         })}
 
-                        {/* Next Page Button */}
+                        {/* Next Button */}
                         <button
                           type="button"
-                          onClick={() => setActivePage((p) => Math.min(totalClientPages, p + 1))}
-                          disabled={activePage >= totalClientPages}
-                          className="w-9 h-9 rounded-xl border border-[#E2E8F0] bg-white hover:bg-slate-50 disabled:opacity-40 text-slate-700 text-sm font-semibold flex items-center justify-center transition-all cursor-pointer disabled:cursor-not-allowed shadow-2xs"
+                          onClick={() => handlePageChange(activePage + 1)}
+                          disabled={
+                            (totalPages > 0 && activePage >= totalPages && !hasMoreJobs) ||
+                            isLoadingPage
+                          }
+                          className="w-8 h-8 rounded-lg border border-[#E2E8F0] bg-white hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed text-slate-700 text-sm flex items-center justify-center transition-colors cursor-pointer"
+                          aria-label="Next Page"
                         >
-                          ›
-                        </button>
-
-                        {/* Load More Jobs from Server Button */}
-                        {hasMoreJobs && (
-                          <button
-                            type="button"
-                            onClick={handleLoadMoreJobs}
-                            disabled={isLoadingMore}
-                            className="h-9 px-4 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] disabled:bg-[#818CF8] text-white text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer active:scale-[0.98] disabled:cursor-not-allowed ml-2"
+                          <svg
+                            className="w-4 h-4 text-slate-600"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
                           >
-                            {isLoadingMore ? (
-                              <>
-                                <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
-                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-                                </svg>
-                                <span>Loading...</span>
-                              </>
-                            ) : (
-                              <>
-                                <span>Load Jobs</span>
-                                <span className="bg-white/20 px-1.5 py-0.5 rounded text-[10px] font-mono">
-                                  +{pageSize}
-                                </span>
-                              </>
-                            )}
-                          </button>
-                        )}
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                          </svg>
+                        </button>
                       </div>
-
-                      <p className="text-[12px] text-[#94A3B8]">
-                        Showing {Math.min(20, filteredJobs.length - (activePage - 1) * 20)} of {filteredJobs.length} loaded jobs (Page {activePage} of {totalClientPages})
-                      </p>
                     </div>
                   </>
                 )}
