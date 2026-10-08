@@ -8,12 +8,11 @@ import {
   getOnboardingProfile,
   getStoredJobMatches,
   getOnboardingState,
-  getStoredResumeId,
-  getJobId,
   getEnhancedResume,
-  downloadEnhancedResume,
   getScoreForEnhancedResume,
   getCandidateId,
+  getStoredResumeId,
+  getJobId,
   getMoreJobsForResume,
   getPrimaryResumeId,
   getBillingStatus,
@@ -92,13 +91,7 @@ const experienceOptions = [
   "Up to 7 years",
 ];
 
-const jobTypeOptions = [
-  "Full-time",
-  "Part-time",
-  "Contract",
-  "Internship",
-  "Freelance",
-];
+const jobTypeOptions = ["Full-time", "Part-time", "Contract", "Internship"];
 const employmentTypeOptions = [
   "Full-time",
   "Part-time",
@@ -330,11 +323,7 @@ const transformMatchToJob = (match, index = 0) => {
       ? match.preferredSkills.map(cleanHtmlText)
       : [];
 
-  const displayScore =
-    rawScore !== null && !Number.isInteger(rawScore)
-      ? Number(rawScore).toFixed(1)
-      : matchPercent;
-  let matchText = matchPercent !== null ? `${displayScore}% match` : "ATS Match";
+  let matchText = matchPercent !== null ? `${matchPercent}% match` : "ATS Match";
   let matchColor = "bg-[#EEF2FF] text-[#4F46E5]";
   if (matchPercent !== null) {
     if (matchPercent < 70) {
@@ -425,9 +414,7 @@ const transformMatchToJob = (match, index = 0) => {
     postedAt: match.postedAt || null,
     match: matchText,
     matchPercent,
-    displayScore,
     rawScore,
-    matchScore: rawScore,
     matchColor,
     logo: match.logo || logo,
     description,
@@ -462,18 +449,9 @@ const getMatchPercent = (job) => {
 };
 
 const getMatchLabel = (job) => {
-  if (job?.displayScore !== undefined && job?.displayScore !== null) {
-    return `${job.displayScore}% match`;
-  }
-  const raw = job?.rawScore ?? job?.matchScore ?? job?.overall_score;
-  if (raw !== undefined && raw !== null && !isNaN(Number(raw))) {
-    const num = Number(raw);
-    const scoreStr = !Number.isInteger(num) ? num.toFixed(1) : num;
-    return `${scoreStr}% match`;
-  }
   const percent = getMatchPercent(job);
   if (percent > 0) {
-    return `${percent}% match`;
+    return `${Number.isInteger(percent) ? percent : Math.round(percent)}% match`;
   }
   return job?.match || "ATS Match";
 };
@@ -646,7 +624,6 @@ const Dashboard = () => {
 
   // Enhance Resume States
   const [isEnhancing, setIsEnhancing] = useState(false);
-  const [isDownloadingResume, setIsDownloadingResume] = useState(false);
   const [enhanceError, setEnhanceError] = useState(null);
   const [enhanceSuccess, setEnhanceSuccess] = useState(null);
   const [enhancedResultsMap, setEnhancedResultsMap] = useState({});
@@ -1217,7 +1194,6 @@ const Dashboard = () => {
     setSelectedJobTypes([]);
     setSponsorsVisa(false);
     setSelectedEmploymentTypes([]);
-    setActiveDropdown(null);
   };
 
   const toggleDropdown = (name) => {
@@ -1552,28 +1528,12 @@ const Dashboard = () => {
     setTimeout(() => setCopiedResume(false), 2500);
   };
 
-  const handleDownloadEnhancedResume = async (text, job) => {
-    const targetJob = job || selectedJobModal;
-    const jobId = getJobId(targetJob);
-    const jobTitle = (targetJob?.title || "Enhanced_Resume").replace(/[^a-zA-Z0-9_-]/g, "_");
-    const fallbackFilename = `${jobTitle}_Resume.docx`;
-
-    if (jobId) {
-      try {
-        setIsDownloadingResume(true);
-        await downloadEnhancedResume(jobId, fallbackFilename);
-        setIsDownloadingResume(false);
-        return;
-      } catch (err) {
-        console.warn("[Dashboard] API download enhanced resume failed, fallback to text blob:", err);
-        setIsDownloadingResume(false);
-      }
-    }
-
+  const handleDownloadEnhancedResume = (text, job) => {
     if (!text) return;
     const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
+    const jobTitle = (job?.title || "Enhanced_Resume").replace(/[^a-zA-Z0-9_-]/g, "_");
     link.href = url;
     link.download = `${jobTitle}_Resume.txt`;
     document.body.appendChild(link);
@@ -2003,12 +1963,9 @@ const Dashboard = () => {
         const activeAtsScore =
           selectedJobId && updatedAtsScores[selectedJobId] !== undefined
             ? updatedAtsScores[selectedJobId]
-            : (selectedJobModal.displayScore ??
-               (rawInitialScore !== null && !isNaN(rawInitialScore)
-                 ? (!Number.isInteger(Number(rawInitialScore))
-                     ? Number(rawInitialScore).toFixed(1)
-                     : Math.min(100, Math.max(1, Math.round(Number(rawInitialScore)))))
-                 : (selectedJobModal.matchPercent ?? null)));
+            : rawInitialScore !== null && !isNaN(rawInitialScore)
+              ? Math.min(100, Math.max(1, Math.round(Number(rawInitialScore))))
+              : null;
 
         const scoreData =
           currentMatch?.score_data || selectedJobModal.scoreData || null;
@@ -2448,7 +2405,7 @@ const Dashboard = () => {
                           {activeAtsScore !== null && (
                             <path
                               className="text-[#4F46E5]"
-                              strokeDasharray={`${Number(activeAtsScore) || 0}, 100`}
+                              strokeDasharray={`${activeAtsScore}, 100`}
                               strokeWidth="3.2"
                               strokeLinecap="round"
                               stroke="currentColor"
@@ -2475,9 +2432,9 @@ const Dashboard = () => {
                         </h3>
                         <p className="text-[12px] text-[#64748B] mt-0.5 leading-snug">
                           {activeAtsScore !== null
-                            ? Number(activeAtsScore) >= 80
+                            ? activeAtsScore >= 80
                               ? "Strong match based on your profile, skills, experience and preferences."
-                              : Number(activeAtsScore) >= 60
+                              : activeAtsScore >= 60
                                 ? "Moderate match. Enhancing your resume can bridge key skill and keyword gaps."
                                 : "Lower match. Review identified gaps below or click Enhance Resume."
                             : "ATS score unavailable for this job."}
@@ -2774,35 +2731,22 @@ const Dashboard = () => {
                         selectedJobModal
                       )
                     }
-                    disabled={isDownloadingResume}
-                    className="px-3.5 py-1.5 bg-[#EEF2FF] hover:bg-[#E0E7FF] disabled:bg-slate-100 text-[#4F46E5] disabled:text-slate-400 text-xs font-semibold rounded-lg transition-colors cursor-pointer disabled:cursor-not-allowed flex items-center gap-1.5"
+                    className="px-3.5 py-1.5 bg-[#EEF2FF] hover:bg-[#E0E7FF] text-[#4F46E5] text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
                   >
-                    {isDownloadingResume ? (
-                      <>
-                        <svg className="animate-spin w-3.5 h-3.5 text-[#4F46E5]" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                        </svg>
-                        <span>Downloading...</span>
-                      </>
-                    ) : (
-                      <>
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                          />
-                        </svg>
-                        <span>Download</span>
-                      </>
-                    )}
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                      />
+                    </svg>
+                    <span>Download</span>
                   </button>
 
                   <button

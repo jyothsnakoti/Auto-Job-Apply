@@ -15,9 +15,12 @@ import {
   getJobById,
   getScoreForEnhancedResume,
   checkUserHasResume,
-  getResumeMatchesStatus,
-  refreshResumeMatches,
 } from "../services/api";
+import {
+  getResumes,
+  setPrimaryResume,
+  refreshResumeMatches,
+} from "../services/resumeService";
 
 import aiLogo from "../assets/ai.svg";
 import mapIcon from "../assets/map.svg";
@@ -399,22 +402,6 @@ const transformMatchToJob = (match, index = 0) => {
   };
 };
 
-const formatMatchTime = (isoString) => {
-  if (!isoString) return "";
-  try {
-    const date = new Date(isoString);
-    if (isNaN(date.getTime())) return String(isoString);
-    return date.toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return String(isoString);
-  }
-};
-
 const BrowseJobs = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
@@ -497,7 +484,14 @@ const BrowseJobs = () => {
   const [hasResume, setHasResume] = useState(false);
   const [activeResumeId, setActiveResumeId] = useState(null);
   const fetchingPagesRef = useRef(new Set());
+ const resumeDropdownRef = useRef(null);
 
+  // Resume Selector States & Logic
+  const [userResumes, setUserResumes] = useState([]);
+  const [isLoadingResumes, setIsLoadingResumes] = useState(false);
+  const [selectedResume, setSelectedResume] = useState(null);
+  const [isResumeDropdownOpen, setIsResumeDropdownOpen] = useState(false);
+  const [isSettingPrimary, setIsSettingPrimary] = useState(false);
   // Dynamic ATS Resume Matches Status & Refresh
   const [matchStatus, setMatchStatus] = useState({
     hasPrimaryResume: null,
@@ -544,7 +538,7 @@ const BrowseJobs = () => {
    * If the page is already cached (and not forcing refresh), returns cached data without API call.
    */
   const loadPage = useCallback(
-    async (pageNumber, { forceRefresh = false, customQuery = null, customSort = null, overrideFilters = null } = {}) => {
+    async (pageNumber, { forceRefresh = false, customQuery = null, customSort = null, overrideFilters = null, customResumeId = null } = {}) => {
       // 1. Check cache first (unless forceRefresh is requested)
       if (!forceRefresh && jobsCacheRef.current[pageNumber]) {
         console.log(`[BrowseJobs] Page ${pageNumber} found in cache. Using cached data (NO API CALL).`);
@@ -567,11 +561,20 @@ const BrowseJobs = () => {
       setLoadMoreError(null);
       setFetchError(null);
 
-      // Check whether user has an uploaded resume
-      let resumeIdVal = null;
-      try {
-        resumeIdVal = await getPrimaryResumeId();
-      } catch {}
+      // Extract target resumeId for GET /api/jobs?resumeId=...
+      let resumeIdVal = customResumeId;
+      if (resumeIdVal === null || resumeIdVal === undefined) {
+        resumeIdVal = selectedResume
+          ? (selectedResume.id ?? selectedResume.resumeId ?? selectedResume._id ?? selectedResume.fileId ?? selectedResume.uuid ?? selectedResume.resume_id)
+          : activeResumeId;
+      }
+      if (!resumeIdVal) {
+        try {
+          resumeIdVal = await getPrimaryResumeId();
+        } catch {
+          // fallback
+        }
+      }
       const onboardingState = getOnboardingState();
       if (!resumeIdVal && onboardingState?.resumeId) {
         resumeIdVal = String(onboardingState.resumeId);
@@ -582,7 +585,9 @@ const BrowseJobs = () => {
       const userHasResume =
         Boolean(resumeIdVal) || (await checkUserHasResume().catch(() => false));
       setHasResume(userHasResume);
-      setActiveResumeId(resumeIdVal);
+      if (resumeIdVal) {
+        setActiveResumeId(String(resumeIdVal));
+      }
 
       try {
         const q = customQuery !== null ? customQuery : searchQuery;
@@ -608,6 +613,7 @@ const BrowseJobs = () => {
         const apiPage = Math.max(0, pageNumber - 1); // 0-indexed for GET /api/jobs
 
         const params = {
+          resumeId: resumeIdVal || undefined,
           q: q ? q.trim() : undefined,
           location: activeLocs.length > 0 ? activeLocs[0] : undefined,
           role: activeRoles.length > 0 ? activeRoles[0] : undefined,
@@ -693,126 +699,66 @@ const BrowseJobs = () => {
     ]
   );
 
-  // Check & Poll GET /api/resumes/matches/status (with automatic refresh trigger)
-  const fetchMatchStatus = useCallback(
-    async (isInitial = false) => {
-      try {
-        if (isInitial) setIsLoadingMatchStatus(true);
-        const status = await getResumeMatchesStatus();
-        if (!status) return;
-
-        setMatchStatus(status);
-
-        if (status.hasPrimaryResume === false) {
-          setHasResume(false);
-        } else if (status.hasPrimaryResume === true) {
-          setHasResume(true);
-        }
-
-        // When matching completes (refreshing transitions from true -> false), reload stored jobs from GET /api/jobs!
-        if (prevRefreshingRef.current === true && status.refreshing === false) {
-          console.log("[BrowseJobs] ATS matching complete. Reloading stored jobs from GET /api/jobs...");
-          jobsCacheRef.current = {};
-          setJobsCache({});
-          loadPage(1, { forceRefresh: true });
-          setRefreshSuccessMessage("ATS matching complete! Fresh jobs loaded.");
-          setTimeout(() => setRefreshSuccessMessage(null), 5000);
-        }
-
-        prevRefreshingRef.current = Boolean(status.refreshing);
-
-        // Automatic Refresh without manual user click:
-        if (
-          isInitial &&
-          status.hasPrimaryResume === true &&
-          !status.refreshing &&
-          !hasAutoRefreshedRef.current
-        ) {
-          hasAutoRefreshedRef.current = true;
-          console.log("[BrowseJobs] Automatically requesting fresh ATS matching on initial load...");
-          try {
-            await refreshResumeMatches();
-            setMatchStatus((prev) => ({
-              ...prev,
-              refreshing: true,
-              progress: "Initiating automatic ATS match refresh...",
-            }));
-            prevRefreshingRef.current = true;
-            if (pollingTimeoutRef.current) clearTimeout(pollingTimeoutRef.current);
-            pollingTimeoutRef.current = setTimeout(() => {
-              fetchMatchStatus(false);
-            }, 1000);
-            return;
-          } catch (autoErr) {
-            console.warn("[BrowseJobs] Auto-refresh match notice:", autoErr?.message);
-          }
-        }
-
-        // Polling: While matching runs, refreshing=true, poll every 3 seconds
-        if (status.refreshing) {
-          if (pollingTimeoutRef.current) clearTimeout(pollingTimeoutRef.current);
-          pollingTimeoutRef.current = setTimeout(() => {
-            fetchMatchStatus(false);
-          }, 3000);
-        }
-      } catch (err) {
-        console.warn("[BrowseJobs] Could not fetch match status:", err);
-      } finally {
-        if (isInitial) setIsLoadingMatchStatus(false);
-        setIsRequestingRefresh(false);
-      }
-    },
-    [loadPage]
-  );
-
-  // Initialize status on mount & cleanup timer
-  useEffect(() => {
-    fetchMatchStatus(true);
-    return () => {
-      if (pollingTimeoutRef.current) {
-        clearTimeout(pollingTimeoutRef.current);
-      }
-    };
-  }, [fetchMatchStatus]);
-
-  // Trigger POST /api/resumes/matches/refresh
-  const handleRequestMatchRefresh = async () => {
-    if (isRequestingRefresh || matchStatus.refreshing) return;
-
-    if (matchStatus.hasPrimaryResume === false) {
-      navigate("/profile");
-      return;
-    }
-
+  // Fetch user resumes from GET /api/resumes
+  const fetchUserResumes = useCallback(async () => {
     try {
-      setIsRequestingRefresh(true);
-      setRefreshSuccessMessage(null);
-      setFetchError(null);
+      setIsLoadingResumes(true);
+      const data = await getResumes();
+      let list = [];
+      if (Array.isArray(data)) {
+        list = data;
+      } else if (data && Array.isArray(data.resumes)) {
+        list = data.resumes;
+      } else if (data && Array.isArray(data.data)) {
+        list = data.data;
+      } else if (data && (data.id !== undefined || data.fileName || data.name)) {
+        list = [data];
+      }
 
-      const res = await refreshResumeMatches();
-      console.log("[BrowseJobs] POST /api/resumes/matches/refresh triggered:", res);
-
-      setMatchStatus((prev) => ({
-        ...prev,
-        refreshing: true,
-        progress: "Matching requested...",
-      }));
-      prevRefreshingRef.current = true;
-
-      setTimeout(() => {
-        fetchMatchStatus(false);
-      }, 500);
+      setUserResumes(list);
+      let targetResumeId = null;
+      if (list.length > 0) {
+        setHasResume(true);
+        // Find primary resume or default to the first one in raw data
+        const primary = list.find((r) => r.isPrimary === true) || list[0];
+        setSelectedResume(primary);
+        targetResumeId = primary?.id ?? primary?.resumeId ?? primary?._id ?? primary?.fileId ?? primary?.uuid ?? primary?.resume_id;
+        if (targetResumeId !== undefined && targetResumeId !== null) {
+          setActiveResumeId(String(targetResumeId));
+        }
+      }
+      jobsCacheRef.current = {};
+      setJobsCache({});
+      loadPage(1, { forceRefresh: true, customResumeId: targetResumeId });
     } catch (err) {
-      console.error("[BrowseJobs] Error requesting match refresh:", err);
-      setFetchError(err?.message || "Failed to trigger match refresh. Please try again.");
-      setIsRequestingRefresh(false);
+      console.error("[BrowseJobs] Error fetching resumes list:", err);
+      jobsCacheRef.current = {};
+      setJobsCache({});
+      loadPage(1, { forceRefresh: true });
+    } finally {
+      setIsLoadingResumes(false);
+    }
+  }, [loadPage]);
+
+  // Handle selecting a resume from the dropdown (fetches GET /api/jobs?resumeId=...)
+  const handleSelectResume = (resume) => {
+    if (!resume) return;
+    setSelectedResume(resume);
+    setIsResumeDropdownOpen(false);
+    const resumeId = resume.id ?? resume.resumeId ?? resume._id ?? resume.fileId ?? resume.uuid ?? resume.resume_id;
+
+    if (resumeId !== undefined && resumeId !== null) {
+      setActiveResumeId(String(resumeId));
+      jobsCacheRef.current = {};
+      setJobsCache({});
+      loadPage(1, { forceRefresh: true, customResumeId: resumeId });
     }
   };
 
   // Trigger initial Page 1 fetch immediately when component mounts
   useEffect(() => {
     let isMounted = true;
-    loadPage(1, { forceRefresh: true });
+    fetchUserResumes();
 
     const handleJobMatchesUpdated = () => {
       if (isMounted) {
@@ -829,7 +775,23 @@ const BrowseJobs = () => {
       window.removeEventListener("jobMatchesUpdated", handleJobMatchesUpdated);
       window.removeEventListener("storage", handleJobMatchesUpdated);
     };
-  }, [loadPage]);
+  }, [fetchUserResumes, loadPage]);
+
+  // Click outside listener to close resume dropdown
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        resumeDropdownRef.current &&
+        !resumeDropdownRef.current.contains(event.target)
+      ) {
+        setIsResumeDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   // Handle Page Change with Cache Checking
   const handlePageChange = (targetPage) => {
@@ -1188,8 +1150,9 @@ const BrowseJobs = () => {
         {/* Browse Jobs Main Content */}
         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-7 flex flex-col gap-6 w-full bg-[#F8FAFC]">
           {/* Page Heading & Actions */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="flex flex-col gap-1">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 w-full">
+            {/* Page Heading */}
+            <div className="flex flex-col gap-1 min-w-0">
               <h1 className="text-[20px] md:text-[22px] font-bold text-black tracking-tight">
                 Browse Jobs
               </h1>
@@ -1198,145 +1161,170 @@ const BrowseJobs = () => {
               </p>
             </div>
 
-            {/* Top ATS Match Status Indicator & Refresh Button */}
-            <div className="flex items-center gap-2 self-start sm:self-auto">
-              {matchStatus.hasPrimaryResume && (
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-white border border-[#E2E8F0] shadow-xs text-[#334155]">
-                  <span
-                    className={`w-2 h-2 rounded-full ${matchStatus.refreshing
-                      ? "bg-amber-500 animate-ping"
-                      : "bg-emerald-500"
-                      }`}
-                  />
-                  <span>
-                    {matchStatus.refreshing
-                      ? "ATS Matching Active"
-                      : matchStatus.lastComputedAt
-                        ? `Synced ${formatMatchTime(matchStatus.lastComputedAt)}`
-                        : "Matches Ready"}
-                  </span>
-                </div>
-              )}
-
+            {/* Select Resume Dropdown (Aligned Right) */}
+            <div className="relative shrink-0 self-start sm:self-center" ref={resumeDropdownRef}>
               <button
                 type="button"
-                onClick={handleRequestMatchRefresh}
-                disabled={isRequestingRefresh || matchStatus.refreshing}
-                title="Request a fresh ATS match run"
-                className="px-3.5 py-1.5 rounded-xl bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] text-xs font-semibold text-[#0F172A] flex items-center gap-1.5 transition-all shadow-xs disabled:opacity-60 cursor-pointer"
+                onClick={() => setIsResumeDropdownOpen((prev) => !prev)}
+                className="h-[42px] px-3.5 rounded-[12px] bg-white border border-[#E2E8F0] hover:border-[#4F46E5]/40 hover:shadow-xs transition-all flex items-center gap-2.5 text-[#0F172A] cursor-pointer"
               >
+                {/* Document / Resume Icon */}
+                <div className="w-6 h-6 rounded-lg bg-[#EEF2FF] text-[#4F46E5] flex items-center justify-center shrink-0">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="16" y1="13" x2="8" y2="13" />
+                    <line x1="16" y1="17" x2="8" y2="17" />
+                  </svg>
+                </div>
+
+                {/* Selected Resume Info */}
+                <div className="flex flex-col text-left max-w-[150px] sm:max-w-[190px] leading-tight">
+                  <span className="text-[9.5px] uppercase font-bold text-[#64748B] tracking-wider">
+                    {isSettingPrimary ? "Updating..." : "Active Resume"}
+                  </span>
+                  <span className="text-[12.5px] font-semibold text-[#0F172A] truncate">
+                    {isLoadingResumes ? (
+                      "Loading resumes..."
+                    ) : selectedResume ? (
+                      selectedResume.fileName || selectedResume.name || selectedResume.originalName || "Selected Resume"
+                    ) : (
+                      "Select Resume"
+                    )}
+                  </span>
+                </div>
+
+                {/* Primary Tag if selected resume is primary */}
+                {selectedResume?.isPrimary && !isSettingPrimary && (
+                  <span className="hidden sm:inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#EEF2FF] text-[#4F46E5] border border-indigo-200/80 shrink-0">
+                    <svg className="w-2.5 h-2.5 text-[#4F46E5]" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                    Primary
+                  </span>
+                )}
+
+                {/* Chevron Icon */}
                 <svg
-                  className={`w-3.5 h-3.5 ${isRequestingRefresh || matchStatus.refreshing
-                    ? "animate-spin text-[#4F46E5]"
-                    : "text-[#64748B]"
-                    }`}
+                  className={`w-4 h-4 text-[#64748B] transition-transform duration-200 shrink-0 ${
+                    isResumeDropdownOpen ? "rotate-180" : ""
+                  }`}
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
-                  strokeWidth="2.5"
+                  strokeWidth="2"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                  />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                 </svg>
-                <span>
-                  {isRequestingRefresh
-                    ? "Requesting..."
-                    : matchStatus.refreshing
-                      ? "Matching in Progress..."
-                      : "Refresh Matches"}
-                </span>
               </button>
+
+              {/* Dropdown Menu Popup */}
+              {isResumeDropdownOpen && (
+                <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-white rounded-[16px] border border-[#E2E8F0] shadow-xl z-50 overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="px-3.5 py-2.5 border-b border-[#F1F5F9] flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-[#0F172A] uppercase tracking-wider">
+                      Select Resume
+                    </span>
+                    <span className="text-[11px] font-medium text-[#64748B]">
+                      {userResumes.length} {userResumes.length === 1 ? "resume" : "resumes"}
+                    </span>
+                  </div>
+
+                  <div className="max-h-[260px] overflow-y-auto p-1.5 space-y-1">
+                    {isLoadingResumes ? (
+                      <div className="p-4 text-center text-xs text-[#64748B]">
+                        Loading resumes...
+                      </div>
+                    ) : userResumes.length === 0 ? (
+                      <div className="p-4 text-center">
+                        <p className="text-xs text-[#64748B] mb-2">No uploaded resumes found</p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsResumeDropdownOpen(false);
+                            navigate("/profile");
+                          }}
+                          className="px-3 py-1.5 bg-[#4F46E5] text-white text-xs font-semibold rounded-lg hover:bg-[#4338CA] transition-colors cursor-pointer"
+                        >
+                          Upload in Profile
+                        </button>
+                      </div>
+                    ) : (
+                      userResumes.map((resume, idx) => {
+                        const resumeId = resume.id ?? resume.resumeId ?? resume._id ?? resume.fileId ?? resume.uuid;
+                        const selectedId = selectedResume?.id ?? selectedResume?.resumeId ?? selectedResume?._id ?? selectedResume?.fileId ?? selectedResume?.uuid;
+                        const isSelected = String(resumeId) === String(selectedId);
+                        const resumeName = resume.fileName || resume.name || resume.originalName || `Resume ${idx + 1}`;
+                        const isPrimary = Boolean(resume.isPrimary === true);
+
+                        return (
+                          <button
+                            key={resumeId || idx}
+                            type="button"
+                            onClick={() => handleSelectResume(resume)}
+                            className={`w-full p-2.5 rounded-[10px] text-left transition-all flex items-center justify-between gap-2 cursor-pointer ${
+                              isSelected
+                                ? "bg-[#EEF2FF] border border-indigo-200/80"
+                                : "hover:bg-[#F8FAFC] border border-transparent"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                              <div className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 ${
+                                isSelected ? "bg-[#4F46E5] text-white" : "bg-slate-100 text-slate-500"
+                              }`}>
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                  <polyline points="14 2 14 8 20 8" />
+                                </svg>
+                              </div>
+                              <div className="flex flex-col min-w-0">
+                                <span className={`text-[12.5px] font-semibold truncate ${
+                                  isSelected ? "text-[#4F46E5]" : "text-[#0F172A]"
+                                }`}>
+                                  {resumeName}
+                                </span>
+                                {resume.createdAt && (
+                                  <span className="text-[10px] text-[#94A3B8]">
+                                    Uploaded {new Date(resume.createdAt).toLocaleDateString()}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {isPrimary && (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#EEF2FF] text-[#4F46E5] border border-indigo-200/60">
+                                  Primary
+                                </span>
+                              )}
+                              {isSelected && (
+                                <svg className="w-4 h-4 text-[#4F46E5]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  <div className="p-2 border-t border-[#F1F5F9] bg-[#F8FAFC] flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsResumeDropdownOpen(false);
+                        navigate("/profile");
+                      }}
+                      className="text-[11.5px] font-semibold text-[#4F46E5] hover:text-[#4338CA] transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>+ Manage / Upload Resumes</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-
-          {/* Conditional Banner: No Primary Resume */}
-          {matchStatus.hasPrimaryResume === false && (
-            <div className="w-full p-4 rounded-[16px] bg-amber-50 border border-amber-200/80 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in duration-300">
-              <div className="flex items-start gap-3">
-                <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center shrink-0 text-amber-600 mt-0.5 sm:mt-0">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-amber-900">Primary Resume Required</h3>
-                  <p className="text-xs text-amber-700 mt-0.5">
-                    No primary resume detected. Please set or upload a primary resume in your profile to enable automated ATS matching and job recommendations.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => navigate("/profile")}
-                className="px-4 py-2 text-xs font-semibold text-white bg-[#4F46E5] hover:bg-[#4338CA] rounded-xl shadow-xs transition-all whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                Go to Profile & Resumes
-              </button>
-            </div>
-          )}
-
-          {/* Conditional Banner: Live Refreshing Progress */}
-          {matchStatus.refreshing && (
-            <div className="w-full p-4.5 rounded-[18px] bg-gradient-to-r from-indigo-50/90 via-purple-50/80 to-blue-50/90 border border-indigo-200/80 shadow-xs flex flex-col gap-2.5 animate-in fade-in duration-300">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-9 h-9 rounded-xl bg-[#4F46E5]/10 flex items-center justify-center text-[#4F46E5] shrink-0">
-                    <svg className="w-4.5 h-4.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-sm font-bold text-[#0F172A]">ATS Job Matching In Progress</h3>
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-100 text-indigo-700">
-                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-ping" />
-                        Scanning Live
-                      </span>
-                    </div>
-                    <p className="text-xs text-[#64748B] mt-0.5 truncate">
-                      {matchStatus.progress || "Fetching and scoring matching jobs from ATS..."}
-                    </p>
-                  </div>
-                </div>
-                <div className="hidden sm:flex items-center text-xs font-medium text-indigo-600 bg-white/80 px-3 py-1.5 rounded-xl border border-indigo-100 shadow-xs shrink-0">
-                  Polling updates...
-                </div>
-              </div>
-              <div className="w-full bg-indigo-100/70 rounded-full h-1.5 overflow-hidden">
-                <div className="bg-[#4F46E5] h-1.5 rounded-full animate-pulse w-3/4 transition-all duration-500" />
-              </div>
-            </div>
-          )}
-
-          {/* Refresh Success Notification */}
-          {refreshSuccessMessage && (
-            <div className="p-3.5 rounded-[14px] bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium flex items-center justify-between gap-3 animate-in fade-in">
-              <div className="flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[11px] font-bold shrink-0">✓</span>
-                <span>{refreshSuccessMessage}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setRefreshSuccessMessage(null)}
-                className="text-emerald-700 hover:text-emerald-900 text-xs font-bold px-2 py-0.5"
-              >
-                ✕
-              </button>
-            </div>
-          )}
 
           {/* Search & Filter Container */}
           <div
@@ -2026,71 +2014,25 @@ const BrowseJobs = () => {
                 ) : allCachedJobs.length === 0 ? (
                   <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-12 text-center flex flex-col items-center justify-center gap-3">
                     <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center text-[#4F46E5] mb-1">
-                      {matchStatus.refreshing ? (
-                        <svg className="w-6 h-6 animate-spin" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path
-                            className="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                          />
-                        </svg>
-                      ) : (
-                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                          <circle cx="11" cy="11" r="7" />
-                          <path d="m20 20-3.5-3.5" />
-                        </svg>
-                      )}
+                      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <circle cx="11" cy="11" r="7" />
+                        <path d="m20 20-3.5-3.5" />
+                      </svg>
                     </div>
                     <p className="text-[16px] font-bold text-slate-800">
-                      {matchStatus.refreshing ? "ATS Job Matching in Progress..." : "No stored job matches found"}
+                      No stored job matches found
                     </p>
                     <p className="text-[13px] text-slate-500 max-w-md leading-relaxed">
-                      {matchStatus.refreshing
-                        ? matchStatus.progress || "Scanning and scoring open jobs against your resume in the background..."
-                        : matchStatus.hasPrimaryResume === false
-                          ? "Upload or set a primary resume in your profile to enable automated ATS matching and job recommendations."
-                          : "Matches can be empty until asynchronous processing finishes or if no jobs meet the configured minimum ATS score."}
+                      Upload or set a primary resume in your profile to enable automated ATS matching and job recommendations.
                     </p>
                     <div className="flex items-center gap-2.5 mt-2">
-                      {matchStatus.hasPrimaryResume === false ? (
-                        <button
-                          type="button"
-                          onClick={() => navigate("/profile")}
-                          className="px-4 py-2 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-semibold rounded-xl transition-colors cursor-pointer shadow-xs"
-                        >
-                          Go to Profile & Resumes
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={handleRequestMatchRefresh}
-                          disabled={isRequestingRefresh || matchStatus.refreshing}
-                          className="px-4 py-2 bg-[#4F46E5] hover:bg-[#4338CA] disabled:opacity-60 text-white text-xs font-semibold rounded-xl transition-colors cursor-pointer shadow-xs flex items-center gap-1.5"
-                        >
-                          <svg
-                            className={`w-3.5 h-3.5 ${isRequestingRefresh || matchStatus.refreshing ? "animate-spin" : ""
-                              }`}
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth="2.5"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                            />
-                          </svg>
-                          <span>
-                            {isRequestingRefresh
-                              ? "Requesting..."
-                              : matchStatus.refreshing
-                                ? "Matching in Progress..."
-                                : "Refresh Matches"}
-                          </span>
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => navigate("/profile")}
+                        className="px-4 py-2 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-semibold rounded-xl transition-colors cursor-pointer shadow-xs"
+                      >
+                        Go to Profile & Resumes
+                      </button>
                     </div>
                   </div>
                 ) : filteredJobs.length === 0 ? (

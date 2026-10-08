@@ -115,7 +115,16 @@ const AutoApply = () => {
   const [jobs, setJobs] = useState([]);
   const [isLoadingJobs, setIsLoadingJobs] = useState(true);
   const [selectedJobIds, setSelectedJobIds] = useState([]);
-  const [billingInfo, setBillingInfo] = useState(null);
+  const [billingInfo, setBillingInfo] = useState(() => {
+    try {
+      const stored =
+        localStorage.getItem("billingStatus") ||
+        sessionStorage.getItem("billingStatus");
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
 
   // Load jobs dynamically
   useEffect(() => {
@@ -197,14 +206,53 @@ const AutoApply = () => {
 
     loadJobsData();
 
-    getBillingStatus()
-      .then((status) => {
-        if (isMounted && status) setBillingInfo(status);
-      })
-      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Fetch Dynamic Billing Status (GET /api/billing/status)
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadBilling = async () => {
+      try {
+        const status = await getBillingStatus();
+        if (isMounted && status) {
+          setBillingInfo(status);
+        }
+      } catch (err) {
+        console.warn("[AutoApply] Could not fetch billing status:", err);
+        try {
+          const stored =
+            localStorage.getItem("billingStatus") ||
+            sessionStorage.getItem("billingStatus");
+          if (stored && isMounted) {
+            setBillingInfo(JSON.parse(stored));
+          }
+        } catch {
+          // ignore
+        }
+      }
+    };
+
+    loadBilling();
+
+    const handleBillingUpdated = (e) => {
+      if (isMounted && e?.detail) {
+        setBillingInfo(e.detail);
+      } else if (isMounted) {
+        loadBilling();
+      }
+    };
+
+    window.addEventListener("billingStatusUpdated", handleBillingUpdated);
+    window.addEventListener("storage", handleBillingUpdated);
 
     return () => {
       isMounted = false;
+      window.removeEventListener("billingStatusUpdated", handleBillingUpdated);
+      window.removeEventListener("storage", handleBillingUpdated);
     };
   }, []);
 
@@ -287,6 +335,59 @@ const AutoApply = () => {
       setSelectedJobIds([...selectedJobIds, id]);
     }
   };
+
+  // Extract dynamic billing info (from GET /api/billing/status)
+  const hasPlan = Boolean(billingInfo?.hasPlan ?? true);
+  const rawPlanName = (billingInfo?.planName || "").trim();
+
+  const planTitle = rawPlanName
+    ? (rawPlanName.toLowerCase().includes("plan") || rawPlanName.toLowerCase().includes("pack")
+        ? rawPlanName
+        : `${rawPlanName.charAt(0).toUpperCase() + rawPlanName.slice(1)} Plan`)
+    : (hasPlan ? "Pro Plan" : "Free Plan");
+
+  const applicationAllowance =
+    typeof billingInfo?.applicationAllowance === "number"
+      ? billingInfo.applicationAllowance
+      : typeof billingInfo?.applicationLimit === "number"
+      ? billingInfo.applicationLimit
+      : typeof billingInfo?.allowance === "number"
+      ? billingInfo.allowance
+      : typeof billingInfo?.limit === "number"
+      ? billingInfo.limit
+      : typeof billingInfo?.totalApplications === "number"
+      ? billingInfo.totalApplications
+      : 100;
+
+  const usedApplications =
+    typeof billingInfo?.usedApplications === "number"
+      ? billingInfo.usedApplications
+      : typeof billingInfo?.applicationsUsed === "number"
+      ? billingInfo.applicationsUsed
+      : typeof billingInfo?.used === "number"
+      ? billingInfo.used
+      : 48;
+
+  const remainingApplications =
+    typeof billingInfo?.remainingApplications === "number"
+      ? billingInfo.remainingApplications
+      : typeof billingInfo?.applicationsRemaining === "number"
+      ? billingInfo.applicationsRemaining
+      : typeof billingInfo?.remaining === "number"
+      ? billingInfo.remaining
+      : Math.max(0, applicationAllowance - usedApplications);
+
+  const rawInterval = (billingInfo?.billingInterval || "month").toLowerCase().trim();
+  const intervalDisplay =
+    rawInterval && rawInterval !== "none" && rawInterval !== "null"
+      ? (rawInterval === "quarter" ? "quarter" : rawInterval === "year" ? "year" : "month")
+      : "month";
+
+  const progressPercent =
+    applicationAllowance > 0
+      ? (usedApplications / applicationAllowance) * 100
+      : 0;
+  const clampedProgress = Math.min(100, Math.max(0, progressPercent));
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#F8FAFC]">
@@ -1212,6 +1313,7 @@ const AutoApply = () => {
                   </h3>
                   <button
                     type="button"
+                    onClick={() => navigate("/upgrade-plan")}
                     className="text-[12.5px] font-semibold text-[#2563EB] hover:text-[#1D4ED8] transition-colors cursor-pointer"
                   >
                     Manage Plan
@@ -1219,19 +1321,24 @@ const AutoApply = () => {
                 </div>
 
                 <div className="flex flex-col mt-0.5">
-                  <span className="text-[14px] font-bold text-[#0F172A]">Pro Plan</span>
-                  <span className="text-[12px] text-[#64748B] mt-0.5">100 applications per month</span>
+                  <span className="text-[14px] font-bold text-[#0F172A]">{planTitle}</span>
+                  <span className="text-[12px] text-[#64748B] mt-0.5">
+                    {applicationAllowance} applications per {intervalDisplay}
+                  </span>
                 </div>
 
                 {/* Progress Bar */}
                 <div className="w-full bg-[#E2E8F0] h-[6px] rounded-full overflow-hidden mt-1.5">
-                  <div className="bg-[#2563EB] h-full rounded-full" style={{ width: "48%" }} />
+                  <div
+                    className="bg-[#2563EB] h-full rounded-full transition-all duration-300"
+                    style={{ width: `${clampedProgress}%` }}
+                  />
                 </div>
 
                 {/* Usage Footnote */}
                 <div className="flex items-center justify-between text-[11.5px] text-[#64748B]">
-                  <span>48 used</span>
-                  <span>52 remaining</span>
+                  <span>{usedApplications} used</span>
+                  <span>{remainingApplications} remaining</span>
                 </div>
               </div>
 

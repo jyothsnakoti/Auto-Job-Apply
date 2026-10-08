@@ -29,6 +29,10 @@ export const getJobs = async (params = {}) => {
   // Clean and prepare query parameters
   const queryParams = {};
 
+  if (params.resumeId !== undefined && params.resumeId !== null && params.resumeId !== '') {
+    queryParams.resumeId = params.resumeId;
+  }
+
   if (params.q && typeof params.q === 'string' && params.q.trim()) {
     queryParams.q = params.q.trim();
   }
