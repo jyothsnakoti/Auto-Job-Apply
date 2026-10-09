@@ -21,18 +21,11 @@ import {
   setPrimaryResume,
   refreshResumeMatches,
 } from "../services/resumeService";
-
-import aiLogo from "../assets/ai.svg";
-import mapIcon from "../assets/map.svg";
-import tickIcon from "../assets/tick.svg";
-
 // Verified tick icon
 const VerifiedTick = () => (
-  <img
-    src={tickIcon}
-    alt="Verified"
-    className="w-3.5 h-3.5 object-contain inline-block shrink-0"
-  />
+  <svg className="w-3.5 h-3.5 text-[#4F46E5] inline-block shrink-0" fill="currentColor" viewBox="0 0 20 20">
+    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+  </svg>
 );
 
 // Standard filter static options
@@ -650,13 +643,16 @@ const BrowseJobs = () => {
 
         const apiPage = Math.max(0, pageNumber - 1); // 0-indexed for GET /api/jobs
 
+        const activeCompanies = overrideFilters?.companies ?? selectedCompanies;
+
         const params = {
           resumeId: resumeIdVal || undefined,
           q: q ? q.trim() : undefined,
-          location: activeLocs.length > 0 ? activeLocs[0] : undefined,
-          role: activeRoles.length > 0 ? activeRoles[0] : undefined,
-          workplace: activeWorkplaces.length > 0 ? activeWorkplaces[0].toLowerCase() : undefined,
-          employmentType: activeJobTypes.length > 0 ? activeJobTypes[0].toLowerCase() : undefined,
+          location: activeLocs.length > 0 ? activeLocs.join(",") : undefined,
+          role: activeRoles.length > 0 ? activeRoles.join(",") : undefined,
+          workplace: activeWorkplaces.length > 0 ? activeWorkplaces.map((w) => w.toLowerCase()).join(",") : undefined,
+          employmentType: activeJobTypes.length > 0 ? activeJobTypes.map((t) => t.toLowerCase()).join(",") : undefined,
+          company: activeCompanies.length > 0 ? activeCompanies.join(",") : undefined,
           postedWithinDays,
           sort: sort || "best_match",
           page: apiPage,
@@ -1228,38 +1224,54 @@ const BrowseJobs = () => {
           return false;
         }
       }
+      if (selectedDate && selectedDate !== "All time") {
+        if (job.createdAt || job.postedAt || job.date) {
+          const jobTime = new Date(job.createdAt || job.postedAt || job.date).getTime();
+          const now = Date.now();
+          if (!isNaN(jobTime)) {
+            let maxAgeMs = Infinity;
+            if (selectedDate === "Last 6 hours") maxAgeMs = 6 * 60 * 60 * 1000;
+            else if (selectedDate === "Last 24 hours") maxAgeMs = 24 * 60 * 60 * 1000;
+            else if (selectedDate === "Last 7 days") maxAgeMs = 7 * 24 * 60 * 60 * 1000;
+            else if (selectedDate === "Last 14 days") maxAgeMs = 14 * 24 * 60 * 60 * 1000;
+            else if (selectedDate === "Last 30 days") maxAgeMs = 30 * 24 * 60 * 60 * 1000;
+
+            if (now - jobTime > maxAgeMs) return false;
+          }
+        }
+      }
       if (selectedLocations.length > 0) {
         const jobLoc = (job.location || job.fullLocation || "").toLowerCase();
         const matchesLoc = selectedLocations.some((loc) =>
-          jobLoc.includes(loc.toLowerCase().split(",")[0])
+          jobLoc.includes(loc.toLowerCase().split(",")[0].trim())
         );
         if (!matchesLoc) return false;
       }
       if (selectedCompanies.length > 0) {
         const jobComp = (job.company || "").toLowerCase();
         const matchesComp = selectedCompanies.some((comp) =>
-          jobComp.includes(comp.toLowerCase())
+          jobComp.includes(comp.toLowerCase().trim())
         );
         if (!matchesComp) return false;
       }
       if (selectedRoles.length > 0) {
         const jobRole = (job.title || "").toLowerCase();
         const matchesRole = selectedRoles.some((role) =>
-          jobRole.includes(role.toLowerCase())
+          jobRole.includes(role.toLowerCase().trim())
         );
         if (!matchesRole) return false;
       }
       if (selectedWorkplace.length > 0) {
-        const jobMode = (job.workMode || "").toLowerCase();
+        const jobMode = (job.workMode || job.workplace || "").toLowerCase();
         const matchesWorkMode = selectedWorkplace.some((m) =>
-          jobMode.includes(m.toLowerCase())
+          jobMode.includes(m.toLowerCase().trim())
         );
         if (!matchesWorkMode) return false;
       }
       if (selectedJobTypes.length > 0) {
-        const jobType = (job.type || "").toLowerCase();
+        const jobType = (job.type || job.employmentType || "").toLowerCase();
         const matchesType = selectedJobTypes.some((t) =>
-          jobType.includes(t.toLowerCase())
+          jobType.includes(t.toLowerCase().trim())
         );
         if (!matchesType) return false;
       }
@@ -1268,6 +1280,7 @@ const BrowseJobs = () => {
   }, [
     allCachedJobs,
     searchQuery,
+    selectedDate,
     selectedLocations,
     selectedCompanies,
     selectedRoles,
@@ -1289,12 +1302,35 @@ const BrowseJobs = () => {
     const sliced = allFilteredJobs.slice(startIdx, endIdx);
     if (sliced.length > 0) return sliced;
 
-    const directPage = jobsCache[activePage];
-    if (Array.isArray(directPage) && directPage.length > 0) {
-      return directPage;
+    const isFilterActive =
+      Boolean(searchQuery.trim()) ||
+      selectedLocations.length > 0 ||
+      selectedCompanies.length > 0 ||
+      selectedRoles.length > 0 ||
+      selectedWorkplace.length > 0 ||
+      selectedJobTypes.length > 0 ||
+      (selectedDate && selectedDate !== "All time");
+
+    if (!isFilterActive) {
+      const directPage = jobsCache[activePage];
+      if (Array.isArray(directPage) && directPage.length > 0) {
+        return directPage;
+      }
     }
     return [];
-  }, [allFilteredJobs, activePage, pageSize, jobsCache]);
+  }, [
+    allFilteredJobs,
+    activePage,
+    pageSize,
+    jobsCache,
+    searchQuery,
+    selectedLocations,
+    selectedCompanies,
+    selectedRoles,
+    selectedWorkplace,
+    selectedJobTypes,
+    selectedDate,
+  ]);
 
   // Aliased for full compatibility with existing JSX
   const filteredJobs = displayedJobs;
@@ -1306,9 +1342,14 @@ const BrowseJobs = () => {
     }
   }, [activePage, displayTotalPages]);
 
-  // Reset to page 1 whenever search query or filters change
+  // Reset to page 1 and fetch backend filtered results whenever search query or filters change
   useEffect(() => {
     setActivePage(1);
+    jobsCacheRef.current = {};
+    setJobsCache({});
+    if (loadPageRef.current) {
+      loadPageRef.current(1, { forceRefresh: true });
+    }
   }, [
     searchQuery,
     selectedLocations,
@@ -1599,15 +1640,14 @@ const BrowseJobs = () => {
                 <button
                   type="button"
                   onClick={() => toggleDropdown("date")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "date" || selectedDate !== "All time"
-                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "date" || (selectedDate && selectedDate !== "All time")
+                    ? "border-[#4F46E5] bg-[#EEF2FF] text-[#4F46E5] font-semibold"
                     : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
                     }`}
                 >
-                  <span>Date</span>
+                  <span>{selectedDate && selectedDate !== "All time" ? `Date: ${selectedDate}` : "Date"}</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "date" ? "rotate-180" : ""
-                      }`}
+                    className={`w-3 h-3 transition-transform ${selectedDate && selectedDate !== "All time" ? "text-[#4F46E5]" : "text-[#94A3B8]"} ${activeDropdown === "date" ? "rotate-180" : ""}`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1665,14 +1705,13 @@ const BrowseJobs = () => {
                   type="button"
                   onClick={() => toggleDropdown("location")}
                   className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "location" || selectedLocations.length > 0
-                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    ? "border-[#4F46E5] bg-[#EEF2FF] text-[#4F46E5] font-semibold"
                     : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
                     }`}
                 >
-                  <span>Location</span>
+                  <span>{selectedLocations.length > 0 ? `Location (${selectedLocations.length})` : "Location"}</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "location" ? "rotate-180" : ""
-                      }`}
+                    className={`w-3 h-3 transition-transform ${selectedLocations.length > 0 ? "text-[#4F46E5]" : "text-[#94A3B8]"} ${activeDropdown === "location" ? "rotate-180" : ""}`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1762,14 +1801,13 @@ const BrowseJobs = () => {
                   type="button"
                   onClick={() => toggleDropdown("role")}
                   className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "role" || selectedRoles.length > 0
-                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    ? "border-[#4F46E5] bg-[#EEF2FF] text-[#4F46E5] font-semibold"
                     : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
                     }`}
                 >
-                  <span>Role</span>
+                  <span>{selectedRoles.length > 0 ? `Role (${selectedRoles.length})` : "Role"}</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "role" ? "rotate-180" : ""
-                      }`}
+                    className={`w-3 h-3 transition-transform ${selectedRoles.length > 0 ? "text-[#4F46E5]" : "text-[#94A3B8]"} ${activeDropdown === "role" ? "rotate-180" : ""}`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1829,14 +1867,13 @@ const BrowseJobs = () => {
                   type="button"
                   onClick={() => toggleDropdown("jobType")}
                   className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "jobType" || selectedJobTypes.length > 0
-                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    ? "border-[#4F46E5] bg-[#EEF2FF] text-[#4F46E5] font-semibold"
                     : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
                     }`}
                 >
-                  <span>Job Type</span>
+                  <span>{selectedJobTypes.length > 0 ? `Job Type (${selectedJobTypes.length})` : "Job Type"}</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "jobType" ? "rotate-180" : ""
-                      }`}
+                    className={`w-3 h-3 transition-transform ${selectedJobTypes.length > 0 ? "text-[#4F46E5]" : "text-[#94A3B8]"} ${activeDropdown === "jobType" ? "rotate-180" : ""}`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1890,14 +1927,13 @@ const BrowseJobs = () => {
                   type="button"
                   onClick={() => toggleDropdown("workplace")}
                   className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "workplace" || selectedWorkplace.length > 0
-                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    ? "border-[#4F46E5] bg-[#EEF2FF] text-[#4F46E5] font-semibold"
                     : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
                     }`}
                 >
-                  <span>Workplace</span>
+                  <span>{selectedWorkplace.length > 0 ? `Workplace (${selectedWorkplace.length})` : "Workplace"}</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "workplace" ? "rotate-180" : ""
-                      }`}
+                    className={`w-3 h-3 transition-transform ${selectedWorkplace.length > 0 ? "text-[#4F46E5]" : "text-[#94A3B8]"} ${activeDropdown === "workplace" ? "rotate-180" : ""}`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1951,14 +1987,13 @@ const BrowseJobs = () => {
                   type="button"
                   onClick={() => toggleDropdown("companies")}
                   className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "companies" || selectedCompanies.length > 0
-                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    ? "border-[#4F46E5] bg-[#EEF2FF] text-[#4F46E5] font-semibold"
                     : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
                     }`}
                 >
-                  <span>Companies</span>
+                  <span>{selectedCompanies.length > 0 ? `Companies (${selectedCompanies.length})` : "Companies"}</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "companies" ? "rotate-180" : ""
-                      }`}
+                    className={`w-3 h-3 transition-transform ${selectedCompanies.length > 0 ? "text-[#4F46E5]" : "text-[#94A3B8]"} ${activeDropdown === "companies" ? "rotate-180" : ""}`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -2211,13 +2246,21 @@ const BrowseJobs = () => {
                             <div>
                               {/* Top Header: Logo + Match Badge */}
                               <div className="flex items-center justify-between gap-2">
-                                <div className="w-[40px] h-[40px] rounded-[10px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2">
-                                  <img
-                                    src={job.logo || aiLogo}
-                                    alt={job.company}
-                                    className="w-full h-full object-contain"
-                                  />
-                                </div>
+                                {job.logo ? (
+                                  <div className="w-[40px] h-[40px] rounded-[10px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-1.5 overflow-hidden">
+                                    <img
+                                      src={job.logo}
+                                      alt={job.company || "Company Logo"}
+                                      className="w-full h-full object-contain"
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="w-[40px] h-[40px] rounded-[10px] bg-[#EEF2FF] border border-indigo-100/80 flex items-center justify-center shrink-0 text-[#4F46E5] shadow-2xs">
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                    </svg>
+                                  </div>
+                                )}
                                 <span
                                   className={`text-[12px] font-semibold px-2.5 py-0.5 rounded-full ${job.matchColor || "bg-[#EEF2FF] text-[#4F46E5]"}`}
                                 >
@@ -2244,11 +2287,10 @@ const BrowseJobs = () => {
                               {/* Location, Workplace & Type Pills */}
                               <div className="mt-3 flex flex-col gap-1.5">
                                 <div className="flex items-center gap-1.5 text-[12.5px] text-[#64748B]">
-                                  <img
-                                    src={mapIcon}
-                                    alt=""
-                                    className="w-[10px] h-[12px] object-contain shrink-0"
-                                  />
+                                  <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  </svg>
                                   <span className="truncate">{job.fullLocation || job.location}</span>
                                 </div>
 
