@@ -80,7 +80,11 @@ export const getNByPlan = (plan = 'free') => {
  */
 export const getStoredJobMatches = () => {
   try {
-    const raw = sessionStorage.getItem('auto_job_apply_stored_matches');
+    const raw =
+      sessionStorage.getItem('auto_job_apply_stored_matches') ||
+      localStorage.getItem('auto_job_apply_stored_matches') ||
+      sessionStorage.getItem('jobMatches') ||
+      localStorage.getItem('jobMatches');
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) return parsed;

@@ -482,16 +482,44 @@ const BrowseJobs = () => {
   const [fetchError, setFetchError] = useState(null);
   const [hasMoreJobs, setHasMoreJobs] = useState(true);
   const [hasResume, setHasResume] = useState(false);
-  const [activeResumeId, setActiveResumeId] = useState(null);
+  const [activeResumeId, setActiveResumeId] = useState(() => {
+    try {
+      return (
+        localStorage.getItem("selected_resume_id") ||
+        localStorage.getItem("resume_id") ||
+        localStorage.getItem("resumeId") ||
+        sessionStorage.getItem("selected_resume_id") ||
+        sessionStorage.getItem("resume_id") ||
+        sessionStorage.getItem("resumeId") ||
+        null
+      );
+    } catch {
+      return null;
+    }
+  });
   const fetchingPagesRef = useRef(new Set());
- const resumeDropdownRef = useRef(null);
+  const resumeDropdownRef = useRef(null);
 
   // Resume Selector States & Logic
   const [userResumes, setUserResumes] = useState([]);
   const [isLoadingResumes, setIsLoadingResumes] = useState(false);
-  const [selectedResume, setSelectedResume] = useState(null);
+  const [selectedResume, setSelectedResume] = useState(() => {
+    try {
+      const storedData =
+        localStorage.getItem("selected_resume_data") ||
+        sessionStorage.getItem("selected_resume_data");
+      return storedData ? JSON.parse(storedData) : null;
+    } catch {
+      return null;
+    }
+  });
   const [isResumeDropdownOpen, setIsResumeDropdownOpen] = useState(false);
   const [isSettingPrimary, setIsSettingPrimary] = useState(false);
+
+  const selectedResumeRef = useRef(selectedResume);
+  selectedResumeRef.current = selectedResume;
+  const activeResumeIdRef = useRef(activeResumeId);
+  activeResumeIdRef.current = activeResumeId;
   // Dynamic ATS Resume Matches Status & Refresh
   const [matchStatus, setMatchStatus] = useState({
     hasPrimaryResume: null,
@@ -540,7 +568,7 @@ const BrowseJobs = () => {
   const loadPage = useCallback(
     async (pageNumber, { forceRefresh = false, customQuery = null, customSort = null, overrideFilters = null, customResumeId = null } = {}) => {
       // 1. Check cache first (unless forceRefresh is requested)
-      if (!forceRefresh && jobsCacheRef.current[pageNumber]) {
+      if (!forceRefresh && jobsCacheRef.current[pageNumber] && jobsCacheRef.current[pageNumber].length > 0) {
         console.log(`[BrowseJobs] Page ${pageNumber} found in cache. Using cached data (NO API CALL).`);
         setActivePage(pageNumber);
         return jobsCacheRef.current[pageNumber];
@@ -564,9 +592,19 @@ const BrowseJobs = () => {
       // Extract target resumeId for GET /api/jobs?resumeId=...
       let resumeIdVal = customResumeId;
       if (resumeIdVal === null || resumeIdVal === undefined) {
-        resumeIdVal = selectedResume
-          ? (selectedResume.id ?? selectedResume.resumeId ?? selectedResume._id ?? selectedResume.fileId ?? selectedResume.uuid ?? selectedResume.resume_id)
-          : activeResumeId;
+        const curResume = selectedResumeRef.current;
+        resumeIdVal = curResume
+          ? (curResume.id ?? curResume.resumeId ?? curResume._id ?? curResume.fileId ?? curResume.uuid ?? curResume.resume_id)
+          : activeResumeIdRef.current;
+      }
+      if (!resumeIdVal) {
+        resumeIdVal =
+          localStorage.getItem("selected_resume_id") ||
+          localStorage.getItem("resume_id") ||
+          localStorage.getItem("resumeId") ||
+          sessionStorage.getItem("selected_resume_id") ||
+          sessionStorage.getItem("resume_id") ||
+          sessionStorage.getItem("resumeId");
       }
       if (!resumeIdVal) {
         try {
@@ -641,20 +679,57 @@ const BrowseJobs = () => {
             ? res.totalPages
             : Math.max(1, Math.ceil(resTotalItems / (pageSize || 20)));
 
-        const hasMore = (apiPage + 1) < resTotalPages && items.length > 0;
+        const hasMore = (apiPage + 1) < resTotalPages && items.length >= pageSize;
         setHasMoreJobs(hasMore);
         setTotalItems(resTotalItems);
         setTotalPages(resTotalPages);
 
-        if (transformed.length === 0 && pageNumber === 1 && (forceRefresh || Object.keys(jobsCacheRef.current).length === 0)) {
-          const stored = getStoredJobMatches();
-          if (Array.isArray(stored) && stored.length > 0) {
-            const fallback = stored.map((m, idx) => transformMatchToJob(m, idx)).filter(Boolean);
-            jobsCacheRef.current[1] = fallback;
-            setJobsCache({ 1: fallback });
-            setActivePage(1);
-            return fallback;
+        if (transformed.length === 0) {
+          if (pageNumber === 1 && (forceRefresh || Object.keys(jobsCacheRef.current).length === 0)) {
+            const stored = getStoredJobMatches();
+            if (Array.isArray(stored) && stored.length > 0) {
+              const fallback = stored.map((m, idx) => transformMatchToJob(m, idx)).filter(Boolean);
+              if (fallback.length > pageSize) {
+                const chunked = {};
+                const chunkPages = Math.ceil(fallback.length / pageSize);
+                for (let p = 1; p <= chunkPages; p++) {
+                  chunked[p] = fallback.slice((p - 1) * pageSize, p * pageSize);
+                }
+                jobsCacheRef.current = chunked;
+                setJobsCache(chunked);
+                setTotalPages(chunkPages);
+              } else {
+                jobsCacheRef.current[1] = fallback;
+                setJobsCache({ 1: fallback });
+                setTotalPages(1);
+              }
+              setActivePage(1);
+              setTotalItems(fallback.length);
+              setHasMoreJobs(false);
+              return fallback;
+            }
+          } else if (pageNumber > 1) {
+            // Server has no more jobs for this page; stay on current page and mark no more jobs
+            setHasMoreJobs(false);
+            setTotalPages((prev) => Math.min(prev, pageNumber - 1));
+            return [];
           }
+        }
+
+        // If page 1 returned all jobs in one response (> pageSize), chunk into pages
+        if (pageNumber === 1 && transformed.length > pageSize) {
+          const chunked = {};
+          const chunkPages = Math.ceil(transformed.length / pageSize);
+          for (let p = 1; p <= chunkPages; p++) {
+            chunked[p] = transformed.slice((p - 1) * pageSize, p * pageSize);
+          }
+          jobsCacheRef.current = chunked;
+          setJobsCache(chunked);
+          setActivePage(1);
+          setTotalItems(transformed.length);
+          setTotalPages(chunkPages);
+          setHasMoreJobs(false);
+          return transformed;
         }
 
         // Cache page data
@@ -676,10 +751,26 @@ const BrowseJobs = () => {
           const stored = getStoredJobMatches();
           if (Array.isArray(stored) && stored.length > 0) {
             const fallback = stored.map((m, idx) => transformMatchToJob(m, idx)).filter(Boolean);
-            jobsCacheRef.current[1] = fallback;
-            setJobsCache({ 1: fallback });
+            if (fallback.length > pageSize) {
+              const chunked = {};
+              const chunkPages = Math.ceil(fallback.length / pageSize);
+              for (let p = 1; p <= chunkPages; p++) {
+                chunked[p] = fallback.slice((p - 1) * pageSize, p * pageSize);
+              }
+              jobsCacheRef.current = chunked;
+              setJobsCache(chunked);
+              setTotalPages(chunkPages);
+            } else {
+              jobsCacheRef.current[1] = fallback;
+              setJobsCache({ 1: fallback });
+              setTotalPages(1);
+            }
             setActivePage(1);
+            setTotalItems(fallback.length);
+            setHasMoreJobs(false);
           }
+        } else if (pageNumber > 1) {
+          setHasMoreJobs(false);
         }
       } finally {
         fetchingPagesRef.current.delete(pageNumber);
@@ -699,6 +790,31 @@ const BrowseJobs = () => {
     ]
   );
 
+  const loadPageRef = useRef(loadPage);
+  useEffect(() => {
+    loadPageRef.current = loadPage;
+  }, [loadPage]);
+
+  // Helper to persist selected resume ID and resume object across refreshes
+  const saveResumeSelection = (resume, resumeId) => {
+    if (!resumeId) return;
+    const strId = String(resumeId);
+    try {
+      localStorage.setItem("selected_resume_id", strId);
+      localStorage.setItem("resume_id", strId);
+      localStorage.setItem("resumeId", strId);
+      sessionStorage.setItem("selected_resume_id", strId);
+      sessionStorage.setItem("resume_id", strId);
+      sessionStorage.setItem("resumeId", strId);
+      if (resume) {
+        localStorage.setItem("selected_resume_data", JSON.stringify(resume));
+        sessionStorage.setItem("selected_resume_data", JSON.stringify(resume));
+      }
+    } catch (e) {
+      console.error("[BrowseJobs] Error saving resume selection to storage:", e);
+    }
+  };
+
   // Fetch user resumes from GET /api/resumes
   const fetchUserResumes = useCallback(async () => {
     try {
@@ -716,29 +832,80 @@ const BrowseJobs = () => {
       }
 
       setUserResumes(list);
+      let targetResume = null;
       let targetResumeId = null;
+
+      // Retrieve stored resume ID & data from localStorage / sessionStorage if user previously selected one
+      const storedResumeId =
+        localStorage.getItem("selected_resume_id") ||
+        localStorage.getItem("resume_id") ||
+        localStorage.getItem("resumeId") ||
+        sessionStorage.getItem("selected_resume_id") ||
+        sessionStorage.getItem("resume_id") ||
+        sessionStorage.getItem("resumeId");
+
+      let storedResumeData = null;
+      try {
+        const rawData =
+          localStorage.getItem("selected_resume_data") ||
+          sessionStorage.getItem("selected_resume_data");
+        if (rawData) storedResumeData = JSON.parse(rawData);
+      } catch {
+        // ignore parse error
+      }
+
       if (list.length > 0) {
         setHasResume(true);
-        // Find primary resume or default to the first one in raw data
-        const primary = list.find((r) => r.isPrimary === true) || list[0];
-        setSelectedResume(primary);
-        targetResumeId = primary?.id ?? primary?.resumeId ?? primary?._id ?? primary?.fileId ?? primary?.uuid ?? primary?.resume_id;
+
+        // 1. Try matching by ID
+        if (storedResumeId) {
+          targetResume = list.find((r) => {
+            const id = r.id ?? r.resumeId ?? r._id ?? r.fileId ?? r.uuid ?? r.resume_id;
+            return String(id) === String(storedResumeId);
+          });
+        }
+
+        // 2. Try matching by stored resume file name if ID match fails
+        if (!targetResume && storedResumeData) {
+          const storedName = storedResumeData.fileName || storedResumeData.name || storedResumeData.originalName;
+          if (storedName) {
+            targetResume = list.find((r) => {
+              const rName = r.fileName || r.name || r.originalName;
+              return rName && rName === storedName;
+            });
+          }
+        }
+
+        // 3. Fallback to primary resume or first resume in list
+        if (!targetResume) {
+          targetResume = list.find((r) => r.isPrimary === true) || list[0];
+        }
+
+        setSelectedResume(targetResume);
+        targetResumeId = targetResume?.id ?? targetResume?.resumeId ?? targetResume?._id ?? targetResume?.fileId ?? targetResume?.uuid ?? targetResume?.resume_id;
+
         if (targetResumeId !== undefined && targetResumeId !== null) {
-          setActiveResumeId(String(targetResumeId));
+          const strId = String(targetResumeId);
+          setActiveResumeId(strId);
+          saveResumeSelection(targetResume, strId);
         }
       }
       jobsCacheRef.current = {};
       setJobsCache({});
-      loadPage(1, { forceRefresh: true, customResumeId: targetResumeId });
+      if (loadPageRef.current) {
+        loadPageRef.current(1, { forceRefresh: true, customResumeId: targetResumeId });
+      }
     } catch (err) {
       console.error("[BrowseJobs] Error fetching resumes list:", err);
       jobsCacheRef.current = {};
       setJobsCache({});
-      loadPage(1, { forceRefresh: true });
+      if (loadPageRef.current) {
+        loadPageRef.current(1, { forceRefresh: true });
+      }
     } finally {
       setIsLoadingResumes(false);
     }
-  }, [loadPage]);
+  }, []);
 
   // Handle selecting a resume from the dropdown (fetches GET /api/jobs?resumeId=...)
   const handleSelectResume = (resume) => {
@@ -748,7 +915,9 @@ const BrowseJobs = () => {
     const resumeId = resume.id ?? resume.resumeId ?? resume._id ?? resume.fileId ?? resume.uuid ?? resume.resume_id;
 
     if (resumeId !== undefined && resumeId !== null) {
-      setActiveResumeId(String(resumeId));
+      const strId = String(resumeId);
+      setActiveResumeId(strId);
+      saveResumeSelection(resume, strId);
       jobsCacheRef.current = {};
       setJobsCache({});
       loadPage(1, { forceRefresh: true, customResumeId: resumeId });
@@ -761,10 +930,10 @@ const BrowseJobs = () => {
     fetchUserResumes();
 
     const handleJobMatchesUpdated = () => {
-      if (isMounted) {
+      if (isMounted && loadPageRef.current) {
         jobsCacheRef.current = {};
         setJobsCache({});
-        loadPage(1, { forceRefresh: true });
+        loadPageRef.current(1, { forceRefresh: true });
       }
     };
 
@@ -775,7 +944,7 @@ const BrowseJobs = () => {
       window.removeEventListener("jobMatchesUpdated", handleJobMatchesUpdated);
       window.removeEventListener("storage", handleJobMatchesUpdated);
     };
-  }, [fetchUserResumes, loadPage]);
+  }, [fetchUserResumes]);
 
   // Click outside listener to close resume dropdown
   useEffect(() => {
@@ -793,13 +962,6 @@ const BrowseJobs = () => {
     };
   }, []);
 
-  // Handle Page Change with Cache Checking
-  const handlePageChange = (targetPage) => {
-    if (targetPage < 1 || targetPage === activePage || (totalPages > 0 && targetPage > totalPages)) {
-      return;
-    }
-    loadPage(targetPage);
-  };
 
   // Enhance Resume Action Handler (POST /api/jobs/{jobId}/enhance -> GET /api/jobs/{jobId}/enhance)
   const handleEnhanceResume = async () => {
@@ -1050,10 +1212,9 @@ const BrowseJobs = () => {
     return Array.from(set);
   }, [allCachedJobs]);
 
-  // Filter jobs for the active page
-  const filteredJobs = useMemo(() => {
-    const pageJobs = jobsCache[activePage] || [];
-    return pageJobs.filter((job) => {
+  // Filter all cached jobs across all loaded pages
+  const allFilteredJobs = useMemo(() => {
+    return allCachedJobs.filter((job) => {
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const matchTitle = (job.title || "").toLowerCase().includes(q);
@@ -1105,8 +1266,7 @@ const BrowseJobs = () => {
       return true;
     });
   }, [
-    jobsCache,
-    activePage,
+    allCachedJobs,
     searchQuery,
     selectedLocations,
     selectedCompanies,
@@ -1115,13 +1275,53 @@ const BrowseJobs = () => {
     selectedJobTypes,
   ]);
 
+  // Derived total pages for pagination controls
+  const totalFilteredPages = Math.max(1, Math.ceil(allFilteredJobs.length / pageSize));
+  const displayTotalPages =
+    totalPages > totalFilteredPages && hasMoreJobs
+      ? totalPages
+      : totalFilteredPages;
+
+  // Active slice of jobs for the current page
+  const displayedJobs = useMemo(() => {
+    const startIdx = (activePage - 1) * pageSize;
+    const endIdx = startIdx + pageSize;
+    const sliced = allFilteredJobs.slice(startIdx, endIdx);
+    if (sliced.length > 0) return sliced;
+
+    const directPage = jobsCache[activePage];
+    if (Array.isArray(directPage) && directPage.length > 0) {
+      return directPage;
+    }
+    return [];
+  }, [allFilteredJobs, activePage, pageSize, jobsCache]);
+
+  // Aliased for full compatibility with existing JSX
+  const filteredJobs = displayedJobs;
+
+  // Auto-reset activePage to 1 if activePage exceeds displayTotalPages
+  useEffect(() => {
+    if (activePage > displayTotalPages && displayTotalPages > 0) {
+      setActivePage(1);
+    }
+  }, [activePage, displayTotalPages]);
+
+  // Reset to page 1 whenever search query or filters change
+  useEffect(() => {
+    setActivePage(1);
+  }, [
+    searchQuery,
+    selectedLocations,
+    selectedCompanies,
+    selectedRoles,
+    selectedWorkplace,
+    selectedJobTypes,
+    selectedDate,
+  ]);
+
   // Determine dynamic visible pages for pagination controls
   const visiblePages = useMemo(() => {
-    const highestPage = Math.max(
-      1,
-      totalPages,
-      ...Object.keys(jobsCache).map(Number)
-    );
+    const highestPage = Math.max(1, displayTotalPages);
     if (highestPage <= 5) {
       return Array.from({ length: highestPage }, (_, i) => i + 1);
     }
@@ -1135,7 +1335,29 @@ const BrowseJobs = () => {
       pages.push(i);
     }
     return pages;
-  }, [totalPages, jobsCache, activePage]);
+  }, [displayTotalPages, activePage]);
+
+  // Handle Page Change with Cache & In-Memory Checking
+  const handlePageChange = (targetPage) => {
+    if (targetPage < 1 || targetPage === activePage || targetPage > displayTotalPages) {
+      return;
+    }
+    const startIdx = (targetPage - 1) * pageSize;
+    // 1. If target page jobs are already loaded in allFilteredJobs:
+    if (startIdx < allFilteredJobs.length) {
+      setActivePage(targetPage);
+      return;
+    }
+    // 2. If target page jobs are cached in jobsCache directly:
+    if (jobsCacheRef.current[targetPage] && jobsCacheRef.current[targetPage].length > 0) {
+      setActivePage(targetPage);
+      return;
+    }
+    // 3. Otherwise fetch from server if more jobs might be available
+    if (hasMoreJobs) {
+      loadPage(targetPage);
+    }
+  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#F8FAFC]">
@@ -1161,16 +1383,16 @@ const BrowseJobs = () => {
               </p>
             </div>
 
-            {/* Select Resume Dropdown (Aligned Right) */}
+            {/* Select Resume Dropdown (Aligned Right - Prominent & Enlarged) */}
             <div className="relative shrink-0 self-start sm:self-center" ref={resumeDropdownRef}>
               <button
                 type="button"
                 onClick={() => setIsResumeDropdownOpen((prev) => !prev)}
-                className="h-[42px] px-3.5 rounded-[12px] bg-white border border-[#E2E8F0] hover:border-[#4F46E5]/40 hover:shadow-xs transition-all flex items-center gap-2.5 text-[#0F172A] cursor-pointer"
+                className="h-[50px] sm:h-[52px] px-4 sm:px-5 rounded-[14px] bg-white border border-[#CBD5E1] hover:border-[#4F46E5] hover:shadow-md transition-all flex items-center gap-3 text-[#0F172A] cursor-pointer"
               >
                 {/* Document / Resume Icon */}
-                <div className="w-6 h-6 rounded-lg bg-[#EEF2FF] text-[#4F46E5] flex items-center justify-center shrink-0">
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#EEF2FF] text-[#4F46E5] flex items-center justify-center shrink-0 shadow-2xs">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                     <polyline points="14 2 14 8 20 8" />
                     <line x1="16" y1="13" x2="8" y2="13" />
@@ -1179,11 +1401,11 @@ const BrowseJobs = () => {
                 </div>
 
                 {/* Selected Resume Info */}
-                <div className="flex flex-col text-left max-w-[150px] sm:max-w-[190px] leading-tight">
-                  <span className="text-[9.5px] uppercase font-bold text-[#64748B] tracking-wider">
+                <div className="flex flex-col text-left max-w-[200px] sm:max-w-[300px] leading-snug">
+                  <span className="text-[10.5px] sm:text-[11px] uppercase font-bold text-[#475569] tracking-wider">
                     {isSettingPrimary ? "Updating..." : "Active Resume"}
                   </span>
-                  <span className="text-[12.5px] font-semibold text-[#0F172A] truncate">
+                  <span className="text-[13.5px] sm:text-[14.5px] font-bold text-[#0F172A] truncate">
                     {isLoadingResumes ? (
                       "Loading resumes..."
                     ) : selectedResume ? (
@@ -1196,8 +1418,8 @@ const BrowseJobs = () => {
 
                 {/* Primary Tag if selected resume is primary */}
                 {selectedResume?.isPrimary && !isSettingPrimary && (
-                  <span className="hidden sm:inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#EEF2FF] text-[#4F46E5] border border-indigo-200/80 shrink-0">
-                    <svg className="w-2.5 h-2.5 text-[#4F46E5]" fill="currentColor" viewBox="0 0 20 20">
+                  <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-[#EEF2FF] text-[#4F46E5] border border-indigo-200 shrink-0">
+                    <svg className="w-3 h-3 text-[#4F46E5]" fill="currentColor" viewBox="0 0 20 20">
                       <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                     </svg>
                     Primary
@@ -1206,7 +1428,7 @@ const BrowseJobs = () => {
 
                 {/* Chevron Icon */}
                 <svg
-                  className={`w-4 h-4 text-[#64748B] transition-transform duration-200 shrink-0 ${
+                  className={`w-5 h-5 text-[#64748B] transition-transform duration-200 shrink-0 ${
                     isResumeDropdownOpen ? "rotate-180" : ""
                   }`}
                   fill="none"
@@ -1218,41 +1440,41 @@ const BrowseJobs = () => {
                 </svg>
               </button>
 
-              {/* Dropdown Menu Popup */}
+              {/* Dropdown Menu Popup (Enlarged & Prominent) */}
               {isResumeDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-white rounded-[16px] border border-[#E2E8F0] shadow-xl z-50 overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-150">
-                  <div className="px-3.5 py-2.5 border-b border-[#F1F5F9] flex items-center justify-between">
-                    <span className="text-[11px] font-bold text-[#0F172A] uppercase tracking-wider">
+                <div className="absolute right-0 mt-2 w-80 sm:w-[380px] bg-white rounded-[18px] border border-[#CBD5E1] shadow-2xl z-50 overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="px-4 py-3 border-b border-[#F1F5F9] flex items-center justify-between bg-[#F8FAFC]">
+                    <span className="text-[12px] font-bold text-[#0F172A] uppercase tracking-wider">
                       Select Resume
                     </span>
-                    <span className="text-[11px] font-medium text-[#64748B]">
+                    <span className="text-[12px] font-semibold text-[#475569] bg-white px-2.5 py-0.5 rounded-full border border-[#E2E8F0]">
                       {userResumes.length} {userResumes.length === 1 ? "resume" : "resumes"}
                     </span>
                   </div>
 
-                  <div className="max-h-[260px] overflow-y-auto p-1.5 space-y-1">
+                  <div className="max-h-[300px] overflow-y-auto p-2 space-y-1.5">
                     {isLoadingResumes ? (
-                      <div className="p-4 text-center text-xs text-[#64748B]">
+                      <div className="p-5 text-center text-sm font-medium text-[#64748B]">
                         Loading resumes...
                       </div>
                     ) : userResumes.length === 0 ? (
-                      <div className="p-4 text-center">
-                        <p className="text-xs text-[#64748B] mb-2">No uploaded resumes found</p>
+                      <div className="p-5 text-center">
+                        <p className="text-sm text-[#64748B] mb-2.5">No uploaded resumes found</p>
                         <button
                           type="button"
                           onClick={() => {
                             setIsResumeDropdownOpen(false);
                             navigate("/profile");
                           }}
-                          className="px-3 py-1.5 bg-[#4F46E5] text-white text-xs font-semibold rounded-lg hover:bg-[#4338CA] transition-colors cursor-pointer"
+                          className="px-4 py-2 bg-[#4F46E5] text-white text-xs font-bold rounded-xl hover:bg-[#4338CA] transition-colors cursor-pointer"
                         >
                           Upload in Profile
                         </button>
                       </div>
                     ) : (
                       userResumes.map((resume, idx) => {
-                        const resumeId = resume.id ?? resume.resumeId ?? resume._id ?? resume.fileId ?? resume.uuid;
-                        const selectedId = selectedResume?.id ?? selectedResume?.resumeId ?? selectedResume?._id ?? selectedResume?.fileId ?? selectedResume?.uuid;
+                        const resumeId = resume.id ?? resume.resumeId ?? resume._id ?? resume.fileId ?? resume.uuid ?? resume.resume_id;
+                        const selectedId = selectedResume?.id ?? selectedResume?.resumeId ?? selectedResume?._id ?? selectedResume?.fileId ?? selectedResume?.uuid ?? selectedResume?.resume_id;
                         const isSelected = String(resumeId) === String(selectedId);
                         const resumeName = resume.fileName || resume.name || resume.originalName || `Resume ${idx + 1}`;
                         const isPrimary = Boolean(resume.isPrimary === true);
@@ -1262,43 +1484,43 @@ const BrowseJobs = () => {
                             key={resumeId || idx}
                             type="button"
                             onClick={() => handleSelectResume(resume)}
-                            className={`w-full p-2.5 rounded-[10px] text-left transition-all flex items-center justify-between gap-2 cursor-pointer ${
+                            className={`w-full p-3 rounded-[12px] text-left transition-all flex items-center justify-between gap-3 cursor-pointer ${
                               isSelected
-                                ? "bg-[#EEF2FF] border border-indigo-200/80"
+                                ? "bg-[#EEF2FF] border border-indigo-200 shadow-2xs"
                                 : "hover:bg-[#F8FAFC] border border-transparent"
                             }`}
                           >
-                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                              <div className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 ${
-                                isSelected ? "bg-[#4F46E5] text-white" : "bg-slate-100 text-slate-500"
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                                isSelected ? "bg-[#4F46E5] text-white shadow-2xs" : "bg-slate-100 text-slate-500"
                               }`}>
-                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                                   <polyline points="14 2 14 8 20 8" />
                                 </svg>
                               </div>
                               <div className="flex flex-col min-w-0">
-                                <span className={`text-[12.5px] font-semibold truncate ${
+                                <span className={`text-[13.5px] sm:text-[14px] font-bold truncate ${
                                   isSelected ? "text-[#4F46E5]" : "text-[#0F172A]"
                                 }`}>
                                   {resumeName}
                                 </span>
                                 {resume.createdAt && (
-                                  <span className="text-[10px] text-[#94A3B8]">
+                                  <span className="text-[11px] text-[#64748B]">
                                     Uploaded {new Date(resume.createdAt).toLocaleDateString()}
                                   </span>
                                 )}
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-1.5 shrink-0">
+                            <div className="flex items-center gap-2 shrink-0">
                               {isPrimary && (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#EEF2FF] text-[#4F46E5] border border-indigo-200/60">
+                                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#EEF2FF] text-[#4F46E5] border border-indigo-200">
                                   Primary
                                 </span>
                               )}
                               {isSelected && (
-                                <svg className="w-4 h-4 text-[#4F46E5]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                <svg className="w-5 h-5 text-[#4F46E5]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
                                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                                 </svg>
                               )}
@@ -1309,16 +1531,16 @@ const BrowseJobs = () => {
                     )}
                   </div>
 
-                  <div className="p-2 border-t border-[#F1F5F9] bg-[#F8FAFC] flex items-center justify-between">
+                  <div className="p-3 border-t border-[#F1F5F9] bg-[#F8FAFC] flex items-center justify-between">
                     <button
                       type="button"
                       onClick={() => {
                         setIsResumeDropdownOpen(false);
                         navigate("/profile");
                       }}
-                      className="text-[11.5px] font-semibold text-[#4F46E5] hover:text-[#4338CA] transition-colors flex items-center gap-1 cursor-pointer"
+                      className="w-full py-2 px-3 text-center text-[12.5px] font-bold text-[#4F46E5] hover:text-[#4338CA] hover:bg-white rounded-xl transition-all border border-transparent hover:border-[#E2E8F0] cursor-pointer"
                     >
-                      <span>+ Manage / Upload Resumes</span>
+                      + Manage / Upload Resumes in Profile
                     </button>
                   </div>
                 </div>
@@ -1958,7 +2180,7 @@ const BrowseJobs = () => {
                       </button>
                     </div>
                   </div>
-                ) : filteredJobs.length === 0 ? (
+                ) : allFilteredJobs.length === 0 ? (
                   <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-10 text-center flex flex-col items-center justify-center gap-3">
                     <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
                       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -2081,20 +2303,12 @@ const BrowseJobs = () => {
                       {/* Left Side: Dynamic Loaded Jobs Count Text */}
                       <span className="text-[13px] sm:text-[13.5px] font-medium text-[#475569]">
                         {(() => {
-                          const currentCount = filteredJobs.length;
-                          const startIdx = currentCount > 0 ? (activePage - 1) * pageSize + 1 : 0;
-                          const endIdx = currentCount > 0 ? (activePage - 1) * pageSize + currentCount : 0;
-                          const totalLoadedJobs = Object.values(jobsCache).reduce(
-                            (sum, list) => sum + (list?.length || 0),
-                            0
-                          );
-                          const displayTotal = totalItems > 0 ? totalItems : totalLoadedJobs;
-                          const displayTotalPages = totalPages > 0 ? totalPages : Math.max(1, Object.keys(jobsCache).length);
+                          const currentCount = displayedJobs.length;
+                          const startIdx = allFilteredJobs.length > 0 ? (activePage - 1) * pageSize + 1 : 0;
+                          const endIdx = allFilteredJobs.length > 0 ? (activePage - 1) * pageSize + currentCount : 0;
+                          const displayTotal = totalItems > allFilteredJobs.length ? totalItems : allFilteredJobs.length;
 
-                          if (totalItems > 0 && totalItems !== totalLoadedJobs) {
-                            return `Showing ${startIdx}–${endIdx} of ${displayTotal} jobs (Page ${activePage} of ${displayTotalPages})`;
-                          }
-                          return `Showing ${startIdx}–${endIdx} of ${totalLoadedJobs} loaded jobs (Page ${activePage} of ${displayTotalPages})`;
+                          return `Showing ${startIdx}–${endIdx} of ${displayTotal} jobs (Page ${activePage} of ${displayTotalPages})`;
                         })()}
                       </span>
 
@@ -2143,10 +2357,7 @@ const BrowseJobs = () => {
                         <button
                           type="button"
                           onClick={() => handlePageChange(activePage + 1)}
-                          disabled={
-                            (totalPages > 0 && activePage >= totalPages && !hasMoreJobs) ||
-                            isLoadingPage
-                          }
+                          disabled={activePage >= displayTotalPages || isLoadingPage}
                           className="w-8 h-8 rounded-lg border border-[#E2E8F0] bg-white hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed text-slate-700 text-sm flex items-center justify-center transition-colors cursor-pointer"
                           aria-label="Next Page"
                         >
