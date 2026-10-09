@@ -107,10 +107,25 @@ export const getJobs = async (params = {}) => {
 
   const responsePage = typeof data.page === 'number' ? data.page : page;
   const responseSize = typeof data.size === 'number' ? data.size : size;
-  const totalItems = typeof data.totalItems === 'number' ? data.totalItems : items.length;
+  const totalItems =
+    typeof data.totalItems === 'number'
+      ? data.totalItems
+      : typeof data.totalElements === 'number'
+      ? data.totalElements
+      : typeof data.total_elements === 'number'
+      ? data.total_elements
+      : typeof data.total === 'number'
+      ? data.total
+      : typeof data.totalCount === 'number'
+      ? data.totalCount
+      : typeof data.count === 'number'
+      ? data.count
+      : items.length;
   const totalPages =
     typeof data.totalPages === 'number'
       ? data.totalPages
+      : typeof data.total_pages === 'number'
+      ? data.total_pages
       : Math.max(1, Math.ceil(totalItems / (responseSize || 20)));
 
   return {
