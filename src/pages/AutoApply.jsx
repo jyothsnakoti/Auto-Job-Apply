@@ -336,6 +336,17 @@ const AutoApply = () => {
     }
   };
 
+  const isAllSelected = jobs.length > 0 && selectedJobIds.length === jobs.length;
+  const isIndeterminate = selectedJobIds.length > 0 && !isAllSelected;
+
+  const handleToggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedJobIds([]);
+    } else {
+      setSelectedJobIds(jobs.map((j) => j.id));
+    }
+  };
+
   // Extract dynamic billing info (from GET /api/billing/status)
   const hasPlan = Boolean(billingInfo?.hasPlan ?? true);
   const rawPlanName = (billingInfo?.planName || "").trim();
@@ -924,14 +935,46 @@ const AutoApply = () => {
                 </p>
               </div>
 
-              {/* Status Header: Selected count badge */}
-              <div className="flex items-center gap-2 text-[13px] font-medium text-[#475569] pt-1">
-                <div className="w-4 h-4 rounded-full bg-[#2563EB] text-white flex items-center justify-center">
-                  <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                </div>
-                <span>{selectedJobIds.length} of {jobs.length} jobs selected</span>
+              {/* Status Header: Select All / Unselect All */}
+              <div className="flex items-center justify-between pt-1 flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handleToggleSelectAll}
+                  disabled={jobs.length === 0}
+                  className="flex items-center gap-2 text-[13px] font-medium text-[#475569] hover:text-[#0F172A] cursor-pointer group select-none transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <div
+                    className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 transition-all ${
+                      isAllSelected
+                        ? "bg-[#2563EB] text-white"
+                        : isIndeterminate
+                          ? "bg-[#2563EB] text-white"
+                          : "border-2 border-slate-300 bg-white group-hover:border-slate-400"
+                    }`}
+                  >
+                    {isAllSelected && (
+                      <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    )}
+                    {isIndeterminate && (
+                      <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5">
+                        <line x1="5" y1="12" x2="19" y2="12" strokeLinecap="round" />
+                      </svg>
+                    )}
+                  </div>
+                  <span>{selectedJobIds.length} of {jobs.length} jobs selected</span>
+                </button>
+
+                {jobs.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleToggleSelectAll}
+                    className="text-[12.5px] font-semibold text-[#2563EB] hover:text-[#1D4ED8] hover:underline cursor-pointer transition-colors"
+                  >
+                    {isAllSelected ? "Unselect all" : "Select all"}
+                  </button>
+                )}
               </div>
 
               {/* Job List Container */}
@@ -1254,7 +1297,8 @@ const AutoApply = () => {
                 <div className="flex flex-col gap-2 pt-2">
                   <button
                     type="button"
-                    className="h-[46px] w-full rounded-[12px] bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-[14px] font-medium flex items-center justify-center gap-2 shadow-xs active:scale-[0.99] transition-all cursor-pointer"
+                    disabled={selectedJobIds.length === 0}
+                    className="h-[46px] w-full rounded-[12px] bg-[#2563EB] hover:bg-[#1D4ED8] disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-[14px] font-medium flex items-center justify-center gap-2 shadow-xs active:scale-[0.99] transition-all cursor-pointer"
                   >
                     <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
                       <path d="M8 5v14l11-7z" />

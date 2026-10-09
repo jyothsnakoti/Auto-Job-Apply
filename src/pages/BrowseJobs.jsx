@@ -2151,10 +2151,10 @@ const BrowseJobs = () => {
                 <button
                   type="button"
                   onClick={() => navigate("/auto-apply")}
-                  className="h-[34px] px-4 rounded-[10px] bg-[#4F46E5] hover:bg-[#4338CA] text-white text-[13px] font-semibold flex items-center gap-1.5 transition-all shadow-xs hover:shadow-md cursor-pointer whitespace-nowrap active:scale-[0.99]"
+                  className="h-[36px] px-6 rounded-[10px] bg-gradient-to-r from-[#4F46E5] via-[#6366F1] to-[#7C3AED] hover:from-[#4338CA] hover:via-[#4F46E5] hover:to-[#6D28D9] text-white text-[14.5px] font-semibold flex items-center gap-2 shadow-[0_4px_14px_rgba(79,70,229,0.35)] hover:shadow-[0_6px_20px_rgba(124,58,237,0.45)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 cursor-pointer whitespace-nowrap"
                 >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  <svg className="w-3.5 h-3.5 text-amber-300 fill-current drop-shadow-[0_0_6px_rgba(252,211,77,0.6)]" viewBox="0 0 24 24">
+                    <path d="M13 2L3 14h8l-1 8 11-12h-8l1-8z" />
                   </svg>
                   <span>Auto Apply All</span>
                 </button>
@@ -2331,7 +2331,7 @@ const BrowseJobs = () => {
                                   e.stopPropagation();
                                   handleOpenJobModal(job);
                                 }}
-                                className="flex-1 h-[36px] rounded-[10px] bg-[#4F46E5] hover:bg-[#4338CA] text-[13px] font-medium text-white shadow-xs transition-colors cursor-pointer flex items-center justify-center active:scale-[0.99]"
+                                className="flex-1 h-[36px] rounded-[10px] bg-[#EEF2FF] hover:bg-[#E0E7FF] text-[#4F46E5] border border-[#C7D2FE]/80 text-[13px] font-semibold transition-colors cursor-pointer flex items-center justify-center active:scale-[0.99]"
                               >
                                 Apply Now
                               </button>
@@ -2534,52 +2534,43 @@ const BrowseJobs = () => {
                     </svg>
                   </button>
 
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    {enhancedResultsMap[selectedJobId] && (
+                  {!enhancedResultsMap[selectedJobId] && (
+                    <div className="flex items-center gap-1.5 mt-0.5">
                       <button
                         type="button"
-                        onClick={() => setShowEnhancedModal(true)}
-                        className="bg-[#EEF2FF] hover:bg-[#E0E7FF] text-[#4F46E5] text-[12px] font-semibold px-2.5 py-1.5 rounded-lg border border-[#C7D2FE] transition-colors cursor-pointer shadow-2xs whitespace-nowrap"
+                        onClick={handleEnhanceResume}
+                        disabled={isEnhancing}
+                        className="bg-[#4F46E5] hover:bg-[#4338CA] disabled:bg-[#818CF8] text-white text-[12.5px] font-semibold px-3.5 py-1.5 rounded-lg transition-colors cursor-pointer shadow-xs whitespace-nowrap flex items-center gap-1.5 active:scale-[0.98] disabled:cursor-not-allowed"
                       >
-                        View Enhanced
+                        {isEnhancing ? (
+                          <>
+                            <svg
+                              className="animate-spin w-3.5 h-3.5 text-white"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                            >
+                              <circle
+                                className="opacity-25"
+                                cx="12"
+                                cy="12"
+                                r="10"
+                                stroke="currentColor"
+                                strokeWidth="4"
+                              />
+                              <path
+                                className="opacity-75"
+                                fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                              />
+                            </svg>
+                            <span>Enhancing...</span>
+                          </>
+                        ) : (
+                          "Enhance Resume"
+                        )}
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={handleEnhanceResume}
-                      disabled={isEnhancing}
-                      className="bg-[#4F46E5] hover:bg-[#4338CA] disabled:bg-[#818CF8] text-white text-[12.5px] font-semibold px-3.5 py-1.5 rounded-lg transition-colors cursor-pointer shadow-xs whitespace-nowrap flex items-center gap-1.5 active:scale-[0.98] disabled:cursor-not-allowed"
-                    >
-                      {isEnhancing ? (
-                        <>
-                          <svg
-                            className="animate-spin w-3.5 h-3.5 text-white"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                          >
-                            <circle
-                              className="opacity-25"
-                              cx="12"
-                              cy="12"
-                              r="10"
-                              stroke="currentColor"
-                              strokeWidth="4"
-                            />
-                            <path
-                              className="opacity-75"
-                              fill="currentColor"
-                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                            />
-                          </svg>
-                          <span>Enhancing...</span>
-                        </>
-                      ) : enhancedResultsMap[selectedJobId] ? (
-                        "Re-enhance"
-                      ) : (
-                        "Enhance Resume"
-                      )}
-                    </button>
-                  </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -2599,7 +2590,7 @@ const BrowseJobs = () => {
                       onClick={() => setShowEnhancedModal(true)}
                       className="underline font-bold text-[#4F46E5] hover:text-[#3730A3] cursor-pointer ml-2"
                     >
-                      Preview
+                      View
                     </button>
                   </div>
                 )}
