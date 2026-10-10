@@ -28,7 +28,7 @@ const navigationItems = [
     activeIcon: browseJobsActiveIcon,
   },
   {
-    name: "Bulk Apply",
+    name: "Bulk Auto Apply",
     path: "/auto-apply",
     icon: autoApplyIcon,
     activeIcon: autoApplyActiveIcon,

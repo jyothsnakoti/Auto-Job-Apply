@@ -2,6 +2,7 @@ import { apiClient } from './authService';
 import { RESUME_API_BASE_URL, JOB_ENDPOINTS } from './endpoints';
 import { getStoredResumeId } from './enhanceResumeService';
 import { getUserPlan, getNByPlan, getStoredJobMatches } from './resumeService';
+import { setStoredDashboardData } from './dashboardService';
 
 export const JOBS_API_URL = JOB_ENDPOINTS?.LIST || '/api/jobs';
 
@@ -204,18 +205,34 @@ export const getDashboard = async () => {
   console.log('[jobService] Calling GET /api/dashboard');
   const response = await apiClient.get('/api/dashboard');
   console.log('[jobService] GET /api/dashboard Raw Response Data:', response.data);
-  console.log('[jobService] GET /api/dashboard Formatted Response:', JSON.stringify(response.data, null, 2));
 
   const data = response.data || {};
-  return {
+  const formatted = {
     jobsFound: typeof data.jobsFound === 'number' ? data.jobsFound : 0,
     qualifiedMatches: typeof data.qualifiedMatches === 'number' ? data.qualifiedMatches : 0,
     applicationsSubmitted: typeof data.applicationsSubmitted === 'number' ? data.applicationsSubmitted : 0,
     applicationsRemaining: typeof data.applicationsRemaining === 'number' ? data.applicationsRemaining : 0,
     applicationAllowance: typeof data.applicationAllowance === 'number' ? data.applicationAllowance : 0,
     topMatches: Array.isArray(data.topMatches) ? data.topMatches : [],
-    raw: data,
+    recentApplications: Array.isArray(data.recentApplications) ? data.recentApplications : [],
+    applicationCounts: data.applicationCounts || {
+      all: 0,
+      submitted: 0,
+      inProgress: 0,
+      needsAction: 0,
+      failed: 0,
+      skipped: 0,
+    },
+    ...data,
   };
+
+  try {
+    setStoredDashboardData(formatted);
+  } catch (cacheErr) {
+    console.warn('[jobService] Error setting dashboard cache:', cacheErr);
+  }
+
+  return formatted;
 };
 
 export const getDashboardData = getDashboard;
