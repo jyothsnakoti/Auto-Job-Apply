@@ -208,12 +208,15 @@ export const getDashboard = async () => {
 
   const data = response.data || {};
   return {
+    ...data,
     jobsFound: typeof data.jobsFound === 'number' ? data.jobsFound : 0,
     qualifiedMatches: typeof data.qualifiedMatches === 'number' ? data.qualifiedMatches : 0,
     applicationsSubmitted: typeof data.applicationsSubmitted === 'number' ? data.applicationsSubmitted : 0,
     applicationsRemaining: typeof data.applicationsRemaining === 'number' ? data.applicationsRemaining : 0,
     applicationAllowance: typeof data.applicationAllowance === 'number' ? data.applicationAllowance : 0,
-    topMatches: Array.isArray(data.topMatches) ? data.topMatches : [],
+    topMatches: Array.isArray(data.topMatches) ? data.topMatches : (Array.isArray(data.jobs) ? data.jobs : []),
+    recentApplications: Array.isArray(data.recentApplications) ? data.recentApplications : (Array.isArray(data.applications) ? data.applications : []),
+    applicationCounts: data.applicationCounts || data.counts || null,
     raw: data,
   };
 };

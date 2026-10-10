@@ -6,21 +6,18 @@ import EnhancedResumeViewer from "../components/EnhancedResumeViewer";
 import {
   getStoredUser,
   getOnboardingProfile,
-  getStoredJobMatches,
   getOnboardingState,
   getEnhancedResume,
   getScoreForEnhancedResume,
   getCandidateId,
   getStoredResumeId,
   getJobId,
-  getMoreJobsForResume,
   getPrimaryResumeId,
   getBillingStatus,
   checkUserHasResume,
   getDashboard,
   getDashboardData,
   getStoredDashboardData,
-  getJobs,
   getJobById,
   getResumeMatchesStatus,
   refreshResumeMatches,
@@ -65,41 +62,6 @@ const DocumentIcon = ({ color = "#6366F1" }) => (
 );
 
 // Standard filter static options
-const dateOptions = [
-  "Last 6 hours",
-  "Last 24 hours",
-  "Last 7 days",
-  "Last 14 days",
-  "Last 30 days",
-  "All time",
-];
-
-const workplaceOptions = ["Remote", "On-site", "Hybrid"];
-
-const degreeOptions = [
-  "Bachelor's Degree",
-  "Master's Degree",
-  "Doctorate (PhD)",
-];
-
-const experienceOptions = [
-  "No experience required",
-  "Up to 1 year",
-  "Up to 2 years",
-  "Up to 3 years",
-  "Up to 5 years",
-  "Up to 7 years",
-];
-
-const jobTypeOptions = ["Full-time", "Part-time", "Contract", "Internship"];
-const employmentTypeOptions = [
-  "Full-time",
-  "Part-time",
-  "Contract",
-  "Internship",
-  "Freelance",
-];
-
 // Helper to clean raw HTML tags (&nbsp;, <br/>, <p>, etc.) and normalize whitespace
 const cleanHtmlText = (str) => {
   if (!str || typeof str !== "string") return "";
@@ -116,6 +78,48 @@ const cleanHtmlText = (str) => {
     .replace(/[ \t]+/g, " ")
     .replace(/\n\s*\n\s*\n+/g, "\n\n")
     .trim();
+};
+
+const formatPostedDate = (postedAt) => {
+  if (!postedAt) return "Recently";
+  try {
+    const date = new Date(postedAt);
+    if (isNaN(date.getTime())) return String(postedAt);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    if (diffMs < 0) return "Just now";
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 0) {
+      if (diffHours <= 1) return "Just now";
+      return `${diffHours} hours ago`;
+    }
+    if (diffDays === 1) return "1 day ago";
+    if (diffDays < 7) return `${diffDays} days ago`;
+    return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  } catch {
+    return String(postedAt);
+  }
+};
+
+const getApplicationCategory = (app) => {
+  if (!app) return "All";
+
+  const rawTab = String(app.tab || app.statusCategory || "").trim().toUpperCase().replace(/[\s-]/g, "_");
+  if (rawTab === "SUBMITTED" || rawTab === "COMPLETED" || rawTab === "SUCCESS") return "Submitted";
+  if (rawTab === "IN_PROGRESS" || rawTab === "QUEUED" || rawTab === "PREPARING") return "In Progress";
+  if (rawTab === "NEEDS_ACTION" || rawTab === "ACTION_REQUIRED") return "Needs Action";
+  if (rawTab === "FAILED" || rawTab === "ERROR" || rawTab === "REJECTED") return "Failed";
+  if (rawTab === "SKIPPED" || rawTab === "IGNORED") return "Skipped";
+
+  const rawStatus = String(app.status || app.state || app.applicationStatus || "").trim().toUpperCase().replace(/[\s-]/g, "_");
+  if (["SUBMITTED", "COMPLETED", "SUCCESS", "APPLIED"].includes(rawStatus)) return "Submitted";
+  if (["PREPARING", "QUEUED", "IN_PROGRESS", "RUNNING", "PROCESSING"].includes(rawStatus)) return "In Progress";
+  if (["NEEDS_ACTION", "ACTION_REQUIRED"].includes(rawStatus)) return "Needs Action";
+  if (["FAILED", "ERROR", "REJECTED"].includes(rawStatus)) return "Failed";
+  if (["SKIPPED", "IGNORED"].includes(rawStatus)) return "Skipped";
+
+  return "Submitted";
 };
 
 const extractCleanJobTitle = (rawTitle, rawText, index = 0) => {
@@ -285,15 +289,8 @@ const transformMatchToJob = (match, index = 0) => {
       : null;
 
   let logo = match.logo || match.companyLogo || match.logo_url || null;
-  if (
-    typeof logo === "string" &&
-    (logo.includes("amazon") ||
-      logo.includes("ai.svg") ||
-      logo.includes("google.svg") ||
-      logo.includes("microsoft.svg") ||
-      logo.includes("shopify.svg"))
-  ) {
-    logo = null;
+  if (!logo && match.companyDomain) {
+    logo = `https://logo.clearbit.com/${match.companyDomain}`;
   }
 
   let location = cleanHtmlText(match.location || match.city || match.country || "");
@@ -313,22 +310,22 @@ const transformMatchToJob = (match, index = 0) => {
     Array.isArray(match.requiredSkills) && match.requiredSkills.length > 0
       ? match.requiredSkills.map(cleanHtmlText)
       : Array.isArray(match.skills) && match.skills.length > 0
-      ? match.skills.map(cleanHtmlText)
-      : Array.isArray(match.extracted_skills) && match.extracted_skills.length > 0
-      ? match.extracted_skills.map(cleanHtmlText)
-      : [];
+        ? match.skills.map(cleanHtmlText)
+        : Array.isArray(match.extracted_skills) && match.extracted_skills.length > 0
+          ? match.extracted_skills.map(cleanHtmlText)
+          : [];
 
   const preferredSkills =
     Array.isArray(match.preferredSkills) && match.preferredSkills.length > 0
       ? match.preferredSkills.map(cleanHtmlText)
       : [];
 
-  let matchText = matchPercent !== null ? `${matchPercent}% match` : "ATS Match";
+  let matchText = rawScore !== null ? `${rawScore}% match` : "ATS Match";
   let matchColor = "bg-[#EEF2FF] text-[#4F46E5]";
-  if (matchPercent !== null) {
-    if (matchPercent < 70) {
+  if (rawScore !== null) {
+    if (rawScore < 60) {
       matchColor = "bg-slate-100 text-slate-700";
-    } else if (matchPercent < 85) {
+    } else if (rawScore < 75) {
       matchColor = "bg-[#FFFBEB] text-[#D97706]";
     } else {
       matchColor = "bg-[#ECFDF5] text-[#059669]";
@@ -365,7 +362,6 @@ const transformMatchToJob = (match, index = 0) => {
 
   const jobId = match.jobId || match.job_id || match.JDid || match.jd_id || match.id || `match-${index + 1}`;
 
-  // Handle backend employmentType like FULL_TIME, PART_TIME, CONTRACT
   let rawEmployment = match.employmentType || match.employment_type || match.type || "";
   let employmentType = "";
   if (rawEmployment) {
@@ -380,7 +376,6 @@ const transformMatchToJob = (match, index = 0) => {
     employmentType = "Full-time";
   }
 
-  // Handle backend workplace like REMOTE, ONSITE, HYBRID
   let rawWorkplace = match.workplace || match.workMode || match.work_mode || "";
   let workMode = "";
   if (rawWorkplace) {
@@ -393,6 +388,24 @@ const transformMatchToJob = (match, index = 0) => {
     workMode = "Remote";
   } else {
     workMode = "On-site";
+  }
+
+  let formattedPosted = "Recent match";
+  if (match.postedAt) {
+    try {
+      const d = new Date(match.postedAt);
+      if (!isNaN(d.getTime())) {
+        formattedPosted = d.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        });
+      }
+    } catch {
+      formattedPosted = cleanHtmlText(match.posted || "Recent match");
+    }
+  } else if (match.posted) {
+    formattedPosted = cleanHtmlText(match.posted);
   }
 
   return {
@@ -410,13 +423,13 @@ const transformMatchToJob = (match, index = 0) => {
     workMode,
     workplace: workMode,
     department: cleanHtmlText(match.department || "Engineering"),
-    posted: match.postedAt ? new Date(match.postedAt).toLocaleDateString() : cleanHtmlText(match.posted || "Recent match"),
+    posted: formattedPosted,
     postedAt: match.postedAt || null,
     match: matchText,
     matchPercent,
     rawScore,
     matchColor,
-    logo: match.logo || logo,
+    logo,
     description,
     responsibilities,
     requiredSkills,
@@ -507,8 +520,6 @@ const formatMatchTime = (isoString) => {
 const Dashboard = () => {
   const navigate = useNavigate();
   const [userName, setUserName] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [activeDropdown, setActiveDropdown] = useState(null);
   const [selectedAppTab, setSelectedAppTab] = useState("All");
   const [selectedJobModal, setSelectedJobModal] = useState(null);
   const [isLoadingJobDetails, setIsLoadingJobDetails] = useState(false);
@@ -572,18 +583,12 @@ const Dashboard = () => {
   };
 
 
-  // Dynamic Jobs & API Pagination State
+  // Dynamic Jobs & API State (Loaded from GET /api/dashboard topMatches)
   const [jobs, setJobs] = useState(() => {
     try {
       const cachedDashboard = getStoredDashboardData();
       if (Array.isArray(cachedDashboard?.topMatches) && cachedDashboard.topMatches.length > 0) {
         return cachedDashboard.topMatches
-          .map((m, idx) => transformMatchToJob(m, idx))
-          .filter(Boolean);
-      }
-      const stored = getStoredJobMatches();
-      if (Array.isArray(stored) && stored.length > 0) {
-        return stored
           .map((m, idx) => transformMatchToJob(m, idx))
           .filter(Boolean);
       }
@@ -598,23 +603,27 @@ const Dashboard = () => {
   const [jobFeedbackMessage, setJobFeedbackMessage] = useState(null);
   const [hasResume, setHasResume] = useState(() => {
     const cachedDashboard = getStoredDashboardData();
-    return Boolean(cachedDashboard?.topMatches?.length > 0);
+    return Boolean(cachedDashboard?.jobsFound > 0 || cachedDashboard?.topMatches?.length > 0);
   });
 
   // Dynamic Billing Information from API
-  const [billingInfo, setBillingInfo] = useState(null);
-
-  // Dynamic User Applications State (Loaded from API / Storage)
-  const [applications, setApplications] = useState(() => {
+  const [billingInfo, setBillingInfo] = useState(() => {
     try {
       const stored =
-        localStorage.getItem("trackerApplications") ||
-        sessionStorage.getItem("trackerApplications") ||
-        localStorage.getItem("appliedJobs") ||
-        sessionStorage.getItem("appliedJobs");
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) return parsed;
+        localStorage.getItem("billingStatus") ||
+        sessionStorage.getItem("billingStatus");
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  // Dynamic User Applications State (Loaded from GET /api/dashboard recentApplications)
+  const [applications, setApplications] = useState(() => {
+    try {
+      const cachedDashboard = getStoredDashboardData();
+      if (Array.isArray(cachedDashboard?.recentApplications)) {
+        return cachedDashboard.recentApplications;
       }
     } catch {
       // ignore
@@ -631,22 +640,6 @@ const Dashboard = () => {
   const [copiedResume, setCopiedResume] = useState(false);
   const [isUpdatingAts, setIsUpdatingAts] = useState(false);
   const [updatedAtsScores, setUpdatedAtsScores] = useState({});
-
-  // Filter States
-  const [selectedDate, setSelectedDate] = useState("All time");
-  const [selectedLocations, setSelectedLocations] = useState([]);
-  const [locationSearch, setLocationSearch] = useState("");
-  const [selectedWorkplace, setSelectedWorkplace] = useState([]);
-  const [selectedCompanies, setSelectedCompanies] = useState([]);
-  const [companySearch, setCompanySearch] = useState("");
-  const [selectedDegrees, setSelectedDegrees] = useState([]);
-  const [selectedExperience, setSelectedExperience] = useState("");
-  const [selectedRoles, setSelectedRoles] = useState([]);
-  const [selectedJobTypes, setSelectedJobTypes] = useState([]);
-  const [sponsorsVisa, setSponsorsVisa] = useState(false);
-  const [selectedEmploymentTypes, setSelectedEmploymentTypes] = useState([]);
-
-  const dropdownRef = useRef(null);
 
   // Dynamic ATS Resume Matches Status from GET /api/resumes/matches/status
   const [matchStatus, setMatchStatus] = useState({
@@ -669,34 +662,25 @@ const Dashboard = () => {
   });
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(!dashboardMetrics);
 
-  // Reload jobs and dashboard data when matching finishes (refreshing transitions from true -> false)
+  // Reload jobs and dashboard data when matching finishes
   const reloadJobsAndDashboard = useCallback(async () => {
     try {
       setIsLoadingJobs(true);
-      // 1. Reload dashboard stats
       const dashData = await getDashboard().catch(() => null);
       if (dashData) {
         setDashboardMetrics(dashData);
-      }
-      // 2. Reload jobs list from GET /api/jobs
-      const jobsRes = await getJobs({ sort: "best_match", page: 0, size: 20 }).catch(() => null);
-      if (jobsRes && Array.isArray(jobsRes.items) && jobsRes.items.length > 0) {
-        const transformed = jobsRes.items
-          .map((m, idx) => transformMatchToJob(m, idx))
-          .filter(Boolean);
-        setJobs(transformed);
-        const last = transformed[transformed.length - 1];
-        if (last?.job_id || last?.id) {
-          setLastJobId(last.job_id || last.id);
+        if (Array.isArray(dashData.topMatches)) {
+          const transformed = dashData.topMatches
+            .map((m, idx) => transformMatchToJob(m, idx))
+            .filter(Boolean);
+          setJobs(transformed);
         }
-      } else if (Array.isArray(dashData?.topMatches) && dashData.topMatches.length > 0) {
-        const transformed = dashData.topMatches
-          .map((m, idx) => transformMatchToJob(m, idx))
-          .filter(Boolean);
-        setJobs(transformed);
+        if (Array.isArray(dashData.recentApplications)) {
+          setApplications(dashData.recentApplications);
+        }
       }
     } catch (err) {
-      console.warn("[Dashboard] Error reloading jobs/dashboard after match refresh:", err);
+      console.warn("[Dashboard] Error reloading dashboard data after match refresh:", err);
     } finally {
       setIsLoadingJobs(false);
     }
@@ -810,112 +794,14 @@ const Dashboard = () => {
     }
   };
 
-  // 1. Fetch Dynamic Dashboard Metrics & Top Matches from GET /api/dashboard
-  useEffect(() => {
-    let isMounted = true;
-    const loadDashboardMetrics = async () => {
-      try {
-        const data = await getDashboardData();
-        if (isMounted && data) {
-          setDashboardMetrics(data);
-
-          // Populate Top Matches dynamically from /api/dashboard
-          if (Array.isArray(data.topMatches) && data.topMatches.length > 0) {
-            const transformed = data.topMatches
-              .map((m, idx) => transformMatchToJob(m, idx))
-              .filter(Boolean);
-
-            if (transformed.length > 0) {
-              setJobs(transformed);
-              setHasResume(true);
-              const last = transformed[transformed.length - 1];
-              if (last?.job_id || last?.id) {
-                setLastJobId(last.job_id || last.id);
-              }
-            }
-          }
-        }
-      } catch (err) {
-        console.warn("[Dashboard] Could not fetch dashboard metrics:", err);
-      } finally {
-        if (isMounted) {
-          setIsLoadingDashboard(false);
-          setIsLoadingJobs(false);
-        }
-      }
-    };
-
-    loadDashboardMetrics();
-
-    const handleDashboardUpdated = (e) => {
-      if (isMounted && e?.detail) {
-        setDashboardMetrics(e.detail);
-        if (Array.isArray(e.detail.topMatches) && e.detail.topMatches.length > 0) {
-          const transformed = e.detail.topMatches
-            .map((m, idx) => transformMatchToJob(m, idx))
-            .filter(Boolean);
-          if (transformed.length > 0) {
-            setJobs(transformed);
-            setHasResume(true);
-          }
-        }
-      }
-    };
-
-    window.addEventListener("dashboardDataUpdated", handleDashboardUpdated);
-    return () => {
-      isMounted = false;
-      window.removeEventListener("dashboardDataUpdated", handleDashboardUpdated);
-    };
-  }, []);
-
-  // 2. Fetch Dynamic Billing Status from API
-  useEffect(() => {
-    let isMounted = true;
-    const loadBilling = async () => {
-      try {
-        const status = await getBillingStatus();
-        if (isMounted && status) {
-          setBillingInfo(status);
-        }
-      } catch (err) {
-        console.warn("[Dashboard] Could not fetch billing status:", err);
-        try {
-          const stored =
-            localStorage.getItem("billingStatus") ||
-            sessionStorage.getItem("billingStatus");
-          if (stored && isMounted) {
-            setBillingInfo(JSON.parse(stored));
-          }
-        } catch {
-          // ignore
-        }
-      }
-    };
-
-    loadBilling();
-
-    const handleBillingUpdated = (e) => {
-      if (isMounted && e?.detail) {
-        setBillingInfo(e.detail);
-      }
-    };
-
-    window.addEventListener("billingStatusUpdated", handleBillingUpdated);
-    return () => {
-      isMounted = false;
-      window.removeEventListener("billingStatusUpdated", handleBillingUpdated);
-    };
-  }, []);
-
-  // 3. Fetch Dynamic User Info & Matched Jobs from API
+  // 1. Fetch Dynamic Dashboard Metrics, Top Matches & Applications from GET /api/dashboard
   useEffect(() => {
     let isMounted = true;
 
-    const loadDashboardData = async () => {
+    const loadDashboard = async () => {
       try {
+        setIsLoadingDashboard(true);
         setIsLoadingJobs(true);
-        setJobError(null);
 
         // Resolve User Name
         const user = getStoredUser();
@@ -959,449 +845,218 @@ const Dashboard = () => {
           })
           .catch(() => { });
 
-        // Check Resume Status
-        let activeResumeId = null;
-        try {
-          activeResumeId = await getPrimaryResumeId();
-        } catch {
-          // fallback
-        }
+        // Fetch Dashboard Data from GET /api/dashboard
+        const data = await getDashboard();
+        if (isMounted && data) {
+          setDashboardMetrics(data);
 
-        const onboardingState = getOnboardingState();
-        if (!activeResumeId && onboardingState?.resumeId) {
-          activeResumeId = String(onboardingState.resumeId);
-        }
-
-        const userHasResume =
-          Boolean(activeResumeId) || (await checkUserHasResume().catch(() => false));
-        if (isMounted) setHasResume(userHasResume);
-
-        if (!userHasResume) {
-          if (isMounted) {
-            setJobs([]);
-            setIsLoadingJobs(false);
-          }
-          return;
-        }
-
-        // 1. Fetch backend dashboard counters and top matches from GET /api/dashboard
-        let fetchedJobsCount = 0;
-
-        try {
-          const dashData = await getDashboard();
-          if (dashData && isMounted) {
-            if (Array.isArray(dashData.topMatches) && dashData.topMatches.length > 0) {
-              const topJobs = dashData.topMatches.map((m, idx) => transformMatchToJob(m, idx)).filter(Boolean);
-              setJobs(topJobs);
-              fetchedJobsCount = topJobs.length;
-            }
-          }
-        } catch (dashErr) {
-          console.debug("[Dashboard] GET /api/dashboard fallback notice:", dashErr?.message);
-        }
-
-        // 2. Fetch stored user jobs from GET /api/jobs
-        try {
-          const jobsRes = await getJobs({ sort: 'best_match', page: 0, size: 20 });
-          if (jobsRes && Array.isArray(jobsRes.items) && jobsRes.items.length > 0 && isMounted) {
-            const transformed = jobsRes.items.map((m, idx) => transformMatchToJob(m, idx)).filter(Boolean);
-            setJobs(transformed);
-            fetchedJobsCount = transformed.length;
-          }
-        } catch (jobsErr) {
-          console.debug("[Dashboard] GET /api/jobs fallback notice:", jobsErr?.message);
-        }
-
-        // 3. Fallback to Local Storage or Ngrok API only if GET /api/jobs returned 0 items
-        if (fetchedJobsCount === 0) {
-          const storedMatches = getStoredJobMatches();
-          let loadedMatches = [];
-
-          if (Array.isArray(storedMatches) && storedMatches.length > 0) {
-            loadedMatches = storedMatches;
-          } else if (
-            Array.isArray(onboardingState?.matches) &&
-            onboardingState.matches.length > 0
-          ) {
-            loadedMatches = onboardingState.matches;
-          }
-
-          if (loadedMatches.length > 0) {
-            const transformed = loadedMatches
+          // Populate Top Matches dynamically from /api/dashboard
+          if (Array.isArray(data.topMatches) && data.topMatches.length > 0) {
+            const transformed = data.topMatches
               .map((m, idx) => transformMatchToJob(m, idx))
               .filter(Boolean);
 
-            // Deduplicate jobs by unique ID
-            const uniqueJobs = [];
-            const seenIds = new Set();
-            for (const j of transformed) {
-              const jid = j.job_id || j.id;
-              if (jid && !seenIds.has(jid)) {
-                seenIds.add(jid);
-                uniqueJobs.push(j);
-              } else if (!jid) {
-                uniqueJobs.push(j);
-              }
-            }
-
-            if (isMounted) {
-              setJobs(uniqueJobs);
-              const last = uniqueJobs[uniqueJobs.length - 1];
-              if (last?.job_id || last?.id) {
-                setLastJobId(last.job_id || last.id);
-              }
+            setJobs(transformed);
+            setHasResume(true);
+            const last = transformed[transformed.length - 1];
+            if (last?.job_id || last?.id) {
+              setLastJobId(last.job_id || last.id);
             }
           } else {
-            // If user has a resume but no stored matches, fetch jobs dynamically from Ngrok API
-            const resumeIdVal = activeResumeId || getStoredResumeId();
-            if (resumeIdVal) {
-              try {
-                const result = await getMoreJobsForResume({
-                  N: 10,
-                  LastJDid: "",
-                  top_k: 1000,
-                  ResumeID: resumeIdVal,
-                });
-                if (
-                  result &&
-                  Array.isArray(result.matches) &&
-                  result.matches.length > 0
-                ) {
-                  const transformed = result.matches
-                    .map((m, idx) => transformMatchToJob(m, idx))
-                    .filter(Boolean);
-                  if (isMounted) {
-                    setJobs(transformed);
-                    const last = transformed[transformed.length - 1];
-                    if (last?.job_id || last?.id) {
-                      setLastJobId(last.job_id || last.id);
-                    }
-                  }
-                }
-              } catch (apiErr) {
-                console.warn("[Dashboard] Could not auto-fetch jobs:", apiErr);
-              }
-            }
+            setJobs([]);
+          }
+
+          // Populate Recent Applications dynamically from /api/dashboard
+          if (Array.isArray(data.recentApplications)) {
+            setApplications(data.recentApplications);
+          } else {
+            setApplications([]);
+          }
+
+          if (data.jobsFound > 0 || (Array.isArray(data.topMatches) && data.topMatches.length > 0)) {
+            setHasResume(true);
           }
         }
       } catch (err) {
-        console.warn("[Dashboard] Error loading dashboard data:", err);
-        if (isMounted) setJobError(err?.message || "Failed to load job matches.");
+        console.warn("[Dashboard] Could not fetch dashboard data:", err);
       } finally {
-        if (isMounted) setIsLoadingJobs(false);
+        if (isMounted) {
+          setIsLoadingDashboard(false);
+          setIsLoadingJobs(false);
+        }
       }
     };
 
-    loadDashboardData();
+    loadDashboard();
 
-    const handleMatchesUpdated = (e) => {
-      if (!isMounted) return;
-      if (Array.isArray(e?.detail) && e.detail.length > 0) {
-        const transformed = e.detail
-          .map((m, idx) => transformMatchToJob(m, idx))
-          .filter(Boolean);
-        const uniqueJobs = [];
-        const seenIds = new Set();
-        for (const j of transformed) {
-          const jid = j.job_id || j.id;
-          if (jid && !seenIds.has(jid)) {
-            seenIds.add(jid);
-            uniqueJobs.push(j);
-          } else if (!jid) {
-            uniqueJobs.push(j);
+    const handleDashboardUpdated = (e) => {
+      if (isMounted && e?.detail) {
+        setDashboardMetrics(e.detail);
+        if (Array.isArray(e.detail.topMatches)) {
+          const transformed = e.detail.topMatches
+            .map((m, idx) => transformMatchToJob(m, idx))
+            .filter(Boolean);
+          setJobs(transformed);
+          if (transformed.length > 0) {
+            setHasResume(true);
           }
         }
-        setJobs(uniqueJobs);
-        setHasResume(true);
-      } else {
-        loadDashboardData();
+        if (Array.isArray(e.detail.recentApplications)) {
+          setApplications(e.detail.recentApplications);
+        }
       }
     };
 
-    window.addEventListener("jobMatchesUpdated", handleMatchesUpdated);
-    window.addEventListener("storage", handleMatchesUpdated);
+    const handleApplicationsUpdated = () => {
+      loadDashboard();
+    };
+
+    window.addEventListener("dashboardDataUpdated", handleDashboardUpdated);
+    window.addEventListener("applicationsUpdated", handleApplicationsUpdated);
 
     return () => {
       isMounted = false;
-      window.removeEventListener("jobMatchesUpdated", handleMatchesUpdated);
-      window.removeEventListener("storage", handleMatchesUpdated);
-    };
-  }, []);
-
-  // Listen for user applications updates
-  useEffect(() => {
-    const handleApplicationsUpdated = () => {
-      try {
-        const stored =
-          localStorage.getItem("trackerApplications") ||
-          sessionStorage.getItem("trackerApplications") ||
-          localStorage.getItem("appliedJobs") ||
-          sessionStorage.getItem("appliedJobs");
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed)) {
-            setApplications(parsed);
-          }
-        }
-      } catch {
-        // ignore
-      }
-    };
-
-    window.addEventListener("applicationsUpdated", handleApplicationsUpdated);
-    window.addEventListener("storage", handleApplicationsUpdated);
-    return () => {
+      window.removeEventListener("dashboardDataUpdated", handleDashboardUpdated);
       window.removeEventListener("applicationsUpdated", handleApplicationsUpdated);
-      window.removeEventListener("storage", handleApplicationsUpdated);
     };
   }, []);
 
-  // Handle Close Modal on Escape and Click Outside
+  // 2. Fetch Dynamic Billing Status from API
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setActiveDropdown(null);
+    let isMounted = true;
+    const loadBilling = async () => {
+      try {
+        const status = await getBillingStatus();
+        if (isMounted && status) {
+          setBillingInfo(status);
+        }
+      } catch (err) {
+        console.warn("[Dashboard] Could not fetch billing status:", err);
       }
     };
 
+    loadBilling();
+
+    const handleBillingUpdated = (e) => {
+      if (isMounted && e?.detail) {
+        setBillingInfo(e.detail);
+      }
+    };
+
+    window.addEventListener("billingStatusUpdated", handleBillingUpdated);
+    return () => {
+      isMounted = false;
+      window.removeEventListener("billingStatusUpdated", handleBillingUpdated);
+    };
+  }, []);
+
+  // Handle Close Modal on Escape
+  useEffect(() => {
     const handleKeyDown = (event) => {
       if (event.key === "Escape") {
         setSelectedJobModal(null);
-        setActiveDropdown(null);
       }
     };
 
-    document.addEventListener("mousedown", handleClickOutside);
     window.addEventListener("keydown", handleKeyDown);
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
 
-  // Filter Clear Handler
-  const handleClear = () => {
-    setSearchQuery("");
-    setSelectedDate("All time");
-    setSelectedLocations([]);
-    setLocationSearch("");
-    setSelectedWorkplace([]);
-    setSelectedCompanies([]);
-    setCompanySearch("");
-    setSelectedDegrees([]);
-    setSelectedExperience("");
-    setSelectedRoles([]);
-    setSelectedJobTypes([]);
-    setSponsorsVisa(false);
-    setSelectedEmploymentTypes([]);
-  };
-
-  const toggleDropdown = (name) => {
-    setActiveDropdown((prev) => (prev === name ? null : name));
-  };
-
-  const toggleCheckbox = (list, setList, item) => {
-    if (list.includes(item)) {
-      setList(list.filter((i) => i !== item));
-    } else {
-      setList([...list, item]);
-    }
-  };
-
-  // Dynamic Filter Options Derived Directly From Loaded API Jobs
-  const dynamicCompanyOptions = useMemo(() => {
-    const set = new Set();
-    jobs.forEach((j) => {
-      if (j.company && j.company !== "Hiring Organization") {
-        set.add(j.company);
-      }
-    });
-    return Array.from(set);
-  }, [jobs]);
-
-  const dynamicRoleOptions = useMemo(() => {
-    const set = new Set();
-    jobs.forEach((j) => {
-      if (j.title && !j.title.startsWith("Position #")) {
-        set.add(j.title);
-      }
-    });
-    return Array.from(set);
-  }, [jobs]);
-
-  const dynamicLocationOptions = useMemo(() => {
-    const set = new Set();
-    jobs.forEach((j) => {
-      if (j.location && j.location !== "Remote / Flexible") {
-        set.add(j.location);
-      }
-    });
-    return Array.from(set);
-  }, [jobs]);
-
-  // Filter jobs based on active search and filter options
-  const filteredJobs = useMemo(() => {
-    return jobs.filter((job) => {
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const matchTitle = job.title?.toLowerCase().includes(q);
-        const matchComp = job.company?.toLowerCase().includes(q);
-        const matchLoc = job.location?.toLowerCase().includes(q);
-        const matchDesc = job.description?.toLowerCase().includes(q);
-        const matchSkills =
-          Array.isArray(job.requiredSkills) &&
-          job.requiredSkills.some((s) => s.toLowerCase().includes(q));
-        if (!matchTitle && !matchComp && !matchLoc && !matchDesc && !matchSkills) {
-          return false;
-        }
-      }
-
-      if (selectedWorkplace.length > 0) {
-        if (
-          !selectedWorkplace.some((w) =>
-            job.workMode?.toLowerCase().includes(w.toLowerCase())
-          )
-        ) {
-          return false;
-        }
-      }
-
-      if (selectedCompanies.length > 0) {
-        if (
-          !selectedCompanies.some((c) =>
-            job.company?.toLowerCase().includes(c.toLowerCase())
-          )
-        ) {
-          return false;
-        }
-      }
-
-      if (selectedLocations.length > 0) {
-        if (
-          !selectedLocations.some((l) =>
-            job.location?.toLowerCase().includes(l.toLowerCase())
-          )
-        ) {
-          return false;
-        }
-      }
-
-      if (selectedRoles.length > 0) {
-        if (
-          !selectedRoles.some((r) =>
-            job.title?.toLowerCase().includes(r.toLowerCase())
-          )
-        ) {
-          return false;
-        }
-      }
-
-      if (selectedJobTypes.length > 0) {
-        if (
-          !selectedJobTypes.some((t) =>
-            (job.type || "").toLowerCase().includes(t.toLowerCase())
-          )
-        ) {
-          return false;
-        }
-      }
-
-      if (selectedEmploymentTypes.length > 0) {
-        if (
-          !selectedEmploymentTypes.some((t) =>
-            (job.type || job.employmentType || job.employment_type || "")
-              .toLowerCase()
-              .includes(t.toLowerCase())
-          )
-        ) {
-          return false;
-        }
-      }
-
-      if (sponsorsVisa) {
-        const visa = job.sponsorsVisa || job.visa_sponsorship || job.rawMatch?.sponsorsVisa;
-        if (!visa) {
-          // If visa requirement is toggled, check if description mentions visa/sponsorship
-          const desc = (job.description || job.fullJdText || "").toLowerCase();
-          if (!desc.includes("visa") && !desc.includes("sponsor")) {
-            return false;
-          }
-        }
-      }
-
-      return true;
-    });
-  }, [
-    jobs,
-    searchQuery,
-    selectedWorkplace,
-    selectedCompanies,
-    selectedLocations,
-    selectedRoles,
-    selectedJobTypes,
-    selectedEmploymentTypes,
-    sponsorsVisa,
-  ]);
-
-  // Dynamic Dashboard Statistics Cards (From GET /api/dashboard & GET /api/resumes/matches/status)
+  // Dynamic Dashboard Statistics Cards (Exclusively From GET /api/dashboard)
   const statsCards = useMemo(() => {
     // 1. Jobs Found
     const jobsFoundVal =
-      typeof
-      typeof matchStatus?.matchCount === "number" && matchStatus.matchCount > 0
-        ? matchStatus.matchCount
-        : (dashboardMetrics?.jobsFound === "number"
+      typeof dashboardMetrics?.jobsFound === "number"
         ? dashboardMetrics.jobsFound
-        : jobs.length > 0
-        ? jobs.length
-        : 0);
+        : 0;
 
     // 2. Qualified Matches
     const qualifiedMatchesVal =
       typeof dashboardMetrics?.qualifiedMatches === "number"
         ? dashboardMetrics.qualifiedMatches
-        : jobs.filter((j) => (j.matchPercent || 0) >= 80).length;
+        : 0;
 
-    // 3. Allowance (for supporting text & limits)
+    // 3. Application Allowance & Limits
     const allowanceVal =
       typeof dashboardMetrics?.applicationAllowance === "number"
         ? dashboardMetrics.applicationAllowance
-        : typeof billingInfo?.applicationAllowance === "number"
-        ? billingInfo.applicationAllowance
-        : typeof billingInfo?.applicationLimit === "number"
-        ? billingInfo.applicationLimit
-        : 100;
+        : 0;
 
     const submittedVal =
       typeof dashboardMetrics?.applicationsSubmitted === "number"
         ? dashboardMetrics.applicationsSubmitted
-        : typeof billingInfo?.usedApplications === "number"
-        ? billingInfo.usedApplications
-        : typeof billingInfo?.applicationsUsed === "number"
-        ? billingInfo.applicationsUsed
-        : applications.length;
+        : 0;
 
     const remainingVal =
       typeof dashboardMetrics?.applicationsRemaining === "number"
         ? dashboardMetrics.applicationsRemaining
-        : typeof billingInfo?.remainingApplications === "number"
-        ? billingInfo.remainingApplications
-        : Math.max(0, allowanceVal - submittedVal);
+        : 0;
+
+    // 4. Resolve Active Plan Name for "Applications Remaining" card
+    const rawCandidate =
+      (typeof billingInfo?.planName === "string" && billingInfo.planName.trim()) ||
+      (typeof dashboardMetrics?.planName === "string" && dashboardMetrics.planName.trim()) ||
+      (typeof billingInfo?.plan === "string" && billingInfo.plan.trim()) ||
+      (typeof dashboardMetrics?.plan === "string" && dashboardMetrics.plan.trim()) ||
+      (typeof billingInfo?.planCode === "string" && billingInfo.planCode.trim()) ||
+      (typeof dashboardMetrics?.planCode === "string" && dashboardMetrics.planCode.trim()) ||
+      "";
+
+    const lowerCandidate = rawCandidate.toLowerCase();
+
+    let resolvedPlan = "";
+    if (rawCandidate && !["active plan", "no active plan"].includes(lowerCandidate)) {
+      if (lowerCandidate === "pro") resolvedPlan = "Pro Plan";
+      else if (lowerCandidate === "basic") resolvedPlan = "Basic Plan";
+      else if (lowerCandidate === "trial") resolvedPlan = "Free Trial";
+      else if (lowerCandidate === "free") resolvedPlan = "Free Trial";
+      else if (lowerCandidate.includes("trial pack")) resolvedPlan = "Trial Pack";
+      else if (lowerCandidate.includes("free trial")) resolvedPlan = "Free Trial";
+      else if (lowerCandidate.includes("free plan")) resolvedPlan = "Free Plan";
+      else if (lowerCandidate.includes("pro")) resolvedPlan = "Pro Plan";
+      else if (lowerCandidate.includes("basic")) resolvedPlan = "Basic Plan";
+      else if (
+        lowerCandidate.includes("plan") ||
+        lowerCandidate.includes("pack") ||
+        lowerCandidate.includes("trial")
+      ) {
+        resolvedPlan = rawCandidate
+          .split(" ")
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+          .join(" ");
+      } else {
+        resolvedPlan = `${rawCandidate.charAt(0).toUpperCase() + rawCandidate.slice(1)} Plan`;
+      }
+    } else if (allowanceVal >= 1000) {
+      resolvedPlan = "Pro Plan";
+    } else if (allowanceVal >= 250) {
+      resolvedPlan = "Basic Plan";
+    } else if (allowanceVal > 0 && allowanceVal <= 20) {
+      resolvedPlan = "Free Trial";
+    } else if (remainingVal > 250) {
+      resolvedPlan = "Pro Plan";
+    } else if (remainingVal > 20 && remainingVal <= 250) {
+      resolvedPlan = "Basic Plan";
+    } else if (remainingVal > 0 && remainingVal <= 10) {
+      resolvedPlan = "Free Trial";
+    } else if (billingInfo?.hasPlan === true || dashboardMetrics?.hasPlan === true) {
+      resolvedPlan = "Active Plan";
+    } else {
+      resolvedPlan = "Free Trial";
+    }
+
+    const remainingTitle = resolvedPlan
+      ? `Applications Remaining (${resolvedPlan})`
+      : "Applications Remaining";
 
     return [
       {
         id: "jobs-found",
         title: "Jobs Found",
         value: Number(jobsFoundVal).toLocaleString(),
-        supportingText: matchStatus?.lastComputedAt
-          ? `Computed ${formatMatchTime(matchStatus.lastComputedAt)}`
-          : jobsFoundVal > 0
-            ? "New jobs in the last 7 days"
-            : matchStatus?.hasPrimaryResume === false
-              ? "Primary resume required"
-              : hasResume
-                ? "No matches found"
-                : "Upload resume to find matches",
+        supportingText: jobsFoundVal > 0 ? "Discovered for your profile" : "No matches found yet",
         iconBg: "#EFF6FF",
         icon: dashboard1Icon,
       },
@@ -1417,57 +1072,48 @@ const Dashboard = () => {
         id: "applications-submitted",
         title: "Applications Submitted",
         value: Number(submittedVal).toLocaleString(),
-        supportingText: `Out of ${allowanceVal} monthly limit`,
+        supportingText: allowanceVal > 0 ? `Out of ${allowanceVal.toLocaleString()} monthly limit` : "Monthly limit",
         iconBg: "#FAF5FF",
         icon: dashboard3Icon,
       },
       {
         id: "applications-remaining",
         title: "Applications Remaining",
+        planName: resolvedPlan,
+        fullTitle: remainingTitle,
         value: Number(remainingVal).toLocaleString(),
         supportingText: "This month",
         iconBg: "#F0FDFA",
         icon: dashboard4Icon,
       },
     ];
-  }, [matchStatus, dashboardMetrics, jobs, billingInfo, applications, hasResume]);
+  }, [dashboardMetrics, billingInfo]);
 
-  // Dynamic Application Tabs with Counts
+  // Dynamic Application Tabs with Counts (Exclusively From GET /api/dashboard applicationCounts or recentApplications)
   const applicationTabs = useMemo(() => {
-    const counts = {
-      All: applications.length,
-      Submitted: 0,
-      "In Progress": 0,
-      "Needs Action": 0,
-      Failed: 0,
-      Skipped: 0,
+    const counts = dashboardMetrics?.applicationCounts || {};
+
+    const countForCategory = (key, categoryName) => {
+      if (typeof counts[key] === "number") return counts[key];
+      if (categoryName === "All") return applications.length;
+      return applications.filter((app) => getApplicationCategory(app) === categoryName).length;
     };
 
-    applications.forEach((app) => {
-      const status = app.statusCategory || app.status || "Submitted";
-      if (counts[status] !== undefined) {
-        counts[status] += 1;
-      } else {
-        counts.Submitted += 1;
-      }
-    });
-
     return [
-      { name: "All", count: counts.All },
-      { name: "Submitted", count: counts.Submitted },
-      { name: "In Progress", count: counts["In Progress"] },
-      { name: "Needs Action", count: counts["Needs Action"] },
-      { name: "Failed", count: counts.Failed },
-      { name: "Skipped", count: counts.Skipped },
+      { name: "All", count: countForCategory("all", "All") },
+      { name: "Submitted", count: countForCategory("submitted", "Submitted") },
+      { name: "In Progress", count: countForCategory("inProgress", "In Progress") },
+      { name: "Needs Action", count: countForCategory("needsAction", "Needs Action") },
+      { name: "Failed", count: countForCategory("failed", "Failed") },
+      { name: "Skipped", count: countForCategory("skipped", "Skipped") },
     ];
-  }, [applications]);
+  }, [dashboardMetrics?.applicationCounts, applications]);
 
   // Filtered Applications Table List
   const filteredApplications = useMemo(() => {
     if (selectedAppTab === "All") return applications;
     return applications.filter(
-      (app) =>
-        (app.statusCategory || app.status || "Submitted") === selectedAppTab
+      (app) => getApplicationCategory(app) === selectedAppTab
     );
   }, [applications, selectedAppTab]);
 
@@ -1709,15 +1355,23 @@ const Dashboard = () => {
                 >
                   <img
                     src={card.icon}
-                    alt={card.title}
+                    alt={card.fullTitle || card.title}
                     className="w-[24px] h-[24px] object-contain"
                   />
                 </div>
 
                 {/* Text Content */}
-                <div className="flex flex-col min-w-0">
-                  <span className="text-[13px] font-medium text-[#64748B] truncate">
+                <div className="flex flex-col min-w-0 flex-1">
+                  <span
+                    className="text-[13px] font-medium text-[#64748B] leading-snug line-clamp-2"
+                    title={card.fullTitle || card.title}
+                  >
                     {card.title}
+                    {card.planName && (
+                      <span className="font-bold text-[#0F172A] ml-1">
+                        ({card.planName})
+                      </span>
+                    )}
                   </span>
                   <span className="text-[26px] font-bold text-[#0F172A] tracking-tight leading-tight my-0.5">
                     {card.value}
@@ -1730,9 +1384,7 @@ const Dashboard = () => {
             ))}
           </div>
 
-
-
-          {/* 4. Recent Applications Section (Dynamic From API / Applications State) */}
+          {/* 3. Recent Applications Section (Dynamic From GET /api/dashboard recentApplications) */}
           <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-6 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col gap-5 w-full mt-2">
 
             {/* Header: Title */}
@@ -1791,7 +1443,7 @@ const Dashboard = () => {
                 <p className="text-xs text-[#64748B] max-w-sm">
                   You haven't submitted any job applications yet. Auto-apply to matched jobs or apply manually to start tracking them here.
                 </p>
-                {filteredJobs.length > 0 && (
+                {jobs.length > 0 && (
                   <button
                     type="button"
                     onClick={() => navigate("/auto-apply")}
@@ -1830,105 +1482,137 @@ const Dashboard = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {filteredApplications.map((app) => (
-                      <tr
-                        key={app.id || app.job_id || Math.random()}
-                        className="hover:bg-slate-50/60 transition-colors cursor-pointer"
-                        onClick={() => handleOpenJobModal(app)}
-                      >
-                        {/* Company */}
-                        <td className="py-4 pr-3">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-[28px] h-[28px] rounded-[6px] bg-white flex items-center justify-center shrink-0 border border-slate-100 p-1">
-                              <img
-                                src={app.logo || aiLogo}
-                                alt={app.company}
-                                className="w-[20px] h-[20px] object-contain"
-                              />
+                    {filteredApplications.map((app) => {
+                      const company = app.companyName || app.company || "Hiring Organization";
+                      const jobTitle = app.jobTitle || app.title || "Job Position";
+                      const rawScore = app.atsScore !== undefined && app.atsScore !== null ? app.atsScore : app.matchPercent;
+                      const scoreDisplay = rawScore !== undefined && rawScore !== null && !isNaN(Number(rawScore)) ? `${Math.round(Number(rawScore))}%` : "75%";
+                      const rawStatus = String(app.status || app.state || app.tab || "Submitted").toUpperCase().replace(/[\s-]/g, "_");
+
+                      let statusLabel = "Submitted";
+                      let dotColor = "bg-[#059669]";
+                      let textColor = "text-[#059669]";
+
+                      if (rawStatus === "PREPARING") {
+                        statusLabel = "Preparing";
+                        dotColor = "bg-[#7C3AED]";
+                        textColor = "text-[#7C3AED]";
+                      } else if (rawStatus === "QUEUED") {
+                        statusLabel = "Queued";
+                        dotColor = "bg-[#4F46E5]";
+                        textColor = "text-[#4F46E5]";
+                      } else if (rawStatus === "IN_PROGRESS") {
+                        statusLabel = "In Progress";
+                        dotColor = "bg-[#2563EB]";
+                        textColor = "text-[#2563EB]";
+                      } else if (rawStatus === "NEEDS_ACTION") {
+                        statusLabel = "Needs Action";
+                        dotColor = "bg-[#D97706]";
+                        textColor = "text-[#D97706]";
+                      } else if (rawStatus === "FAILED" || rawStatus === "ERROR") {
+                        statusLabel = "Failed";
+                        dotColor = "bg-[#DC2626]";
+                        textColor = "text-[#DC2626]";
+                      } else if (rawStatus === "SKIPPED") {
+                        statusLabel = "Skipped";
+                        dotColor = "bg-[#64748B]";
+                        textColor = "text-[#64748B]";
+                      } else if (rawStatus === "SUBMITTED" || rawStatus === "COMPLETED" || rawStatus === "SUCCESS") {
+                        statusLabel = "Submitted";
+                        dotColor = "bg-[#059669]";
+                        textColor = "text-[#059669]";
+                      } else {
+                        statusLabel = cleanHtmlText(app.status || "Submitted");
+                      }
+
+                      const appliedDate = app.appliedAt ? formatPostedDate(app.appliedAt) : (app.applied || "Recently");
+
+                      const modalJobPayload = {
+                        ...app,
+                        title: jobTitle,
+                        company: company,
+                        companyDomain: app.companyDomain || "",
+                        location: app.location || "Remote",
+                        fullLocation: app.fullLocation || app.location || "Remote",
+                        workMode: app.workplace || app.workMode || "Remote",
+                        type: app.employmentType || app.type || "Full-time",
+                      };
+
+                      return (
+                        <tr
+                          key={app.id || app.jobId || app.job_id || Math.random()}
+                          className="hover:bg-slate-50/60 transition-colors cursor-pointer"
+                          onClick={() => handleOpenJobModal(modalJobPayload)}
+                        >
+                          {/* Company */}
+                          <td className="py-4 pr-3">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-[28px] h-[28px] rounded-[6px] bg-white flex items-center justify-center shrink-0 border border-slate-100 p-1">
+                                <img
+                                  src={app.logo || aiLogo}
+                                  alt={company}
+                                  className="w-[20px] h-[20px] object-contain"
+                                />
+                              </div>
+                              <span className="text-[14px] font-bold text-[#0F172A]">
+                                {company}
+                              </span>
                             </div>
-                            <span className="text-[14px] font-bold text-[#0F172A]">
-                              {app.company}
+                          </td>
+
+                          {/* Job Title */}
+                          <td className="py-4 px-3 text-[13.5px] font-medium text-[#334155]">
+                            {jobTitle}
+                          </td>
+
+                          {/* ATS Match */}
+                          <td className="py-4 px-3">
+                            <span className="text-[13px] font-bold text-[#4F46E5]">
+                              {scoreDisplay}
                             </span>
-                          </div>
-                        </td>
+                          </td>
 
-                        {/* Job Title */}
-                        <td className="py-4 px-3 text-[13.5px] font-medium text-[#334155]">
-                          {app.jobTitle || app.title}
-                        </td>
+                          {/* Resume */}
+                          <td className="py-4 px-3">
+                            <div className="flex items-center gap-1.5">
+                              <DocumentIcon color="#6366F1" />
+                              <span className="text-[13px] font-medium text-[#6366F1]">
+                                {app.resumeType || app.resume || "Tailored"}
+                              </span>
+                            </div>
+                          </td>
 
-                        {/* ATS Match */}
-                        <td className="py-4 px-3">
-                          <span
-                            className={`text-[13px] font-bold ${(app.matchPercent || 0) >= 80
-                                ? "text-[#059669]"
-                                : (app.matchPercent || 0) >= 60
-                                  ? "text-[#D97706]"
-                                  : "text-[#4F46E5]"
-                              }`}
-                          >
-                            {app.atsMatch || `${app.matchPercent || 0}%`}
-                          </span>
-                        </td>
+                          {/* Status */}
+                          <td className="py-4 px-3">
+                            <div className="flex items-center gap-2">
+                              <span className={`w-2 h-2 rounded-full ${dotColor}`} />
+                              <span className={`text-[13px] font-medium ${textColor}`}>
+                                {statusLabel}
+                              </span>
+                            </div>
+                          </td>
 
-                        {/* Resume */}
-                        <td className="py-4 px-3">
-                          <div className="flex items-center gap-1.5">
-                            <DocumentIcon color="#6366F1" />
-                            <span className="text-[13px] font-medium text-[#6366F1]">
-                              {app.resume || "Tailored"}
-                            </span>
-                          </div>
-                        </td>
+                          {/* Applied */}
+                          <td className="py-4 px-3 text-[13px] text-[#64748B]">
+                            {appliedDate}
+                          </td>
 
-                        {/* Status */}
-                        <td className="py-4 px-3">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`w-2 h-2 rounded-full ${app.status === "Submitted"
-                                  ? "bg-[#059669]"
-                                  : app.status === "In Progress"
-                                    ? "bg-[#2563EB]"
-                                    : app.status === "Failed"
-                                      ? "bg-[#DC2626]"
-                                      : "bg-[#D97706]"
-                                }`}
-                            />
-                            <span
-                              className={`text-[13px] font-medium ${app.status === "Submitted"
-                                  ? "text-[#059669]"
-                                  : app.status === "In Progress"
-                                    ? "text-[#2563EB]"
-                                    : app.status === "Failed"
-                                      ? "text-[#DC2626]"
-                                      : "text-[#D97706]"
-                                }`}
+                          {/* Actions */}
+                          <td className="py-4 pl-3 text-right pr-2">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenJobModal(modalJobPayload);
+                              }}
+                              className="h-[30px] px-3.5 rounded-[8px] border border-[#E2E8F0] bg-white text-[12.5px] font-medium text-[#334155] hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
                             >
-                              {app.status || "Submitted"}
-                            </span>
-                          </div>
-                        </td>
-
-                        {/* Applied */}
-                        <td className="py-4 px-3 text-[13px] text-[#64748B]">
-                          {app.applied || "Recently"}
-                        </td>
-
-                        {/* Actions */}
-                        <td className="py-4 pl-3 text-right pr-2">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpenJobModal(app);
-                            }}
-                            className="h-[30px] px-3.5 rounded-[8px] border border-[#E2E8F0] bg-white text-[12.5px] font-medium text-[#334155] hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
-                          >
-                            View
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                              View
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -2635,25 +2319,25 @@ const Dashboard = () => {
                       <div className="flex flex-col text-[12.5px]">
                         <span className="text-[#64748B]">Experience</span>
                         <span className="font-semibold text-[#0F172A] mt-0.5">
-                          {selectedJobModal.experience}
+                          {selectedJobModal.experience || "Not specified"}
                         </span>
                       </div>
                       <div className="flex flex-col text-[12.5px]">
                         <span className="text-[#64748B]">Work mode</span>
                         <span className="font-semibold text-[#0F172A] mt-0.5">
-                          {selectedJobModal.workMode}
+                          {selectedJobModal.workMode || selectedJobModal.workplace || "Remote"}
                         </span>
                       </div>
                       <div className="flex flex-col text-[12.5px]">
                         <span className="text-[#64748B]">Employment type</span>
                         <span className="font-semibold text-[#0F172A] mt-0.5">
-                          {selectedJobModal.type}
+                          {selectedJobModal.type || selectedJobModal.employmentType || "Full-time"}
                         </span>
                       </div>
                       <div className="flex flex-col text-[12.5px]">
                         <span className="text-[#64748B]">Location</span>
                         <span className="font-semibold text-[#0F172A] mt-0.5">
-                          {selectedJobModal.fullLocation}
+                          {selectedJobModal.fullLocation || selectedJobModal.location || "Remote"}
                         </span>
                       </div>
                     </div>
@@ -2883,7 +2567,7 @@ const Dashboard = () => {
                     }
                     compact={false}
                   />
-                 </div>
+                </div>
               </div>
 
               {/* Modal Footer */}
