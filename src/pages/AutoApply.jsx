@@ -17,6 +17,11 @@ import {
   getMoreJobsForResume,
   getStoredResumeId,
   getBillingStatus,
+  getResumes,
+  applyToJobs,
+  applyToJobsInBatches,
+  extractNumericJobId,
+  extractNumericResumeId,
 } from "../services/api";
 
 const dateOptions = [
@@ -110,6 +115,93 @@ const AutoApply = () => {
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [selectedJobModal, setSelectedJobModal] = useState(null);
   const [isJobSaved, setIsJobSaved] = useState(false);
+
+  // Application Service States
+  const [isApplyingPanelJob, setIsApplyingPanelJob] = useState(false);
+  const [panelApplyStatus, setPanelApplyStatus] = useState(null);
+
+  const handleApplyToPanelJob = async () => {
+    if (!selectedJobModal) return;
+
+    const numericJobId = extractNumericJobId(selectedJobModal);
+    if (!numericJobId) {
+      setPanelApplyStatus({
+        type: "error",
+        message: "Displayed job is missing a valid numeric backend Job ID.",
+      });
+      return;
+    }
+
+    if (isApplyingPanelJob) return;
+
+    let numericResumeId = null;
+    try {
+      const resumes = await getResumes();
+      if (Array.isArray(resumes) && resumes.length > 0) {
+        const primary = resumes.find((r) => r.isPrimary) || resumes[0];
+        numericResumeId = extractNumericResumeId(primary);
+      }
+    } catch {
+      // ignore
+    }
+
+    if (!numericResumeId) {
+      const storedId =
+        localStorage.getItem("selected_resume_id") ||
+        localStorage.getItem("resume_id") ||
+        localStorage.getItem("resumeId");
+      if (storedId) numericResumeId = extractNumericResumeId(storedId);
+    }
+
+    if (!numericResumeId) {
+      setPanelApplyStatus({
+        type: "error",
+        message: "No valid resume found. Please go to Profile to select/upload a resume.",
+      });
+      return;
+    }
+
+    setIsApplyingPanelJob(true);
+    setPanelApplyStatus(null);
+
+    try {
+      const res = await applyToJobs({ resumeId: numericResumeId, jobIds: [numericJobId] });
+      const queuedCount = res.queued?.length || 0;
+      const skippedArr = res.skipped || [];
+
+      if (queuedCount > 0) {
+        setPanelApplyStatus({
+          type: "success",
+          message: `Application queued successfully! (${queuedCount} queued)`,
+        });
+
+        getBillingStatus()
+          .then((status) => {
+            if (status) setBillingInfo(status);
+          })
+          .catch(() => {});
+      } else if (skippedArr.length > 0) {
+        const reason = skippedArr[0]?.reason || "ALREADY_SUBMITTED";
+        setPanelApplyStatus({
+          type: "skipped",
+          message: `Application skipped: ${reason}`,
+        });
+      } else {
+        setPanelApplyStatus({
+          type: "skipped",
+          message: "Application skipped (No new jobs queued).",
+        });
+      }
+    } catch (err) {
+      console.error("[AutoApply] Panel apply error:", err);
+      setPanelApplyStatus({
+        type: "error",
+        message: err.message || "Failed to submit application.",
+      });
+    } finally {
+      setIsApplyingPanelJob(false);
+    }
+  };
 
   // Jobs state & Selected Jobs for Auto Apply
   const [jobs, setJobs] = useState([]);
@@ -1408,7 +1500,7 @@ const AutoApply = () => {
               <div>
                 <h3 className="text-[14.5px] font-bold text-[#0F172A]">Job description</h3>
                 <p className="text-[13px] text-[#475569] leading-relaxed mt-1.5">
-                  {selectedJobModal.description}
+                  {selectedJobModal.description || "No description available."}
                 </p>
               </div>
 
@@ -1416,7 +1508,7 @@ const AutoApply = () => {
               <div>
                 <h3 className="text-[14px] font-bold text-[#0F172A]">Key responsibilities:</h3>
                 <ul className="space-y-2 mt-2">
-                  {selectedJobModal.responsibilities.map((resp, idx) => (
+                  {(selectedJobModal.responsibilities || []).map((resp, idx) => (
                     <li key={idx} className="text-[13px] text-[#475569] flex items-start gap-2 leading-snug">
                       <span className="text-[#94A3B8] shrink-0">•</span>
                       <span>{resp}</span>
@@ -1429,7 +1521,7 @@ const AutoApply = () => {
               <div>
                 <h3 className="text-[14px] font-bold text-[#0F172A]">Required skills</h3>
                 <div className="flex flex-wrap gap-2 mt-2">
-                  {selectedJobModal.requiredSkills.map((skill) => (
+                  {(selectedJobModal.requiredSkills || []).map((skill) => (
                     <span
                       key={skill}
                       className="bg-[#F1F5F9] text-[#334155] rounded-[8px] px-3 py-1.5 text-[12.5px] font-medium"
@@ -1444,7 +1536,7 @@ const AutoApply = () => {
               <div>
                 <h3 className="text-[14px] font-bold text-[#0F172A]">Preferred skills</h3>
                 <div className="flex flex-wrap gap-2 mt-2">
-                  {selectedJobModal.preferredSkills.map((skill) => (
+                  {(selectedJobModal.preferredSkills || []).map((skill) => (
                     <span
                       key={skill}
                       className="bg-[#F1F5F9] text-[#334155] rounded-[8px] px-3 py-1.5 text-[12.5px] font-medium"
@@ -1461,19 +1553,19 @@ const AutoApply = () => {
                 <div className="grid grid-cols-2 gap-y-2.5 gap-x-4">
                   <div className="flex items-center gap-2 text-[13px]">
                     <span className="text-[#64748B]">Experience</span>
-                    <span className="font-semibold text-[#0F172A]">{selectedJobModal.experience}</span>
+                    <span className="font-semibold text-[#0F172A]">{selectedJobModal.experience || "Not specified"}</span>
                   </div>
                   <div className="flex items-center gap-2 text-[13px]">
                     <span className="text-[#64748B]">Work mode</span>
-                    <span className="font-semibold text-[#0F172A]">{selectedJobModal.workMode}</span>
+                    <span className="font-semibold text-[#0F172A]">{selectedJobModal.workMode || selectedJobModal.workplace || "Remote"}</span>
                   </div>
                   <div className="flex items-center gap-2 text-[13px]">
                     <span className="text-[#64748B]">Employment type</span>
-                    <span className="font-semibold text-[#0F172A]">{selectedJobModal.type}</span>
+                    <span className="font-semibold text-[#0F172A]">{selectedJobModal.type || selectedJobModal.employmentType || "Full-time"}</span>
                   </div>
                   <div className="flex items-center gap-2 text-[13px]">
                     <span className="text-[#64748B]">Location</span>
-                    <span className="font-semibold text-[#0F172A]">{selectedJobModal.fullLocation}</span>
+                    <span className="font-semibold text-[#0F172A]">{selectedJobModal.fullLocation || selectedJobModal.location || "Remote"}</span>
                   </div>
                 </div>
               </div>
@@ -1481,12 +1573,46 @@ const AutoApply = () => {
 
             {/* Modal Footer */}
             <div className="p-5 border-t border-slate-100 bg-white shrink-0 flex flex-col gap-2.5">
+              {panelApplyStatus && (
+                <div
+                  className={`p-3 rounded-xl border text-[12.5px] font-medium flex items-center justify-between gap-2 ${
+                    panelApplyStatus.type === "success"
+                      ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                      : panelApplyStatus.type === "skipped"
+                      ? "bg-amber-50 border-amber-200 text-amber-800"
+                      : "bg-rose-50 border-rose-200 text-rose-800"
+                  }`}
+                >
+                  <span>{panelApplyStatus.message}</span>
+                  <button
+                    type="button"
+                    onClick={() => setPanelApplyStatus(null)}
+                    className="text-xs font-bold text-slate-400 hover:text-slate-600 shrink-0"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
               <button
                 type="button"
-                className="w-full h-[44px] rounded-[12px] bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-[13.5px] font-medium flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.99] transition-all cursor-pointer"
+                onClick={handleApplyToPanelJob}
+                disabled={isApplyingPanelJob}
+                className="w-full h-[44px] rounded-[12px] bg-[#2563EB] hover:bg-[#1D4ED8] disabled:opacity-60 text-white text-[13.5px] font-medium flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.99] transition-all cursor-pointer disabled:cursor-not-allowed"
               >
-                <span>Apply now</span>
-                <span>→</span>
+                {isApplyingPanelJob ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                    </svg>
+                    <span>Submitting application...</span>
+                  </span>
+                ) : (
+                  <>
+                    <span>Apply now</span>
+                    <span>→</span>
+                  </>
+                )}
               </button>
 
               <p className="text-[11.5px] text-[#94A3B8] text-center">

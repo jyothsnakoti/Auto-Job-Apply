@@ -15,24 +15,29 @@ import {
   getJobById,
   getScoreForEnhancedResume,
   checkUserHasResume,
+  applyToJobs,
+  applyToJobsInBatches,
+  extractNumericJobId,
+  extractNumericResumeId,
+  getBillingStatus,
+  getStoredAppliedJobIds,
+  isJobAlreadyApplied,
+  getApplicationStatuses,
+  isApplyNowHiddenForJob,
+  getMatchingApplicationForJob,
+  extractJobIdFromApplicationRecord,
+  normalizeApplicationStatus,
 } from "../services/api";
 import {
   getResumes,
   setPrimaryResume,
   refreshResumeMatches,
 } from "../services/resumeService";
-
-import aiLogo from "../assets/ai.svg";
-import mapIcon from "../assets/map.svg";
-import tickIcon from "../assets/tick.svg";
-
 // Verified tick icon
 const VerifiedTick = () => (
-  <img
-    src={tickIcon}
-    alt="Verified"
-    className="w-3.5 h-3.5 object-contain inline-block shrink-0"
-  />
+  <svg className="w-3.5 h-3.5 text-[#4F46E5] inline-block shrink-0" fill="currentColor" viewBox="0 0 20 20">
+    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+  </svg>
 );
 
 // Standard filter static options
@@ -364,13 +369,15 @@ const transformMatchToJob = (match, index = 0) => {
     }
   }
 
-  const id = match.jobId || match.job_id || match.id || match.JDid || match.jd_id || `job-${index + 1}`;
+  const numericJobId = extractNumericJobId(match);
+  const primaryId = match.job_id || match.jobId || match.id || match.JDid || match.jd_id || (numericJobId !== null ? numericJobId : `job-${index + 1}`);
 
   return {
-    id,
-    jobId: id,
-    job_id: id,
-    JDid: id,
+    id: primaryId,
+    jobId: numericJobId !== null ? numericJobId : (match.jobId || primaryId),
+    job_id: match.job_id || primaryId,
+    numericJobId,
+    JDid: match.JDid || primaryId,
     title,
     company,
     companyDomain,
@@ -547,6 +554,301 @@ const BrowseJobs = () => {
   const [isUpdatingAts, setIsUpdatingAts] = useState(false);
   const [updatedAtsScores, setUpdatedAtsScores] = useState({});
 
+  // Application Service States & Toast Notifications
+  const [appliedJobIds, setAppliedJobIds] = useState(() => getStoredAppliedJobIds());
+  const [applicationMap, setApplicationMap] = useState(() => new Map());
+  const [isStatusLoading, setIsStatusLoading] = useState(true);
+  const [statusError, setStatusError] = useState(null);
+  const [applyingCardIds, setApplyingCardIds] = useState({});
+  const [isApplyingPanelJob, setIsApplyingPanelJob] = useState(false);
+  const [panelApplyStatus, setPanelApplyStatus] = useState(null);
+  const [isAutoApplyingAll, setIsAutoApplyingAll] = useState(false);
+  const [toast, setToast] = useState({ show: false, message: "", type: "success" });
+
+  const fetchApplicationStatuses = useCallback(async () => {
+    setIsStatusLoading(true);
+    setStatusError(null);
+    try {
+      const { applicationMap: map } = await getApplicationStatuses();
+      setApplicationMap(map);
+    } catch (err) {
+      console.error("[BrowseJobs] Failed to fetch application statuses:", err);
+      setStatusError(err.message || "Failed to load application statuses from server.");
+    } finally {
+      setIsStatusLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchApplicationStatuses();
+  }, [fetchApplicationStatuses]);
+
+  useEffect(() => {
+    const handleAppliedUpdated = () => {
+      setAppliedJobIds(getStoredAppliedJobIds());
+      fetchApplicationStatuses();
+    };
+    window.addEventListener("appliedJobIdsUpdated", handleAppliedUpdated);
+    window.addEventListener("storage", handleAppliedUpdated);
+    return () => {
+      window.removeEventListener("appliedJobIdsUpdated", handleAppliedUpdated);
+      window.removeEventListener("storage", handleAppliedUpdated);
+    };
+  }, [fetchApplicationStatuses]);
+
+  useEffect(() => {
+    if (toast.show) {
+      const timer = setTimeout(() => {
+        setToast((prev) => ({ ...prev, show: false }));
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast.show]);
+
+  const showToast = useCallback((message, type = "success") => {
+    setToast({ show: true, message, type });
+  }, []);
+
+  /**
+   * Helper to retrieve active or primary numeric resume ID
+   */
+  const getAppResumeId = useCallback(async () => {
+    let targetResume = selectedResumeRef.current;
+    let numericId = extractNumericResumeId(targetResume);
+
+    if (!numericId && userResumes.length > 0) {
+      targetResume = userResumes.find((r) => r.isPrimary) || userResumes[0];
+      numericId = extractNumericResumeId(targetResume);
+    }
+
+    if (!numericId) {
+      try {
+        const fetched = await getResumes();
+        if (Array.isArray(fetched) && fetched.length > 0) {
+          setUserResumes(fetched);
+          targetResume = fetched.find((r) => r.isPrimary) || fetched[0];
+          numericId = extractNumericResumeId(targetResume);
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    if (!numericId && activeResumeIdRef.current) {
+      numericId = extractNumericResumeId(activeResumeIdRef.current);
+    }
+
+    return { numericId, resume: targetResume };
+  }, [userResumes]);
+
+  /**
+   * Apply Now handler for single job card
+   */
+  const handleApplyToCardJob = async (job, e) => {
+    if (e) e.stopPropagation();
+    if (!job) return;
+
+    const numericJobId = extractNumericJobId(job);
+    const cardKey = job.id || job.jobId || numericJobId || `job-${Math.random()}`;
+
+    if (!numericJobId) {
+      showToast("Selected job is missing a valid numeric backend Job ID.", "error");
+      return;
+    }
+
+    if (applyingCardIds[cardKey]) return; // prevent duplicate clicks
+
+    const { numericId: numericResumeId } = await getAppResumeId();
+    if (!numericResumeId) {
+      showToast("No resume selected. Go to Profile to upload/select a resume.", "error");
+      return;
+    }
+
+    setApplyingCardIds((prev) => ({ ...prev, [cardKey]: true }));
+
+    try {
+      const res = await applyToJobs({ resumeId: numericResumeId, jobIds: [numericJobId] });
+      const queuedCount = res.queued?.length || 0;
+      const skippedArr = res.skipped || [];
+
+      if (queuedCount > 0) {
+        showToast(`Application queued successfully! (${queuedCount} queued)`, "success");
+      } else if (skippedArr.length > 0) {
+        const reason = skippedArr[0]?.reason || "ALREADY_SUBMITTED";
+        showToast(`Skipped (${reason})`, "warning");
+      } else {
+        showToast("Application skipped (No new jobs queued).", "warning");
+      }
+
+      fetchApplicationStatuses();
+
+      getBillingStatus()
+        .then((status) => {
+          if (status) window.dispatchEvent(new CustomEvent("billingStatusUpdated", { detail: status }));
+        })
+        .catch(() => { });
+    } catch (err) {
+      console.error("[BrowseJobs] Single card apply error:", err);
+      showToast(err.message || "Failed to submit application.", "error");
+    } finally {
+      setApplyingCardIds((prev) => {
+        const copy = { ...prev };
+        delete copy[cardKey];
+        return copy;
+      });
+    }
+  };
+
+  /**
+   * Apply Now handler for Job Details side panel
+   */
+  const handleApplyToPanelJob = async () => {
+    if (!selectedJobModal) return;
+
+    const numericJobId = extractNumericJobId(selectedJobModal);
+    if (!numericJobId) {
+      setPanelApplyStatus({
+        type: "error",
+        message: "Displayed job is missing a valid numeric backend Job ID.",
+      });
+      showToast("Displayed job is missing a valid numeric backend Job ID.", "error");
+      return;
+    }
+
+    if (isApplyingPanelJob) return;
+
+    const { numericId: numericResumeId } = await getAppResumeId();
+    if (!numericResumeId) {
+      setPanelApplyStatus({
+        type: "error",
+        message: "No resume selected. Please go to Profile to select or upload a resume.",
+      });
+      showToast("No resume selected. Please go to Profile to select or upload a resume.", "error");
+      return;
+    }
+
+    setIsApplyingPanelJob(true);
+    setPanelApplyStatus(null);
+
+    try {
+      const res = await applyToJobs({ resumeId: numericResumeId, jobIds: [numericJobId] });
+      const queuedCount = res.queued?.length || 0;
+      const skippedArr = res.skipped || [];
+
+      fetchApplicationStatuses();
+
+      if (queuedCount > 0) {
+        const msg = `Application queued! Redirecting to Applications...`;
+        setPanelApplyStatus({ type: "success", message: msg });
+        showToast(msg, "success");
+
+        getBillingStatus()
+          .then((status) => {
+            if (status) window.dispatchEvent(new CustomEvent("billingStatusUpdated", { detail: status }));
+          })
+          .catch(() => { });
+
+        setTimeout(() => {
+          setSelectedJobModal(null);
+          setPanelApplyStatus(null);
+          navigate("/auto-apply", { state: { tab: "in-progress" } });
+        }, 1200);
+      } else if (skippedArr.length > 0) {
+        const reason = skippedArr[0]?.reason || "ALREADY_SUBMITTED";
+        const msg = `Application skipped: ${reason}`;
+        setPanelApplyStatus({ type: "skipped", message: msg });
+        showToast(msg, "warning");
+      } else {
+        const msg = "Application skipped (No new jobs queued).";
+        setPanelApplyStatus({ type: "skipped", message: msg });
+        showToast(msg, "warning");
+      }
+    } catch (err) {
+      console.error("[BrowseJobs] Panel apply error:", err);
+      const msg = err.message || "Failed to submit application.";
+      setPanelApplyStatus({ type: "error", message: msg });
+      showToast(msg, "error");
+    } finally {
+      setIsApplyingPanelJob(false);
+    }
+  };
+
+  /**
+   * Auto Apply All handler
+   */
+  const handleAutoApplyAll = async () => {
+    if (isAutoApplyingAll) return;
+
+    setIsAutoApplyingAll(true);
+
+    try {
+      const billing = await getBillingStatus().catch(() => null);
+      const remaining =
+        typeof billing?.remainingApplications === "number"
+          ? billing.remainingApplications
+          : typeof billing?.remaining === "number"
+            ? billing.remaining
+            : 100;
+
+      if (remaining <= 0) {
+        showToast("Insufficient application credits. Please upgrade your plan in Subscriptions.", "error");
+        setIsAutoApplyingAll(false);
+        return;
+      }
+
+      const { numericId: numericResumeId } = await getAppResumeId();
+      if (!numericResumeId) {
+        showToast("No resume selected. Please go to Profile to upload/select a resume.", "error");
+        setIsAutoApplyingAll(false);
+        return;
+      }
+
+      const currentJobsList = jobsCache[activePage] || [];
+      const eligibleJobs = currentJobsList.filter(
+        (j) => !isApplyNowHiddenForJob(j, applicationMap)
+      );
+
+      const validJobs = eligibleJobs
+        .map((j) => ({ job: j, numericId: extractNumericJobId(j) }))
+        .filter((item) => item.numericId !== null);
+
+      if (validJobs.length === 0) {
+        showToast("No unapplied or retryable jobs found on this page.", "warning");
+        setIsAutoApplyingAll(false);
+        return;
+      }
+
+      const jobIdsToApply = validJobs.map((item) => item.numericId).slice(0, remaining);
+
+      const batchResult = await applyToJobsInBatches({
+        resumeId: numericResumeId,
+        jobIds: jobIdsToApply,
+        batchSize: 50,
+      });
+
+      const queuedCount = batchResult.queued.length;
+      const skippedCount = batchResult.skipped.length;
+
+      fetchApplicationStatuses();
+
+      showToast(
+        `Batch Auto Apply: ${queuedCount} Queued, ${skippedCount} Skipped across ${batchResult.totalProcessed} jobs.`,
+        queuedCount > 0 ? "success" : "warning"
+      );
+
+      getBillingStatus()
+        .then((status) => {
+          if (status) window.dispatchEvent(new CustomEvent("billingStatusUpdated", { detail: status }));
+        })
+        .catch(() => { });
+    } catch (err) {
+      console.error("[BrowseJobs] Auto Apply All error:", err);
+      showToast(err.message || "Failed to submit bulk applications.", "error");
+    } finally {
+      setIsAutoApplyingAll(false);
+    }
+  };
+
   // Filter States
   const [selectedDate, setSelectedDate] = useState("All time");
   const [selectedLocations, setSelectedLocations] = useState([]);
@@ -650,13 +952,16 @@ const BrowseJobs = () => {
 
         const apiPage = Math.max(0, pageNumber - 1); // 0-indexed for GET /api/jobs
 
+        const activeCompanies = overrideFilters?.companies ?? selectedCompanies;
+
         const params = {
           resumeId: resumeIdVal || undefined,
           q: q ? q.trim() : undefined,
-          location: activeLocs.length > 0 ? activeLocs[0] : undefined,
-          role: activeRoles.length > 0 ? activeRoles[0] : undefined,
-          workplace: activeWorkplaces.length > 0 ? activeWorkplaces[0].toLowerCase() : undefined,
-          employmentType: activeJobTypes.length > 0 ? activeJobTypes[0].toLowerCase() : undefined,
+          location: activeLocs.length > 0 ? activeLocs.join(",") : undefined,
+          role: activeRoles.length > 0 ? activeRoles.join(",") : undefined,
+          workplace: activeWorkplaces.length > 0 ? activeWorkplaces.map((w) => w.toLowerCase()).join(",") : undefined,
+          employmentType: activeJobTypes.length > 0 ? activeJobTypes.map((t) => t.toLowerCase()).join(",") : undefined,
+          company: activeCompanies.length > 0 ? activeCompanies.join(",") : undefined,
           postedWithinDays,
           sort: sort || "best_match",
           page: apiPage,
@@ -1228,38 +1533,54 @@ const BrowseJobs = () => {
           return false;
         }
       }
+      if (selectedDate && selectedDate !== "All time") {
+        if (job.createdAt || job.postedAt || job.date) {
+          const jobTime = new Date(job.createdAt || job.postedAt || job.date).getTime();
+          const now = Date.now();
+          if (!isNaN(jobTime)) {
+            let maxAgeMs = Infinity;
+            if (selectedDate === "Last 6 hours") maxAgeMs = 6 * 60 * 60 * 1000;
+            else if (selectedDate === "Last 24 hours") maxAgeMs = 24 * 60 * 60 * 1000;
+            else if (selectedDate === "Last 7 days") maxAgeMs = 7 * 24 * 60 * 60 * 1000;
+            else if (selectedDate === "Last 14 days") maxAgeMs = 14 * 24 * 60 * 60 * 1000;
+            else if (selectedDate === "Last 30 days") maxAgeMs = 30 * 24 * 60 * 60 * 1000;
+
+            if (now - jobTime > maxAgeMs) return false;
+          }
+        }
+      }
       if (selectedLocations.length > 0) {
         const jobLoc = (job.location || job.fullLocation || "").toLowerCase();
         const matchesLoc = selectedLocations.some((loc) =>
-          jobLoc.includes(loc.toLowerCase().split(",")[0])
+          jobLoc.includes(loc.toLowerCase().split(",")[0].trim())
         );
         if (!matchesLoc) return false;
       }
       if (selectedCompanies.length > 0) {
         const jobComp = (job.company || "").toLowerCase();
         const matchesComp = selectedCompanies.some((comp) =>
-          jobComp.includes(comp.toLowerCase())
+          jobComp.includes(comp.toLowerCase().trim())
         );
         if (!matchesComp) return false;
       }
       if (selectedRoles.length > 0) {
         const jobRole = (job.title || "").toLowerCase();
         const matchesRole = selectedRoles.some((role) =>
-          jobRole.includes(role.toLowerCase())
+          jobRole.includes(role.toLowerCase().trim())
         );
         if (!matchesRole) return false;
       }
       if (selectedWorkplace.length > 0) {
-        const jobMode = (job.workMode || "").toLowerCase();
+        const jobMode = (job.workMode || job.workplace || "").toLowerCase();
         const matchesWorkMode = selectedWorkplace.some((m) =>
-          jobMode.includes(m.toLowerCase())
+          jobMode.includes(m.toLowerCase().trim())
         );
         if (!matchesWorkMode) return false;
       }
       if (selectedJobTypes.length > 0) {
-        const jobType = (job.type || "").toLowerCase();
+        const jobType = (job.type || job.employmentType || "").toLowerCase();
         const matchesType = selectedJobTypes.some((t) =>
-          jobType.includes(t.toLowerCase())
+          jobType.includes(t.toLowerCase().trim())
         );
         if (!matchesType) return false;
       }
@@ -1268,6 +1589,7 @@ const BrowseJobs = () => {
   }, [
     allCachedJobs,
     searchQuery,
+    selectedDate,
     selectedLocations,
     selectedCompanies,
     selectedRoles,
@@ -1289,12 +1611,35 @@ const BrowseJobs = () => {
     const sliced = allFilteredJobs.slice(startIdx, endIdx);
     if (sliced.length > 0) return sliced;
 
-    const directPage = jobsCache[activePage];
-    if (Array.isArray(directPage) && directPage.length > 0) {
-      return directPage;
+    const isFilterActive =
+      Boolean(searchQuery.trim()) ||
+      selectedLocations.length > 0 ||
+      selectedCompanies.length > 0 ||
+      selectedRoles.length > 0 ||
+      selectedWorkplace.length > 0 ||
+      selectedJobTypes.length > 0 ||
+      (selectedDate && selectedDate !== "All time");
+
+    if (!isFilterActive) {
+      const directPage = jobsCache[activePage];
+      if (Array.isArray(directPage) && directPage.length > 0) {
+        return directPage;
+      }
     }
     return [];
-  }, [allFilteredJobs, activePage, pageSize, jobsCache]);
+  }, [
+    allFilteredJobs,
+    activePage,
+    pageSize,
+    jobsCache,
+    searchQuery,
+    selectedLocations,
+    selectedCompanies,
+    selectedRoles,
+    selectedWorkplace,
+    selectedJobTypes,
+    selectedDate,
+  ]);
 
   // Aliased for full compatibility with existing JSX
   const filteredJobs = displayedJobs;
@@ -1306,9 +1651,14 @@ const BrowseJobs = () => {
     }
   }, [activePage, displayTotalPages]);
 
-  // Reset to page 1 whenever search query or filters change
+  // Reset to page 1 and fetch backend filtered results whenever search query or filters change
   useEffect(() => {
     setActivePage(1);
+    jobsCacheRef.current = {};
+    setJobsCache({});
+    if (loadPageRef.current) {
+      loadPageRef.current(1, { forceRefresh: true });
+    }
   }, [
     searchQuery,
     selectedLocations,
@@ -1428,9 +1778,8 @@ const BrowseJobs = () => {
 
                 {/* Chevron Icon */}
                 <svg
-                  className={`w-5 h-5 text-[#64748B] transition-transform duration-200 shrink-0 ${
-                    isResumeDropdownOpen ? "rotate-180" : ""
-                  }`}
+                  className={`w-5 h-5 text-[#64748B] transition-transform duration-200 shrink-0 ${isResumeDropdownOpen ? "rotate-180" : ""
+                    }`}
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -1484,25 +1833,22 @@ const BrowseJobs = () => {
                             key={resumeId || idx}
                             type="button"
                             onClick={() => handleSelectResume(resume)}
-                            className={`w-full p-3 rounded-[12px] text-left transition-all flex items-center justify-between gap-3 cursor-pointer ${
-                              isSelected
+                            className={`w-full p-3 rounded-[12px] text-left transition-all flex items-center justify-between gap-3 cursor-pointer ${isSelected
                                 ? "bg-[#EEF2FF] border border-indigo-200 shadow-2xs"
                                 : "hover:bg-[#F8FAFC] border border-transparent"
-                            }`}
+                              }`}
                           >
                             <div className="flex items-center gap-3 min-w-0 flex-1">
-                              <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-                                isSelected ? "bg-[#4F46E5] text-white shadow-2xs" : "bg-slate-100 text-slate-500"
-                              }`}>
+                              <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${isSelected ? "bg-[#4F46E5] text-white shadow-2xs" : "bg-slate-100 text-slate-500"
+                                }`}>
                                 <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                                   <polyline points="14 2 14 8 20 8" />
                                 </svg>
                               </div>
                               <div className="flex flex-col min-w-0">
-                                <span className={`text-[13.5px] sm:text-[14px] font-bold truncate ${
-                                  isSelected ? "text-[#4F46E5]" : "text-[#0F172A]"
-                                }`}>
+                                <span className={`text-[13.5px] sm:text-[14px] font-bold truncate ${isSelected ? "text-[#4F46E5]" : "text-[#0F172A]"
+                                  }`}>
                                   {resumeName}
                                 </span>
                                 {resume.createdAt && (
@@ -1599,15 +1945,14 @@ const BrowseJobs = () => {
                 <button
                   type="button"
                   onClick={() => toggleDropdown("date")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "date" || selectedDate !== "All time"
-                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "date" || (selectedDate && selectedDate !== "All time")
+                    ? "border-[#4F46E5] bg-[#EEF2FF] text-[#4F46E5] font-semibold"
                     : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
                     }`}
                 >
-                  <span>Date</span>
+                  <span>{selectedDate && selectedDate !== "All time" ? `Date: ${selectedDate}` : "Date"}</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "date" ? "rotate-180" : ""
-                      }`}
+                    className={`w-3 h-3 transition-transform ${selectedDate && selectedDate !== "All time" ? "text-[#4F46E5]" : "text-[#94A3B8]"} ${activeDropdown === "date" ? "rotate-180" : ""}`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1665,14 +2010,13 @@ const BrowseJobs = () => {
                   type="button"
                   onClick={() => toggleDropdown("location")}
                   className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "location" || selectedLocations.length > 0
-                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    ? "border-[#4F46E5] bg-[#EEF2FF] text-[#4F46E5] font-semibold"
                     : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
                     }`}
                 >
-                  <span>Location</span>
+                  <span>{selectedLocations.length > 0 ? `Location (${selectedLocations.length})` : "Location"}</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "location" ? "rotate-180" : ""
-                      }`}
+                    className={`w-3 h-3 transition-transform ${selectedLocations.length > 0 ? "text-[#4F46E5]" : "text-[#94A3B8]"} ${activeDropdown === "location" ? "rotate-180" : ""}`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1762,14 +2106,13 @@ const BrowseJobs = () => {
                   type="button"
                   onClick={() => toggleDropdown("role")}
                   className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "role" || selectedRoles.length > 0
-                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    ? "border-[#4F46E5] bg-[#EEF2FF] text-[#4F46E5] font-semibold"
                     : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
                     }`}
                 >
-                  <span>Role</span>
+                  <span>{selectedRoles.length > 0 ? `Role (${selectedRoles.length})` : "Role"}</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "role" ? "rotate-180" : ""
-                      }`}
+                    className={`w-3 h-3 transition-transform ${selectedRoles.length > 0 ? "text-[#4F46E5]" : "text-[#94A3B8]"} ${activeDropdown === "role" ? "rotate-180" : ""}`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1829,14 +2172,13 @@ const BrowseJobs = () => {
                   type="button"
                   onClick={() => toggleDropdown("jobType")}
                   className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "jobType" || selectedJobTypes.length > 0
-                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    ? "border-[#4F46E5] bg-[#EEF2FF] text-[#4F46E5] font-semibold"
                     : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
                     }`}
                 >
-                  <span>Job Type</span>
+                  <span>{selectedJobTypes.length > 0 ? `Job Type (${selectedJobTypes.length})` : "Job Type"}</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "jobType" ? "rotate-180" : ""
-                      }`}
+                    className={`w-3 h-3 transition-transform ${selectedJobTypes.length > 0 ? "text-[#4F46E5]" : "text-[#94A3B8]"} ${activeDropdown === "jobType" ? "rotate-180" : ""}`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1890,14 +2232,13 @@ const BrowseJobs = () => {
                   type="button"
                   onClick={() => toggleDropdown("workplace")}
                   className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "workplace" || selectedWorkplace.length > 0
-                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    ? "border-[#4F46E5] bg-[#EEF2FF] text-[#4F46E5] font-semibold"
                     : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
                     }`}
                 >
-                  <span>Workplace</span>
+                  <span>{selectedWorkplace.length > 0 ? `Workplace (${selectedWorkplace.length})` : "Workplace"}</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "workplace" ? "rotate-180" : ""
-                      }`}
+                    className={`w-3 h-3 transition-transform ${selectedWorkplace.length > 0 ? "text-[#4F46E5]" : "text-[#94A3B8]"} ${activeDropdown === "workplace" ? "rotate-180" : ""}`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -1951,14 +2292,13 @@ const BrowseJobs = () => {
                   type="button"
                   onClick={() => toggleDropdown("companies")}
                   className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "companies" || selectedCompanies.length > 0
-                    ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+                    ? "border-[#4F46E5] bg-[#EEF2FF] text-[#4F46E5] font-semibold"
                     : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
                     }`}
                 >
-                  <span>Companies</span>
+                  <span>{selectedCompanies.length > 0 ? `Companies (${selectedCompanies.length})` : "Companies"}</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "companies" ? "rotate-180" : ""
-                      }`}
+                    className={`w-3 h-3 transition-transform ${selectedCompanies.length > 0 ? "text-[#4F46E5]" : "text-[#94A3B8]"} ${activeDropdown === "companies" ? "rotate-180" : ""}`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -2115,17 +2455,32 @@ const BrowseJobs = () => {
                 {/* Auto Apply All Button */}
                 <button
                   type="button"
-                  onClick={() => navigate("/auto-apply")}
-                  className="h-[36px] px-6 rounded-[10px] bg-gradient-to-r from-[#4F46E5] via-[#6366F1] to-[#7C3AED] hover:from-[#4338CA] hover:via-[#4F46E5] hover:to-[#6D28D9] text-white text-[14.5px] font-semibold flex items-center gap-2 shadow-[0_4px_14px_rgba(79,70,229,0.35)] hover:shadow-[0_6px_20px_rgba(124,58,237,0.45)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 cursor-pointer whitespace-nowrap"
+                  onClick={handleAutoApplyAll}
+                  disabled={isAutoApplyingAll}
+                  className="h-[36px] px-6 rounded-[10px] bg-gradient-to-r from-[#4F46E5] via-[#6366F1] to-[#7C3AED] hover:from-[#4338CA] hover:via-[#4F46E5] hover:to-[#6D28D9] disabled:opacity-60 text-white text-[14.5px] font-semibold flex items-center gap-2 shadow-[0_4px_14px_rgba(79,70,229,0.35)] hover:shadow-[0_6px_20px_rgba(124,58,237,0.45)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 cursor-pointer disabled:cursor-not-allowed whitespace-nowrap"
                 >
-                  <svg className="w-3.5 h-3.5 text-amber-300 fill-current drop-shadow-[0_0_6px_rgba(252,211,77,0.6)]" viewBox="0 0 24 24">
-                    <path d="M13 2L3 14h8l-1 8 11-12h-8l1-8z" />
-                  </svg>
-                  <span>Auto Apply All</span>
+                  {isAutoApplyingAll ? (
+                    <>
+                      <svg className="animate-spin w-4 h-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                      </svg>
+                      <span>Applying in batches...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3.5 h-3.5 text-amber-300 fill-current drop-shadow-[0_0_6px_rgba(252,211,77,0.6)]" viewBox="0 0 24 24">
+                        <path d="M13 2L3 14h8l-1 8 11-12h-8l1-8z" />
+                      </svg>
+                      <span>Auto Apply All</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
           </div>
+
+
 
           {/* Error Banner */}
           {fetchError && (
@@ -2140,6 +2495,23 @@ const BrowseJobs = () => {
                 className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold cursor-pointer shrink-0 transition-colors"
               >
                 Retry
+              </button>
+            </div>
+          )}
+
+          {/* Application Status Error Banner */}
+          {statusError && (
+            <div className="p-4 rounded-[14px] bg-amber-50 border border-amber-200 text-amber-800 text-[13px] font-medium flex items-center justify-between gap-3 animate-in fade-in">
+              <div className="flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-amber-600 text-white flex items-center justify-center text-[11px] font-bold shrink-0">!</span>
+                <span>Application Status Error: {statusError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={fetchApplicationStatuses}
+                className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold cursor-pointer shrink-0 transition-colors"
+              >
+                Retry Loading Statuses
               </button>
             </div>
           )}
@@ -2201,431 +2573,431 @@ const BrowseJobs = () => {
                   </div>
                 ) : (
                   <>
+                    {statusError && (
+                      <div className="mb-4 p-4 rounded-[16px] bg-red-50 border border-red-200 text-red-700 text-[13.5px] flex items-center justify-between gap-4 shadow-xs">
+                        <div className="flex items-center gap-2.5">
+                          <svg className="w-5 h-5 text-red-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                          <div>
+                            <span className="font-semibold">Application Status Error:</span> {statusError}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={fetchApplicationStatuses}
+                          className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer shrink-0"
+                        >
+                          Retry Status
+                        </button>
+                      </div>
+                    )}
                     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4.5 w-full">
                       {filteredJobs.map((job, idx) => (
-                          <div
-                            key={job.id || job.job_id || job.jobId || `job-${idx}`}
-                            onClick={() => handleOpenJobModal(job)}
-                            className="bg-white rounded-[20px] border border-[#E2E8F0] p-5 flex flex-col justify-between shadow-[0_1px_3px_rgba(15,23,42,0.02)] hover:shadow-md hover:border-slate-300 transition-all duration-200 min-h-[260px] cursor-pointer group"
-                          >
-                            <div>
-                              {/* Top Header: Logo + Match Badge */}
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="w-[40px] h-[40px] rounded-[10px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2">
+                        <div
+                          key={job.id || job.job_id || job.jobId || `job-${idx}`}
+                          onClick={() => handleOpenJobModal(job)}
+                          className="bg-white rounded-[20px] border border-[#E2E8F0] p-5 flex flex-col justify-between shadow-[0_1px_3px_rgba(15,23,42,0.02)] hover:shadow-md hover:border-slate-300 transition-all duration-200 min-h-[260px] cursor-pointer group"
+                        >
+                          <div>
+                            {/* Top Header: Logo + Match Badge */}
+                            <div className="flex items-center justify-between gap-2">
+                              {job.logo ? (
+                                <div className="w-[40px] h-[40px] rounded-[10px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-1.5 overflow-hidden">
                                   <img
-                                    src={job.logo || aiLogo}
-                                    alt={job.company}
+                                    src={job.logo}
+                                    alt={job.company || "Company Logo"}
                                     className="w-full h-full object-contain"
                                   />
                                 </div>
-                                <span
-                                  className={`text-[12px] font-semibold px-2.5 py-0.5 rounded-full ${job.matchColor || "bg-[#EEF2FF] text-[#4F46E5]"}`}
-                                >
-                                  {job.match || (job.matchPercent ? `${job.matchPercent}% match` : "ATS Match")}
-                                </span>
-                              </div>
-
-                              {/* Job Title & Company */}
-                              <div className="mt-3.5">
-                                <h3 className="text-[15px] font-bold text-[#0F172A] tracking-tight leading-snug group-hover:text-[#4F46E5] transition-colors line-clamp-2">
-                                  {job.title}
-                                </h3>
-                                <div className="flex items-center gap-1.5 text-[13px] text-[#64748B] font-normal mt-1 flex-wrap">
-                                  <span className="font-medium text-slate-700 truncate max-w-[140px]">{job.company}</span>
-                                  {job.companyDomain && (
-                                    <span className="text-[11px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded font-mono">
-                                      {job.companyDomain}
-                                    </span>
-                                  )}
-                                  <VerifiedTick />
+                              ) : (
+                                <div className="w-[40px] h-[40px] rounded-[10px] bg-[#EEF2FF] border border-indigo-100/80 flex items-center justify-center shrink-0 text-[#4F46E5] shadow-2xs">
+                                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                  </svg>
                                 </div>
-                              </div>
+                              )}
+                              <span
+                                className={`text-[12px] font-semibold px-2.5 py-0.5 rounded-full ${job.matchColor || "bg-[#EEF2FF] text-[#4F46E5]"}`}
+                              >
+                                {job.match || (job.matchPercent ? `${job.matchPercent}% match` : "ATS Match")}
+                              </span>
+                            </div>
 
-                              {/* Location, Workplace & Type Pills */}
-                              <div className="mt-3 flex flex-col gap-1.5">
-                                <div className="flex items-center gap-1.5 text-[12.5px] text-[#64748B]">
-                                  <img
-                                    src={mapIcon}
-                                    alt=""
-                                    className="w-[10px] h-[12px] object-contain shrink-0"
-                                  />
-                                  <span className="truncate">{job.fullLocation || job.location}</span>
-                                </div>
-
-                                <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                                  {job.workMode && (
-                                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 capitalize">
-                                      {job.workMode}
-                                    </span>
-                                  )}
-                                  {job.type && (
-                                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 capitalize">
-                                      {job.type}
-                                    </span>
-                                  )}
-                                </div>
-
-                                <div className="text-[11.5px] text-[#94A3B8] mt-0.5">
-                                  {job.posted}
-                                </div>
+                            {/* Job Title & Company */}
+                            <div className="mt-3.5">
+                              <h3 className="text-[15px] font-bold text-[#0F172A] tracking-tight leading-snug group-hover:text-[#4F46E5] transition-colors line-clamp-2">
+                                {job.title}
+                              </h3>
+                              <div className="flex items-center gap-1.5 text-[13px] text-[#64748B] font-normal mt-1 flex-wrap">
+                                <span className="font-medium text-slate-700 truncate max-w-[140px]">{job.company}</span>
+                                {job.companyDomain && (
+                                  <span className="text-[11px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded font-mono">
+                                    {job.companyDomain}
+                                  </span>
+                                )}
+                                <VerifiedTick />
                               </div>
                             </div>
 
-                            {/* Action Buttons */}
-                            <div className="flex items-center gap-2.5 pt-4 mt-auto">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleOpenJobModal(job);
-                                }}
-                                className="flex-1 h-[36px] rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] font-medium text-[#334155] hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-center"
-                              >
-                                View Details
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleOpenJobModal(job);
-                                }}
-                                className="flex-1 h-[36px] rounded-[10px] bg-[#EEF2FF] hover:bg-[#E0E7FF] text-[#4F46E5] border border-[#C7D2FE]/80 text-[13px] font-semibold transition-colors cursor-pointer flex items-center justify-center active:scale-[0.99]"
-                              >
-                                Apply Now
-                              </button>
+                            {/* Location, Workplace & Type Pills */}
+                            <div className="mt-3 flex flex-col gap-1.5">
+                              <div className="flex items-center gap-1.5 text-[12.5px] text-[#64748B]">
+                                <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                                <span className="truncate">{job.fullLocation || job.location}</span>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                                {job.workMode && (
+                                  <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 capitalize">
+                                    {job.workMode}
+                                  </span>
+                                )}
+                                {job.type && (
+                                  <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 capitalize">
+                                    {job.type}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="text-[11.5px] text-[#94A3B8] mt-0.5">
+                                {job.posted}
+                              </div>
                             </div>
                           </div>
+
+                          {/* Action Buttons */}
+                          {(() => {
+                            const cardJobIdKey = job.id || job.jobId || extractNumericJobId(job);
+
+                            if (isStatusLoading) {
+                              return (
+                                <div className="flex items-center gap-2.5 pt-4 mt-auto">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenJobModal(job);
+                                    }}
+                                    className="flex-1 h-[36px] font-medium rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#334155] hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-center"
+                                  >
+                                    View Details
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled
+                                    className="flex-1 h-[36px] rounded-[10px] bg-slate-50 border border-slate-200/80 text-slate-400 text-[12px] font-medium flex items-center justify-center gap-1.5 cursor-not-allowed"
+                                  >
+                                    <svg className="animate-spin h-3.5 w-3.5 text-slate-400" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                                    </svg>
+                                    <span>Checking...</span>
+                                  </button>
+                                </div>
+                              );
+                            }
+
+                            const actualJobId = extractNumericJobId(job) || job.jobId || job.job_id || job.id;
+                            const record = getMatchingApplicationForJob(job, applicationMap);
+                            const hideApply = isApplyNowHiddenForJob(job, applicationMap);
+
+                            console.log("[BrowseJobs] Application status match", {
+                              cardJobId: actualJobId,
+                              matchedApplicationJobId: record ? (extractJobIdFromApplicationRecord(record) ?? null) : null,
+                              applicationId: record?.id ?? null,
+                              status: record?.status ?? record?.state ?? null,
+                              hideApplyNow: hideApply
+                            });
+
+                            if (hideApply) {
+                              const rawStatus = record?.status || record?.state || record?.applicationStatus;
+                              const norm = normalizeApplicationStatus(rawStatus);
+
+                              let displayLabel = "Applied";
+                              let badgeClass = "bg-slate-100 text-slate-600 border-slate-200";
+                              if (norm === "SUBMITTED") {
+                                displayLabel = "Submitted";
+                                badgeClass = "bg-emerald-50 text-emerald-700 border-emerald-200/80";
+                              } else if (norm === "QUEUED") {
+                                displayLabel = "Queued";
+                                badgeClass = "bg-indigo-50 text-indigo-700 border-indigo-200/80";
+                              } else if (norm === "IN_PROGRESS") {
+                                displayLabel = "In Progress";
+                                badgeClass = "bg-blue-50 text-blue-700 border-blue-200/80";
+                              } else if (norm === "NEEDS_ACTION") {
+                                displayLabel = "Needs Action";
+                                badgeClass = "bg-amber-50 text-amber-700 border-amber-200/80";
+                              } else if (norm === "PREPARING") {
+                                displayLabel = "Preparing";
+                                badgeClass = "bg-purple-50 text-purple-700 border-purple-200/80";
+                              }
+
+                              return (
+                                <div className="flex items-center gap-2.5 pt-4 mt-auto">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenJobModal(job);
+                                    }}
+                                    className="flex-1 h-[36px] font-medium rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#334155] hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-center"
+                                  >
+                                    View Details
+                                  </button>
+                                  <span
+                                    className={`flex-1 h-[36px] rounded-[10px] border text-[12.5px] font-semibold flex items-center justify-center ${badgeClass}`}
+                                  >
+                                    {displayLabel}
+                                  </span>
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <div className="flex items-center gap-2.5 pt-4 mt-auto">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenJobModal(job);
+                                  }}
+                                  className="flex-1 h-[36px] font-medium rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#334155] hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-center"
+                                >
+                                  View Details
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleApplyToCardJob(job, e)}
+                                  disabled={Boolean(applyingCardIds[cardJobIdKey])}
+                                  className="flex-1 h-[36px] rounded-[10px] bg-[#EEF2FF] hover:bg-[#E0E7FF] disabled:opacity-60 text-[#4F46E5] border border-[#C7D2FE]/80 text-[13px] font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed flex items-center justify-center active:scale-[0.99]"
+                                >
+                                  {applyingCardIds[cardJobIdKey] ? (
+                                    <span className="flex items-center gap-1.5">
+                                      <svg className="animate-spin h-3.5 w-3.5 text-[#4F46E5]" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                                      </svg>
+                                      <span>Applying...</span>
+                                    </span>
+                                  ) : (
+                                    "Apply Now"
+                                  )}
+                                </button>
+                              </div>
+                            );
+                          })()}
+                        </div>
                         ))}
-                    </div>
+                  </div>
 
-                    {/* Bottom Pagination Card (Image 2 Design) */}
-                    <div className="bg-white rounded-[16px] border border-[#E2E8F0] px-5 py-3.5 flex items-center justify-between flex-wrap gap-4 shadow-[0_1px_3px_rgba(15,23,42,0.02)] mt-2 mb-8">
-                      {/* Left Side: Dynamic Loaded Jobs Count Text */}
-                      <span className="text-[13px] sm:text-[13.5px] font-medium text-[#475569]">
-                        {(() => {
-                          const currentCount = displayedJobs.length;
-                          const startIdx = allFilteredJobs.length > 0 ? (activePage - 1) * pageSize + 1 : 0;
-                          const endIdx = allFilteredJobs.length > 0 ? (activePage - 1) * pageSize + currentCount : 0;
-                          const displayTotal = totalItems > allFilteredJobs.length ? totalItems : allFilteredJobs.length;
+                {/* Bottom Pagination Card (Image 2 Design) */}
+                <div className="bg-white rounded-[16px] border border-[#E2E8F0] px-5 py-3.5 flex items-center justify-between flex-wrap gap-4 shadow-[0_1px_3px_rgba(15,23,42,0.02)] mt-2 mb-8">
+                  {/* Left Side: Dynamic Loaded Jobs Count Text */}
+                  <span className="text-[13px] sm:text-[13.5px] font-medium text-[#475569]">
+                    {(() => {
+                      const currentCount = displayedJobs.length;
+                      const startIdx = allFilteredJobs.length > 0 ? (activePage - 1) * pageSize + 1 : 0;
+                      const endIdx = allFilteredJobs.length > 0 ? (activePage - 1) * pageSize + currentCount : 0;
+                      const displayTotal = totalItems > allFilteredJobs.length ? totalItems : allFilteredJobs.length;
 
-                          return `Showing ${startIdx}–${endIdx} of ${displayTotal} jobs (Page ${activePage} of ${displayTotalPages})`;
-                        })()}
-                      </span>
+                      return `Showing ${startIdx}–${endIdx} of ${displayTotal} jobs (Page ${activePage} of ${displayTotalPages})`;
+                    })()}
+                  </span>
 
-                      {/* Right Side: Pagination Controls (< 1 2 3 >) */}
-                      <div className="flex items-center gap-1.5">
-                        {/* Previous Button */}
+                  {/* Right Side: Pagination Controls (< 1 2 3 >) */}
+                  <div className="flex items-center gap-1.5">
+                    {/* Previous Button */}
+                    <button
+                      type="button"
+                      onClick={() => handlePageChange(activePage - 1)}
+                      disabled={activePage <= 1 || isLoadingPage}
+                      className="w-8 h-8 rounded-lg border border-[#E2E8F0] bg-white hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed text-slate-700 text-sm flex items-center justify-center transition-colors cursor-pointer"
+                      aria-label="Previous Page"
+                    >
+                      <svg
+                        className="w-4 h-4 text-slate-600"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+
+                    {/* Page Numbers */}
+                    {visiblePages.map((pg) => {
+                      const isActive = activePage === pg;
+                      return (
                         <button
+                          key={pg}
                           type="button"
-                          onClick={() => handlePageChange(activePage - 1)}
-                          disabled={activePage <= 1 || isLoadingPage}
-                          className="w-8 h-8 rounded-lg border border-[#E2E8F0] bg-white hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed text-slate-700 text-sm flex items-center justify-center transition-colors cursor-pointer"
-                          aria-label="Previous Page"
+                          onClick={() => handlePageChange(pg)}
+                          disabled={isLoadingPage && isActive}
+                          className={`w-8 h-8 rounded-lg text-sm font-semibold flex items-center justify-center transition-colors cursor-pointer ${isActive
+                              ? "bg-[#4F46E5] text-white shadow-xs"
+                              : "border border-[#E2E8F0] bg-white text-slate-700 hover:bg-slate-50"
+                            }`}
                         >
-                          <svg
-                            className="w-4 h-4 text-slate-600"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth="2.5"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                          </svg>
+                          {pg}
                         </button>
+                      );
+                    })}
 
-                        {/* Page Numbers */}
-                        {visiblePages.map((pg) => {
-                          const isActive = activePage === pg;
-                          return (
-                            <button
-                              key={pg}
-                              type="button"
-                              onClick={() => handlePageChange(pg)}
-                              disabled={isLoadingPage && isActive}
-                              className={`w-8 h-8 rounded-lg text-sm font-semibold flex items-center justify-center transition-colors cursor-pointer ${
-                                isActive
-                                  ? "bg-[#4F46E5] text-white shadow-xs"
-                                  : "border border-[#E2E8F0] bg-white text-slate-700 hover:bg-slate-50"
-                              }`}
-                            >
-                              {pg}
-                            </button>
-                          );
-                        })}
-
-                        {/* Next Button */}
-                        <button
-                          type="button"
-                          onClick={() => handlePageChange(activePage + 1)}
-                          disabled={activePage >= displayTotalPages || isLoadingPage}
-                          className="w-8 h-8 rounded-lg border border-[#E2E8F0] bg-white hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed text-slate-700 text-sm flex items-center justify-center transition-colors cursor-pointer"
-                          aria-label="Next Page"
-                        >
-                          <svg
-                            className="w-4 h-4 text-slate-600"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth="2.5"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </>
-            );
-          })()}
-        </main>
-      </div>
-
-      {/* Job Details Modal Drawer (Right side slide-over) */}
-      {selectedJobModal && (() => {
-        const selectedJobId = getJobId(selectedJobModal);
-        const activeAtsScore =
-          updatedAtsScores[selectedJobId] !== undefined
-            ? updatedAtsScores[selectedJobId]
-            : (selectedJobModal.displayScore ??
-              (selectedJobModal.rawScore !== null && selectedJobModal.rawScore !== undefined && !isNaN(Number(selectedJobModal.rawScore))
-                ? (!Number.isInteger(Number(selectedJobModal.rawScore))
-                  ? Number(selectedJobModal.rawScore).toFixed(1)
-                  : Math.min(100, Math.max(1, Math.round(Number(selectedJobModal.rawScore)))))
-                : selectedJobModal.matchPercent) ??
-              96);
-        const scoreData =
-          selectedJobModal.scoreData || selectedJobModal.rawMatch?.score_data;
-        const missingRequiredSkills =
-          scoreData?.missing_required_skills ||
-          selectedJobModal.rawMatch?.missing_required_skills ||
-          [];
-        const missingPreferredSkills =
-          scoreData?.missing_preferred_skills ||
-          selectedJobModal.rawMatch?.missing_preferred_skills ||
-          [];
-        const missingKeywords =
-          scoreData?.missing_keywords ||
-          selectedJobModal.rawMatch?.missing_keywords ||
-          [];
-
-        return (
-          <div
-            className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[2px]"
-            onClick={() => {
-              setSelectedJobModal(null);
-              setEnhanceError(null);
-              setEnhanceSuccess(null);
-            }}
-          >
-            <div
-              className="absolute top-0 right-0 h-full w-full sm:w-[520px] lg:w-[440px] bg-white shadow-2xl overflow-hidden flex flex-col min-h-0 animate-in slide-in-from-right duration-300"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Modal Header */}
-              <div className="p-5 sm:p-6 pb-4 border-b border-slate-100 flex items-start justify-between gap-4 shrink-0">
-                <div className="flex items-start gap-3.5 flex-1 min-w-0 pr-2">
-                  {selectedJobModal.logo ? (
-                    <div className="w-[44px] h-[44px] rounded-[12px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2 mt-0.5">
-                      <img
-                        src={selectedJobModal.logo}
-                        alt={selectedJobModal.company || "Company Logo"}
-                        className="w-full h-full object-contain"
-                      />
-                    </div>
-                  ) : null}
-
-                  <div className="flex flex-col flex-1 min-w-0">
-                    <h2 className="text-[17px] font-bold text-[#0F172A] tracking-tight leading-snug break-words">
-                      {typeof selectedJobModal.title === "string"
-                        ? selectedJobModal.title
-                          .replace(/<[^>]*>/g, " ")
-                          .replace(/\s+/g, " ")
-                          .trim()
-                        : selectedJobModal.title}
-                    </h2>
-
-                    <div className="flex items-center gap-1.5 text-[13.5px] text-[#475569] font-medium mt-1">
-                      <span className="truncate">{selectedJobModal.company}</span>
-                      <VerifiedTick />
-                    </div>
-
-                    <div className="flex items-center gap-2.5 text-[12px] text-[#64748B] mt-2 flex-wrap">
-                      <span>
-                        {selectedJobModal.fullLocation ||
-                          selectedJobModal.location}
-                      </span>
-                      <span className="text-slate-300">•</span>
-                      <span>{selectedJobModal.type || "Full-time"}</span>
-                      <span className="text-slate-300">•</span>
-                      <span>{selectedJobModal.workMode || "On-site"}</span>
-                    </div>
-                    <div className="text-[12px] text-[#64748B] mt-1">
-                      {selectedJobModal.department || "Engineering"}
-                    </div>
+                    {/* Next Button */}
+                    <button
+                      type="button"
+                      onClick={() => handlePageChange(activePage + 1)}
+                      disabled={activePage >= displayTotalPages || isLoadingPage}
+                      className="w-8 h-8 rounded-lg border border-[#E2E8F0] bg-white hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed text-slate-700 text-sm flex items-center justify-center transition-colors cursor-pointer"
+                      aria-label="Next Page"
+                    >
+                      <svg
+                        className="w-4 h-4 text-slate-600"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
                   </div>
                 </div>
+              </>
+            )
+          }
+              </>
+        );
+          })()}
+      </main>
+    </div>
 
-                {/* Right Actions (Close & Enhance Resume) */}
-                <div className="flex flex-col items-end gap-2 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedJobModal(null);
-                      setEnhanceError(null);
-                      setEnhanceSuccess(null);
-                    }}
-                    className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
-                  >
-                    <svg
-                      className="w-5 h-5"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M6 18L18 6M6 6l12 12"
-                      />
-                    </svg>
-                  </button>
+      {/* Job Details Modal Drawer (Right side slide-over) */ }
+  {
+    selectedJobModal && (() => {
+      const selectedJobId = getJobId(selectedJobModal);
+      const activeAtsScore =
+        updatedAtsScores[selectedJobId] !== undefined
+          ? updatedAtsScores[selectedJobId]
+          : (selectedJobModal.displayScore ??
+            (selectedJobModal.rawScore !== null && selectedJobModal.rawScore !== undefined && !isNaN(Number(selectedJobModal.rawScore))
+              ? (!Number.isInteger(Number(selectedJobModal.rawScore))
+                ? Number(selectedJobModal.rawScore).toFixed(1)
+                : Math.min(100, Math.max(1, Math.round(Number(selectedJobModal.rawScore)))))
+              : selectedJobModal.matchPercent) ??
+            96);
+      const scoreData =
+        selectedJobModal.scoreData || selectedJobModal.rawMatch?.score_data;
+      const missingRequiredSkills =
+        scoreData?.missing_required_skills ||
+        selectedJobModal.rawMatch?.missing_required_skills ||
+        [];
+      const missingPreferredSkills =
+        scoreData?.missing_preferred_skills ||
+        selectedJobModal.rawMatch?.missing_preferred_skills ||
+        [];
+      const missingKeywords =
+        scoreData?.missing_keywords ||
+        selectedJobModal.rawMatch?.missing_keywords ||
+        [];
 
-                  {!enhancedResultsMap[selectedJobId] && (
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <button
-                        type="button"
-                        onClick={handleEnhanceResume}
-                        disabled={isEnhancing}
-                        className="bg-[#4F46E5] hover:bg-[#4338CA] disabled:bg-[#818CF8] text-white text-[12.5px] font-semibold px-3.5 py-1.5 rounded-lg transition-colors cursor-pointer shadow-xs whitespace-nowrap flex items-center gap-1.5 active:scale-[0.98] disabled:cursor-not-allowed"
-                      >
-                        {isEnhancing ? (
-                          <>
-                            <svg
-                              className="animate-spin w-3.5 h-3.5 text-white"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                            >
-                              <circle
-                                className="opacity-25"
-                                cx="12"
-                                cy="12"
-                                r="10"
-                                stroke="currentColor"
-                                strokeWidth="4"
-                              />
-                              <path
-                                className="opacity-75"
-                                fill="currentColor"
-                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                              />
-                            </svg>
-                            <span>Enhancing...</span>
-                          </>
-                        ) : (
-                          "Enhance Resume"
-                        )}
-                      </button>
-                    </div>
-                  )}
+      return (
+        <div
+          className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[2px]"
+          onClick={() => {
+            setSelectedJobModal(null);
+            setEnhanceError(null);
+            setEnhanceSuccess(null);
+          }}
+        >
+          <div
+            className="absolute top-0 right-0 h-full w-full sm:w-[520px] lg:w-[440px] bg-white shadow-2xl overflow-hidden flex flex-col min-h-0 animate-in slide-in-from-right duration-300"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-5 sm:p-6 pb-4 border-b border-slate-100 flex items-start justify-between gap-4 shrink-0">
+              <div className="flex items-start gap-3.5 flex-1 min-w-0 pr-2">
+                {selectedJobModal.logo ? (
+                  <div className="w-[44px] h-[44px] rounded-[12px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2 mt-0.5">
+                    <img
+                      src={selectedJobModal.logo}
+                      alt={selectedJobModal.company || "Company Logo"}
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                ) : null}
+
+                <div className="flex flex-col flex-1 min-w-0">
+                  <h2 className="text-[17px] font-bold text-[#0F172A] tracking-tight leading-snug break-words">
+                    {typeof selectedJobModal.title === "string"
+                      ? selectedJobModal.title
+                        .replace(/<[^>]*>/g, " ")
+                        .replace(/\s+/g, " ")
+                        .trim()
+                      : selectedJobModal.title}
+                  </h2>
+
+                  <div className="flex items-center gap-1.5 text-[13.5px] text-[#475569] font-medium mt-1">
+                    <span className="truncate">{selectedJobModal.company}</span>
+                    <VerifiedTick />
+                  </div>
+
+                  <div className="flex items-center gap-2.5 text-[12px] text-[#64748B] mt-2 flex-wrap">
+                    <span>
+                      {selectedJobModal.fullLocation ||
+                        selectedJobModal.location}
+                    </span>
+                    <span className="text-slate-300">•</span>
+                    <span>{selectedJobModal.type || "Full-time"}</span>
+                    <span className="text-slate-300">•</span>
+                    <span>{selectedJobModal.workMode || "On-site"}</span>
+                  </div>
+                  <div className="text-[12px] text-[#64748B] mt-1">
+                    {selectedJobModal.department || "Engineering"}
+                  </div>
                 </div>
               </div>
 
-              {/* Modal Scrollable Body */}
-              <div className="flex-1 min-h-0 overflow-y-auto p-5 sm:p-6 space-y-5">
-                {/* Feedback Alerts */}
-                {enhanceSuccess && (
-                  <div className="bg-[#EEF2FF] border border-[#C7D2FE] text-[#312E81] text-xs px-3.5 py-2.5 rounded-xl flex items-center justify-between shadow-2xs">
-                    <div className="flex items-center gap-2">
-                      <span className="w-4 h-4 rounded-full bg-[#4F46E5] text-white flex items-center justify-center text-[10px] font-bold">
-                        ✓
-                      </span>
-                      <span className="font-semibold">{enhanceSuccess}</span>
-                    </div>
+              {/* Right Actions (Close & Enhance Resume) */}
+              <div className="flex flex-col items-end gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedJobModal(null);
+                    setEnhanceError(null);
+                    setEnhanceSuccess(null);
+                  }}
+                  className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
+                >
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+
+                {!enhancedResultsMap[selectedJobId] && (
+                  <div className="flex items-center gap-1.5 mt-0.5">
                     <button
                       type="button"
-                      onClick={() => setShowEnhancedModal(true)}
-                      className="underline font-bold text-[#4F46E5] hover:text-[#3730A3] cursor-pointer ml-2"
+                      onClick={handleEnhanceResume}
+                      disabled={isEnhancing}
+                      className="bg-[#4F46E5] hover:bg-[#4338CA] disabled:bg-[#818CF8] text-white text-[12.5px] font-semibold px-3.5 py-1.5 rounded-lg transition-colors cursor-pointer shadow-xs whitespace-nowrap flex items-center gap-1.5 active:scale-[0.98] disabled:cursor-not-allowed"
                     >
-                      View
-                    </button>
-                  </div>
-                )}
-
-                {enhanceError && (
-                  <div className="bg-rose-50 border border-rose-200 text-rose-800 text-xs px-3.5 py-2.5 rounded-xl flex items-center justify-between shadow-2xs">
-                    <div className="flex items-center gap-2">
-                      <span className="w-4 h-4 rounded-full bg-rose-600 text-white flex items-center justify-center text-[10px] font-bold">
-                        !
-                      </span>
-                      <span className="font-medium">{enhanceError}</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setEnhanceError(null)}
-                      className="text-rose-500 hover:text-rose-700 font-bold ml-2 cursor-pointer"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                )}
-
-                {/* ATS Match Box */}
-                <div className="rounded-[16px] border border-slate-200/80 bg-[#F8FAFC]/70 p-4 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3.5 min-w-0">
-                    <div className="relative w-[64px] h-[64px] shrink-0 flex items-center justify-center">
-                      <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                        <path
-                          className="text-slate-200"
-                          strokeWidth="3.2"
-                          stroke="currentColor"
-                          fill="none"
-                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                        />
-                        <path
-                          className="text-[#4F46E5]"
-                          strokeDasharray={`${Number(activeAtsScore) || 0}, 100`}
-                          strokeWidth="3.2"
-                          strokeLinecap="round"
-                          stroke="currentColor"
-                          fill="none"
-                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                        />
-                      </svg>
-                      <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-[13px] font-bold text-[#0F172A] leading-none">
-                          {activeAtsScore}%
-                        </span>
-                        <span className="text-[8.5px] text-[#64748B] font-medium leading-none mt-0.5">
-                          Match
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col">
-                      <h3 className="text-[14px] font-bold text-[#0F172A]">
-                        ATS Match
-                      </h3>
-                      <p className="text-[12px] text-[#64748B] mt-0.5 leading-snug">
-                        {Number(activeAtsScore) >= 80
-                          ? "Strong match based on your profile, skills, experience and preferences."
-                          : Number(activeAtsScore) >= 60
-                            ? "Moderate match. Enhancing your resume can bridge key skill and keyword gaps."
-                            : "Lower match. Review identified gaps below or click Enhance Resume."}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Get Updated ATS Button */}
-                  {enhancedResultsMap[selectedJobId] && (
-                    <button
-                      type="button"
-                      onClick={handleGetUpdatedAts}
-                      disabled={isUpdatingAts}
-                      className="px-3.5 py-2 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-[12px] font-semibold rounded-xl shadow-xs shrink-0 whitespace-nowrap transition-all active:scale-[0.98] cursor-pointer flex items-center gap-1.5"
-                    >
-                      {isUpdatingAts ? (
+                      {isEnhancing ? (
                         <>
                           <svg
                             className="animate-spin w-3.5 h-3.5 text-white"
@@ -2646,299 +3018,483 @@ const BrowseJobs = () => {
                               d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                             />
                           </svg>
-                          <span>Updating...</span>
+                          <span>Enhancing...</span>
                         </>
                       ) : (
-                        "Get Updated ATS"
+                        "Enhance Resume"
                       )}
                     </button>
-                  )}
-                </div>
-
-                {/* ATS Identified Gaps & Missing Skills */}
-                {(missingRequiredSkills.length > 0 ||
-                  missingPreferredSkills.length > 0 ||
-                  missingKeywords.length > 0) && (
-                    <div className="rounded-[16px] border border-amber-200/80 bg-gradient-to-br from-amber-50/60 to-orange-50/30 p-4 space-y-3 shadow-2xs">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="w-5 h-5 rounded-md bg-amber-100 text-amber-800 text-[11px] font-bold flex items-center justify-center">
-                            !
-                          </span>
-                          <h4 className="text-[13px] font-bold text-amber-950">
-                            ATS Identified Gaps
-                          </h4>
-                        </div>
-                        <span className="text-[10.5px] font-semibold text-amber-800 bg-amber-100/80 border border-amber-200 px-2 py-0.5 rounded-full">
-                          {missingRequiredSkills.length +
-                            missingPreferredSkills.length +
-                            missingKeywords.length}{" "}
-                          Gaps
-                        </span>
-                      </div>
-
-                      {missingRequiredSkills.length > 0 && (
-                        <div>
-                          <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">
-                            Missing Required Skills:
-                          </span>
-                          <div className="flex flex-wrap gap-1.5">
-                            {missingRequiredSkills.map((skill, i) => (
-                              <span
-                                key={i}
-                                className="bg-white border border-amber-200 text-amber-900 text-[11.5px] font-medium px-2.5 py-0.5 rounded-md shadow-2xs"
-                              >
-                                • {skill}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {missingPreferredSkills.length > 0 && (
-                        <div>
-                          <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">
-                            Missing Preferred Skills:
-                          </span>
-                          <div className="flex flex-wrap gap-1.5">
-                            {missingPreferredSkills.map((skill, i) => (
-                              <span
-                                key={i}
-                                className="bg-white border border-amber-200 text-amber-900 text-[11.5px] font-medium px-2.5 py-0.5 rounded-md shadow-2xs"
-                              >
-                                • {skill}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {missingKeywords.length > 0 && (
-                        <div>
-                          <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">
-                            Missing Keywords:
-                          </span>
-                          <div className="flex flex-wrap gap-1.5">
-                            {missingKeywords.map((kw, i) => (
-                              <span
-                                key={i}
-                                className="bg-white border border-amber-200 text-slate-700 text-[11px] font-normal px-2 py-0.5 rounded-md"
-                              >
-                                {kw}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                {/* Job Description */}
-                <div>
-                  <h3 className="text-[14px] font-bold text-[#0F172A]">
-                    Job description
-                  </h3>
-                  <p className="text-[12.5px] text-[#475569] leading-relaxed mt-1.5">
-                    {cleanHtmlText(
-                      selectedJobModal.description ||
-                      selectedJobModal.fullJdText ||
-                      selectedJobModal.preview
-                    )}
-                  </p>
-                </div>
-
-                {/* Key Responsibilities */}
-                {Array.isArray(selectedJobModal.responsibilities) &&
-                  selectedJobModal.responsibilities.length > 0 && (
-                    <div>
-                      <h3 className="text-[14px] font-bold text-[#0F172A]">
-                        Key responsibilities:
-                      </h3>
-                      <ul className="space-y-2 mt-2">
-                        {selectedJobModal.responsibilities.map((resp, idx) => (
-                          <li
-                            key={idx}
-                            className="text-[12.5px] text-[#475569] flex items-start gap-2 leading-snug"
-                          >
-                            <span className="text-[#94A3B8] shrink-0">•</span>
-                            <span>{resp}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                {/* Required Skills */}
-                {Array.isArray(selectedJobModal.requiredSkills) &&
-                  selectedJobModal.requiredSkills.length > 0 && (
-                    <div>
-                      <h3 className="text-[14px] font-bold text-[#0F172A]">
-                        Required skills
-                      </h3>
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {selectedJobModal.requiredSkills.map((skill) => (
-                          <span
-                            key={skill}
-                            className="bg-[#F1F5F9] text-[#334155] rounded-[8px] px-3 py-1.5 text-[12px] font-medium"
-                          >
-                            {skill}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                {/* Preferred Skills */}
-                {Array.isArray(selectedJobModal.preferredSkills) &&
-                  selectedJobModal.preferredSkills.length > 0 && (
-                    <div>
-                      <h3 className="text-[14px] font-bold text-[#0F172A]">
-                        Preferred skills
-                      </h3>
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {selectedJobModal.preferredSkills.map((skill) => (
-                          <span
-                            key={skill}
-                            className="bg-[#F1F5F9] text-[#334155] rounded-[8px] px-3 py-1.5 text-[12px] font-medium"
-                          >
-                            {skill}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                {/* Job Details */}
-                <div>
-                  <h3 className="text-[14px] font-bold text-[#0F172A] mb-2.5">
-                    Job details
-                  </h3>
-                  <div className="grid grid-cols-2 gap-y-2.5 gap-x-4">
-                    <div className="flex items-center gap-2 text-[12.5px]">
-                      <span className="text-[#64748B]">Experience</span>
-                      <span className="font-semibold text-[#0F172A]">
-                        {selectedJobModal.experience || "Not specified"}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 text-[12.5px]">
-                      <span className="text-[#64748B]">Work mode</span>
-                      <span className="font-semibold text-[#0F172A]">
-                        {selectedJobModal.workMode || "On-site"}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 text-[12.5px]">
-                      <span className="text-[#64748B]">Employment type</span>
-                      <span className="font-semibold text-[#0F172A]">
-                        {selectedJobModal.type || "Full-time"}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 text-[12.5px]">
-                      <span className="text-[#64748B]">Location</span>
-                      <span className="font-semibold text-[#0F172A]">
-                        {selectedJobModal.fullLocation ||
-                          selectedJobModal.location || "Remote / Flexible"}
-                      </span>
-                    </div>
                   </div>
-                </div>
-              </div>
-
-              {/* Modal Footer */}
-              <div className="p-4 sm:p-5 border-t border-slate-100 bg-white shrink-0 flex flex-col gap-2.5">
-                <button
-                  type="button"
-                  className="w-full h-[44px] rounded-[12px] bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-[13.5px] font-medium flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.99] transition-all cursor-pointer"
-                >
-                  <span>Apply now</span>
-                  <span>→</span>
-                </button>
-
-                <p className="text-[11.5px] text-[#94A3B8] text-center">
-                  Your application quota will be reserved before submission.
-                </p>
+                )}
               </div>
             </div>
-          </div>
-        );
-      })()}
 
-      {/* Full Enhanced Resume Modal View */}
-      {showEnhancedModal &&
-        selectedJobModal &&
-        enhancedResultsMap[getJobId(selectedJobModal)] && (
-          <div className="fixed inset-0 z-[60] overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
-              {/* Modal Header */}
-              <div className="p-6 pb-4 border-b border-slate-100 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-[#EEF2FF] border border-[#C7D2FE] flex items-center justify-center text-[#4F46E5] font-bold text-sm">
-                    AI
+            {/* Modal Scrollable Body */}
+            <div className="flex-1 min-h-0 overflow-y-auto p-5 sm:p-6 space-y-5">
+              {/* Feedback Alerts */}
+              {enhanceSuccess && (
+                <div className="bg-[#EEF2FF] border border-[#C7D2FE] text-[#312E81] text-xs px-3.5 py-2.5 rounded-xl flex items-center justify-between shadow-2xs">
+                  <div className="flex items-center gap-2">
+                    <span className="w-4 h-4 rounded-full bg-[#4F46E5] text-white flex items-center justify-center text-[10px] font-bold">
+                      ✓
+                    </span>
+                    <span className="font-semibold">{enhanceSuccess}</span>
                   </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-[#0F172A]">
-                      AI Enhanced Resume
+                  <button
+                    type="button"
+                    onClick={() => setShowEnhancedModal(true)}
+                    className="underline font-bold text-[#4F46E5] hover:text-[#3730A3] cursor-pointer ml-2"
+                  >
+                    View
+                  </button>
+                </div>
+              )}
+
+              {enhanceError && (
+                <div className="bg-rose-50 border border-rose-200 text-rose-800 text-xs px-3.5 py-2.5 rounded-xl flex items-center justify-between shadow-2xs">
+                  <div className="flex items-center gap-2">
+                    <span className="w-4 h-4 rounded-full bg-rose-600 text-white flex items-center justify-center text-[10px] font-bold">
+                      !
+                    </span>
+                    <span className="font-medium">{enhanceError}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEnhanceError(null)}
+                    className="text-rose-500 hover:text-rose-700 font-bold ml-2 cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {/* ATS Match Box */}
+              <div className="rounded-[16px] border border-slate-200/80 bg-[#F8FAFC]/70 p-4 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="relative w-[64px] h-[64px] shrink-0 flex items-center justify-center">
+                    <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                      <path
+                        className="text-slate-200"
+                        strokeWidth="3.2"
+                        stroke="currentColor"
+                        fill="none"
+                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      />
+                      <path
+                        className="text-[#4F46E5]"
+                        strokeDasharray={`${Number(activeAtsScore) || 0}, 100`}
+                        strokeWidth="3.2"
+                        strokeLinecap="round"
+                        stroke="currentColor"
+                        fill="none"
+                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="text-[13px] font-bold text-[#0F172A] leading-none">
+                        {activeAtsScore}%
+                      </span>
+                      <span className="text-[8.5px] text-[#64748B] font-medium leading-none mt-0.5">
+                        Match
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col">
+                    <h3 className="text-[14px] font-bold text-[#0F172A]">
+                      ATS Match
                     </h3>
-                    <p className="text-xs text-[#64748B] mt-0.5">
-                      Tailored specifically for {selectedJobModal.title} at{" "}
-                      {selectedJobModal.company}
+                    <p className="text-[12px] text-[#64748B] mt-0.5 leading-snug">
+                      {Number(activeAtsScore) >= 80
+                        ? "Strong match based on your profile, skills, experience and preferences."
+                        : Number(activeAtsScore) >= 60
+                          ? "Moderate match. Enhancing your resume can bridge key skill and keyword gaps."
+                          : "Lower match. Review identified gaps below or click Enhance Resume."}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                {/* Get Updated ATS Button */}
+                {enhancedResultsMap[selectedJobId] && (
                   <button
                     type="button"
-                    onClick={() =>
-                      handleDownloadEnhancedResume(
-                        enhancedResultsMap[getJobId(selectedJobModal)]
-                          ?.EnhResume ||
-                        enhancedResultsMap[getJobId(selectedJobModal)]
-                          ?.enhResume ||
-                        enhancedResultsMap[getJobId(selectedJobModal)]
-                          ?.enhanced_resume ||
-                        enhancedResultsMap[getJobId(selectedJobModal)]
-                          ?.enhancedResume,
-                        selectedJobModal
-                      )
-                    }
-                    disabled={isDownloadingResume}
-                    className="px-3.5 py-1.5 bg-[#EEF2FF] hover:bg-[#E0E7FF] disabled:bg-slate-100 text-[#4F46E5] disabled:text-slate-400 text-xs font-semibold rounded-lg transition-colors cursor-pointer disabled:cursor-not-allowed flex items-center gap-1.5"
+                    onClick={handleGetUpdatedAts}
+                    disabled={isUpdatingAts}
+                    className="px-3.5 py-2 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-[12px] font-semibold rounded-xl shadow-xs shrink-0 whitespace-nowrap transition-all active:scale-[0.98] cursor-pointer flex items-center gap-1.5"
                   >
-                    {isDownloadingResume ? (
-                      <>
-                        <svg className="animate-spin w-3.5 h-3.5 text-[#4F46E5]" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                        </svg>
-                        <span>Downloading...</span>
-                      </>
-                    ) : (
+                    {isUpdatingAts ? (
                       <>
                         <svg
-                          className="w-4 h-4"
+                          className="animate-spin w-3.5 h-3.5 text-white"
                           fill="none"
                           viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          strokeWidth="2"
                         >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          />
                           <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                           />
                         </svg>
-                        <span>Download</span>
+                        <span>Updating...</span>
+                      </>
+                    ) : (
+                      "Get Updated ATS"
+                    )}
+                  </button>
+                )}
+              </div>
+
+              {/* ATS Identified Gaps & Missing Skills */}
+              {(missingRequiredSkills.length > 0 ||
+                missingPreferredSkills.length > 0 ||
+                missingKeywords.length > 0) && (
+                  <div className="rounded-[16px] border border-amber-200/80 bg-gradient-to-br from-amber-50/60 to-orange-50/30 p-4 space-y-3 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="w-5 h-5 rounded-md bg-amber-100 text-amber-800 text-[11px] font-bold flex items-center justify-center">
+                          !
+                        </span>
+                        <h4 className="text-[13px] font-bold text-amber-950">
+                          ATS Identified Gaps
+                        </h4>
+                      </div>
+                      <span className="text-[10.5px] font-semibold text-amber-800 bg-amber-100/80 border border-amber-200 px-2 py-0.5 rounded-full">
+                        {missingRequiredSkills.length +
+                          missingPreferredSkills.length +
+                          missingKeywords.length}{" "}
+                        Gaps
+                      </span>
+                    </div>
+
+                    {missingRequiredSkills.length > 0 && (
+                      <div>
+                        <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">
+                          Missing Required Skills:
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {missingRequiredSkills.map((skill, i) => (
+                            <span
+                              key={i}
+                              className="bg-white border border-amber-200 text-amber-900 text-[11.5px] font-medium px-2.5 py-0.5 rounded-md shadow-2xs"
+                            >
+                              • {skill}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {missingPreferredSkills.length > 0 && (
+                      <div>
+                        <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">
+                          Missing Preferred Skills:
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {missingPreferredSkills.map((skill, i) => (
+                            <span
+                              key={i}
+                              className="bg-white border border-amber-200 text-amber-900 text-[11.5px] font-medium px-2.5 py-0.5 rounded-md shadow-2xs"
+                            >
+                              • {skill}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {missingKeywords.length > 0 && (
+                      <div>
+                        <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">
+                          Missing Keywords:
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {missingKeywords.map((kw, i) => (
+                            <span
+                              key={i}
+                              className="bg-white border border-amber-200 text-slate-700 text-[11px] font-normal px-2 py-0.5 rounded-md"
+                            >
+                              {kw}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+              {/* Job Description */}
+              <div>
+                <h3 className="text-[14px] font-bold text-[#0F172A]">
+                  Job description
+                </h3>
+                <p className="text-[12.5px] text-[#475569] leading-relaxed mt-1.5">
+                  {cleanHtmlText(
+                    selectedJobModal.description ||
+                    selectedJobModal.fullJdText ||
+                    selectedJobModal.preview
+                  )}
+                </p>
+              </div>
+
+              {/* Key Responsibilities */}
+              {Array.isArray(selectedJobModal.responsibilities) &&
+                selectedJobModal.responsibilities.length > 0 && (
+                  <div>
+                    <h3 className="text-[14px] font-bold text-[#0F172A]">
+                      Key responsibilities:
+                    </h3>
+                    <ul className="space-y-2 mt-2">
+                      {selectedJobModal.responsibilities.map((resp, idx) => (
+                        <li
+                          key={idx}
+                          className="text-[12.5px] text-[#475569] flex items-start gap-2 leading-snug"
+                        >
+                          <span className="text-[#94A3B8] shrink-0">•</span>
+                          <span>{resp}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+              {/* Required Skills */}
+              {Array.isArray(selectedJobModal.requiredSkills) &&
+                selectedJobModal.requiredSkills.length > 0 && (
+                  <div>
+                    <h3 className="text-[14px] font-bold text-[#0F172A]">
+                      Required skills
+                    </h3>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {selectedJobModal.requiredSkills.map((skill) => (
+                        <span
+                          key={skill}
+                          className="bg-[#F1F5F9] text-[#334155] rounded-[8px] px-3 py-1.5 text-[12px] font-medium"
+                        >
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+              {/* Preferred Skills */}
+              {Array.isArray(selectedJobModal.preferredSkills) &&
+                selectedJobModal.preferredSkills.length > 0 && (
+                  <div>
+                    <h3 className="text-[14px] font-bold text-[#0F172A]">
+                      Preferred skills
+                    </h3>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {selectedJobModal.preferredSkills.map((skill) => (
+                        <span
+                          key={skill}
+                          className="bg-[#F1F5F9] text-[#334155] rounded-[8px] px-3 py-1.5 text-[12px] font-medium"
+                        >
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+              {/* Job Details */}
+              <div>
+                <h3 className="text-[14px] font-bold text-[#0F172A] mb-2.5">
+                  Job details
+                </h3>
+                <div className="grid grid-cols-2 gap-y-2.5 gap-x-4">
+                  <div className="flex items-center gap-2 text-[12.5px]">
+                    <span className="text-[#64748B]">Experience</span>
+                    <span className="font-semibold text-[#0F172A]">
+                      {selectedJobModal.experience || "Not specified"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-[12.5px]">
+                    <span className="text-[#64748B]">Work mode</span>
+                    <span className="font-semibold text-[#0F172A]">
+                      {selectedJobModal.workMode || "On-site"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-[12.5px]">
+                    <span className="text-[#64748B]">Employment type</span>
+                    <span className="font-semibold text-[#0F172A]">
+                      {selectedJobModal.type || "Full-time"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-[12.5px]">
+                    <span className="text-[#64748B]">Location</span>
+                    <span className="font-semibold text-[#0F172A]">
+                      {selectedJobModal.fullLocation ||
+                        selectedJobModal.location || "Remote / Flexible"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 sm:p-5 border-t border-slate-100 bg-white shrink-0 flex flex-col gap-2.5">
+              {panelApplyStatus && (
+                <div
+                  className={`p-3 rounded-xl border text-[12.5px] font-medium flex items-center justify-between gap-2 ${panelApplyStatus.type === "success"
+                      ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                      : panelApplyStatus.type === "skipped"
+                        ? "bg-amber-50 border-amber-200 text-amber-800"
+                        : "bg-rose-50 border-rose-200 text-rose-800"
+                    }`}
+                >
+                  <span>{panelApplyStatus.message}</span>
+                  <button
+                    type="button"
+                    onClick={() => setPanelApplyStatus(null)}
+                    className="text-xs font-bold text-slate-400 hover:text-slate-600 shrink-0"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+              {(() => {
+                if (isStatusLoading) {
+                  return (
+                    <button
+                      type="button"
+                      disabled
+                      className="w-full h-[44px] rounded-[12px] bg-slate-100 border border-slate-200 text-slate-400 text-[13.5px] font-medium flex items-center justify-center gap-2 cursor-not-allowed"
+                    >
+                      <svg className="animate-spin h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                      </svg>
+                      <span>Checking status...</span>
+                    </button>
+                  );
+                }
+
+                const isHidden = isApplyNowHiddenForJob(selectedJobModal, applicationMap);
+
+                if (isHidden) {
+                  const numericId = extractNumericJobId(selectedJobModal);
+                  const stringId = getJobId(selectedJobModal);
+                  const record = (numericId !== null && applicationMap.get(numericId)) || (stringId && applicationMap.get(stringId));
+                  const rawStatus = record?.status || record?.state || record?.applicationStatus;
+                  const norm = normalizeApplicationStatus(rawStatus);
+
+                  let displayLabel = 'Already Applied';
+                  if (norm === 'SUBMITTED') displayLabel = 'Submitted';
+                  else if (norm === 'QUEUED') displayLabel = 'Queued';
+                  else if (norm === 'IN_PROGRESS') displayLabel = 'In Progress';
+                  else if (norm === 'NEEDS_ACTION') displayLabel = 'Needs Action';
+                  else if (norm === 'PREPARING') displayLabel = 'Preparing';
+
+                  return (
+                    <button
+                      type="button"
+                      disabled
+                      className="w-full h-[44px] rounded-[12px] bg-slate-100 border border-slate-200 text-slate-500 text-[13.5px] font-semibold flex items-center justify-center cursor-not-allowed"
+                    >
+                      {displayLabel}
+                    </button>
+                  );
+                }
+
+                return (
+                  <button
+                    type="button"
+                    onClick={handleApplyToPanelJob}
+                    disabled={isApplyingPanelJob}
+                    className="w-full h-[44px] rounded-[12px] bg-[#2563EB] hover:bg-[#1D4ED8] disabled:opacity-60 text-white text-[13.5px] font-medium flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.99] transition-all cursor-pointer disabled:cursor-not-allowed"
+                  >
+                    {isApplyingPanelJob ? (
+                      <span className="flex items-center gap-2">
+                        <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                        </svg>
+                        <span>Submitting application...</span>
+                      </span>
+                    ) : (
+                      <>
+                        <span>Apply now</span>
+                        <span>→</span>
                       </>
                     )}
                   </button>
+                );
+              })()}
 
-                  <button
-                    type="button"
-                    onClick={() => setShowEnhancedModal(false)}
-                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-                  >
+              <p className="text-[11.5px] text-[#94A3B8] text-center">
+                Your application quota will be reserved before submission.
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    })()
+  }
+
+  {/* Full Enhanced Resume Modal View */ }
+  {
+    showEnhancedModal &&
+    selectedJobModal &&
+    enhancedResultsMap[getJobId(selectedJobModal)] && (
+      <div className="fixed inset-0 z-[60] overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+          {/* Modal Header */}
+          <div className="p-6 pb-4 border-b border-slate-100 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-[#EEF2FF] border border-[#C7D2FE] flex items-center justify-center text-[#4F46E5] font-bold text-sm">
+                AI
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-[#0F172A]">
+                  AI Enhanced Resume
+                </h3>
+                <p className="text-xs text-[#64748B] mt-0.5">
+                  Tailored specifically for {selectedJobModal.title} at{" "}
+                  {selectedJobModal.company}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  handleDownloadEnhancedResume(
+                    enhancedResultsMap[getJobId(selectedJobModal)]
+                      ?.EnhResume ||
+                    enhancedResultsMap[getJobId(selectedJobModal)]
+                      ?.enhResume ||
+                    enhancedResultsMap[getJobId(selectedJobModal)]
+                      ?.enhanced_resume ||
+                    enhancedResultsMap[getJobId(selectedJobModal)]
+                      ?.enhancedResume,
+                    selectedJobModal
+                  )
+                }
+                disabled={isDownloadingResume}
+                className="px-3.5 py-1.5 bg-[#EEF2FF] hover:bg-[#E0E7FF] disabled:bg-slate-100 text-[#4F46E5] disabled:text-slate-400 text-xs font-semibold rounded-lg transition-colors cursor-pointer disabled:cursor-not-allowed flex items-center gap-1.5"
+              >
+                {isDownloadingResume ? (
+                  <>
+                    <svg className="animate-spin w-3.5 h-3.5 text-[#4F46E5]" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    <span>Downloading...</span>
+                  </>
+                ) : (
+                  <>
                     <svg
-                      className="w-5 h-5"
+                      className="w-4 h-4"
                       fill="none"
                       viewBox="0 0 24 24"
                       stroke="currentColor"
@@ -2947,177 +3503,250 @@ const BrowseJobs = () => {
                       <path
                         strokeLinecap="round"
                         strokeLinejoin="round"
-                        d="M6 18L18 6M6 6l12 12"
+                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
                       />
                     </svg>
-                  </button>
-                </div>
-              </div>
+                    <span>Download</span>
+                  </>
+                )}
+              </button>
 
-              {/* Modal Body */}
-              <div className="p-6 overflow-y-auto space-y-4 flex-1">
-                {/* Bridged Gaps Summary */}
-                {enhancedResultsMap[getJobId(selectedJobModal)]
-                  ?.bridgeable_gaps && (
-                    <div className="bg-[#EEF2FF]/70 border border-[#C7D2FE] rounded-xl p-4.5 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-xs font-bold text-[#312E81] uppercase tracking-wide">
-                          Bridged Skills & Qualifications
-                        </h4>
-                        {Array.isArray(
-                          enhancedResultsMap[getJobId(selectedJobModal)]
-                            .bridgeable_gaps
-                        ) && (
-                            <span className="text-[11px] font-semibold text-[#4F46E5] bg-white border border-[#C7D2FE] px-2 py-0.5 rounded-full">
-                              {
-                                enhancedResultsMap[getJobId(selectedJobModal)]
-                                  .bridgeable_gaps.length
-                              }{" "}
-                              Tailored Improvements
-                            </span>
-                          )}
-                      </div>
-                      <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
-                        {Array.isArray(
-                          enhancedResultsMap[getJobId(selectedJobModal)]
-                            .bridgeable_gaps
-                        ) ? (
-                          enhancedResultsMap[
-                            getJobId(selectedJobModal)
-                          ].bridgeable_gaps.map((gap, i) => {
-                            if (typeof gap === "string") {
-                              return (
-                                <div
-                                  key={i}
-                                  className="flex items-center gap-2 bg-white text-slate-800 border border-[#E0E7FF] rounded-lg p-2.5 shadow-2xs"
-                                >
-                                  <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">
-                                    ✓
-                                  </span>
-                                  <span className="text-xs font-semibold text-slate-900">
-                                    {gap}
-                                  </span>
-                                </div>
-                              );
-                            }
+              <button
+                type="button"
+                onClick={() => setShowEnhancedModal(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
 
-                            const skill =
-                              gap?.skill || gap?.name || gap?.title || "";
-                            const severity =
-                              gap?.severity ||
-                              (gap?.source ? String(gap.source).toUpperCase() : "");
-                            const rationale =
-                              gap?.rationale ||
-                              gap?.description ||
-                              gap?.reason ||
-                              "";
-
-                            return (
-                              <div
-                                key={i}
-                                className="bg-white text-slate-800 border border-[#E0E7FF] rounded-xl p-3 shadow-2xs space-y-1.5"
-                              >
-                                <div className="flex items-center justify-between gap-2">
-                                  <div className="flex items-center gap-2">
-                                    <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">
-                                      ✓
-                                    </span>
-                                    <span className="text-xs font-bold text-slate-900">
-                                      {skill || "Optimized Skill"}
-                                    </span>
-                                  </div>
-                                  {severity && (
-                                    <span
-                                      className={`text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${severity === "CRITICAL"
-                                        ? "bg-amber-50 text-amber-700 border-amber-200"
-                                        : severity === "PREFERRED"
-                                          ? "bg-blue-50 text-blue-700 border-blue-200"
-                                          : "bg-indigo-50 text-[#4F46E5] border-indigo-200"
-                                        }`}
-                                    >
-                                      {severity}
-                                    </span>
-                                  )}
-                                </div>
-                                {rationale && (
-                                  <p className="text-xs text-slate-600 leading-relaxed pl-6 font-normal">
-                                    {rationale}
-                                  </p>
-                                )}
-                              </div>
-                            );
-                          })
-                        ) : typeof enhancedResultsMap[getJobId(selectedJobModal)]
-                          .bridgeable_gaps === "object" ? (
-                          Object.entries(
+          {/* Modal Body */}
+          <div className="p-6 overflow-y-auto space-y-4 flex-1">
+            {/* Bridged Gaps Summary */}
+            {enhancedResultsMap[getJobId(selectedJobModal)]
+              ?.bridgeable_gaps && (
+                <div className="bg-[#EEF2FF]/70 border border-[#C7D2FE] rounded-xl p-4.5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-[#312E81] uppercase tracking-wide">
+                      Bridged Skills & Qualifications
+                    </h4>
+                    {Array.isArray(
+                      enhancedResultsMap[getJobId(selectedJobModal)]
+                        .bridgeable_gaps
+                    ) && (
+                        <span className="text-[11px] font-semibold text-[#4F46E5] bg-white border border-[#C7D2FE] px-2 py-0.5 rounded-full">
+                          {
                             enhancedResultsMap[getJobId(selectedJobModal)]
-                              .bridgeable_gaps
-                          ).map(([k, v], i) => (
+                              .bridgeable_gaps.length
+                          }{" "}
+                          Tailored Improvements
+                        </span>
+                      )}
+                  </div>
+                  <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
+                    {Array.isArray(
+                      enhancedResultsMap[getJobId(selectedJobModal)]
+                        .bridgeable_gaps
+                    ) ? (
+                      enhancedResultsMap[
+                        getJobId(selectedJobModal)
+                      ].bridgeable_gaps.map((gap, i) => {
+                        if (typeof gap === "string") {
+                          return (
                             <div
                               key={i}
-                              className="bg-white text-slate-800 border border-[#E0E7FF] rounded-xl p-3 shadow-2xs space-y-1"
+                              className="flex items-center gap-2 bg-white text-slate-800 border border-[#E0E7FF] rounded-lg p-2.5 shadow-2xs"
                             >
+                              <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">
+                                ✓
+                              </span>
+                              <span className="text-xs font-semibold text-slate-900">
+                                {gap}
+                              </span>
+                            </div>
+                          );
+                        }
+
+                        const skill =
+                          gap?.skill || gap?.name || gap?.title || "";
+                        const severity =
+                          gap?.severity ||
+                          (gap?.source ? String(gap.source).toUpperCase() : "");
+                        const rationale =
+                          gap?.rationale ||
+                          gap?.description ||
+                          gap?.reason ||
+                          "";
+
+                        return (
+                          <div
+                            key={i}
+                            className="bg-white text-slate-800 border border-[#E0E7FF] rounded-xl p-3 shadow-2xs space-y-1.5"
+                          >
+                            <div className="flex items-center justify-between gap-2">
                               <div className="flex items-center gap-2">
                                 <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">
                                   ✓
                                 </span>
                                 <span className="text-xs font-bold text-slate-900">
-                                  {k}
+                                  {skill || "Optimized Skill"}
                                 </span>
                               </div>
-                              <p className="text-xs text-slate-600 leading-relaxed pl-6 font-normal">
-                                {String(v)}
-                              </p>
+                              {severity && (
+                                <span
+                                  className={`text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${severity === "CRITICAL"
+                                    ? "bg-amber-50 text-amber-700 border-amber-200"
+                                    : severity === "PREFERRED"
+                                      ? "bg-blue-50 text-blue-700 border-blue-200"
+                                      : "bg-indigo-50 text-[#4F46E5] border-indigo-200"
+                                    }`}
+                                >
+                                  {severity}
+                                </span>
+                              )}
                             </div>
-                          ))
-                        ) : (
-                          <p className="text-xs text-[#4F46E5]">
-                            {String(
-                              enhancedResultsMap[getJobId(selectedJobModal)]
-                                .bridgeable_gaps
+                            {rationale && (
+                              <p className="text-xs text-slate-600 leading-relaxed pl-6 font-normal">
+                                {rationale}
+                              </p>
                             )}
+                          </div>
+                        );
+                      })
+                    ) : typeof enhancedResultsMap[getJobId(selectedJobModal)]
+                      .bridgeable_gaps === "object" ? (
+                      Object.entries(
+                        enhancedResultsMap[getJobId(selectedJobModal)]
+                          .bridgeable_gaps
+                      ).map(([k, v], i) => (
+                        <div
+                          key={i}
+                          className="bg-white text-slate-800 border border-[#E0E7FF] rounded-xl p-3 shadow-2xs space-y-1"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">
+                              ✓
+                            </span>
+                            <span className="text-xs font-bold text-slate-900">
+                              {k}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-600 leading-relaxed pl-6 font-normal">
+                            {String(v)}
                           </p>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-xs text-[#4F46E5]">
+                        {String(
+                          enhancedResultsMap[getJobId(selectedJobModal)]
+                            .bridgeable_gaps
                         )}
-                      </div>
-                    </div>
-                  )}
-
-                {/* Professional Enhanced Resume Content */}
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide">
-                      Professional Formatted Resume
-                    </h4>
-                    <span className="text-[11px] text-[#4F46E5] font-semibold bg-[#EEF2FF] border border-[#C7D2FE] px-2.5 py-0.5 rounded-full">
-                      Dynamically Formatted
-                    </span>
+                      </p>
+                    )}
                   </div>
-                  <EnhancedResumeViewer
-                    resumeText={
-                      enhancedResultsMap[getJobId(selectedJobModal)]?.EnhResume ||
-                      enhancedResultsMap[getJobId(selectedJobModal)]?.enhResume ||
-                      enhancedResultsMap[getJobId(selectedJobModal)]?.enhanced_resume ||
-                      enhancedResultsMap[getJobId(selectedJobModal)]?.enhancedResume
-                    }
-                    compact={false}
-                  />
                 </div>
-              </div>
+              )}
 
-              {/* Modal Footer */}
-              <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowEnhancedModal(false)}
-                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-                >
-                  Close
-                </button>
+            {/* Professional Enhanced Resume Content */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+                  Professional Formatted Resume
+                </h4>
+                <span className="text-[11px] text-[#4F46E5] font-semibold bg-[#EEF2FF] border border-[#C7D2FE] px-2.5 py-0.5 rounded-full">
+                  Dynamically Formatted
+                </span>
               </div>
+              <EnhancedResumeViewer
+                resumeText={
+                  enhancedResultsMap[getJobId(selectedJobModal)]?.EnhResume ||
+                  enhancedResultsMap[getJobId(selectedJobModal)]?.enhResume ||
+                  enhancedResultsMap[getJobId(selectedJobModal)]?.enhanced_resume ||
+                  enhancedResultsMap[getJobId(selectedJobModal)]?.enhancedResume
+                }
+                compact={false}
+              />
             </div>
           </div>
-        )}
-    </div>
+
+          {/* Modal Footer */}
+          <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setShowEnhancedModal(false)}
+              className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  {/* Floating Toast Notification */ }
+  {
+    toast.show && (
+      <div className="fixed top-20 right-6 md:right-8 z-[100] animate-in fade-in slide-in-from-top-3 duration-300">
+        <div
+          className={`flex items-center gap-3 px-4 py-3 rounded-xl border shadow-[0_4px_20px_-2px_rgba(0,0,0,0.15)] ${toast.type === "error"
+              ? "bg-rose-50 border-rose-200 text-rose-800"
+              : toast.type === "skipped" || toast.type === "warning"
+                ? "bg-amber-50 border-amber-200 text-amber-900"
+                : "bg-[#EEF2FF] border-[#C7D2FE] text-[#4338CA]"
+            }`}
+        >
+          <div
+            className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${toast.type === "error"
+                ? "bg-rose-100 text-rose-600"
+                : toast.type === "skipped" || toast.type === "warning"
+                  ? "bg-amber-100 text-amber-700"
+                  : "bg-[#E0E7FF] text-[#4F46E5]"
+              }`}
+          >
+            {toast.type === "error" ? (
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : toast.type === "skipped" || toast.type === "warning" ? (
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            ) : (
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            )}
+          </div>
+          <p className="text-[13px] font-semibold tracking-wide">{toast.message}</p>
+          <button
+            type="button"
+            onClick={() => setToast((prev) => ({ ...prev, show: false }))}
+            className="ml-2 text-slate-400 hover:text-slate-600 cursor-pointer transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    )
+  }
+    </div >
   );
 };
 

@@ -16,6 +16,7 @@ export * from './enhancedAtsService';
 export * from './jobService';
 export * from './dashboardService';
 export * from './applicationService';
+export * from './applicationService';
 export {
   getStoredAuthToken,
   getStoredRefreshToken,
@@ -50,6 +51,21 @@ export {
   getStoredApplicationsData,
   setStoredApplicationsData,
   getApplicationStatusCategory,
+} from './applicationService';
+export {
+  applyToJobs,
+  applyToJobsInBatches,
+  extractNumericJobId,
+  extractNumericResumeId,
+  getStoredAppliedJobIds,
+  markJobsAsApplied,
+  isJobAlreadyApplied,
+  getApplicationStatuses,
+  isApplyNowHiddenForJob,
+  extractJobIdFromApplicationRecord,
+  getMatchingApplicationForJob,
+  normalizeApplicationStatus,
+  isApplicationStatusActiveOrCompleted,
 } from './applicationService';
 
 export { apiClient as api, apiClient, axiosInstance };

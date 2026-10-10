@@ -84,6 +84,48 @@ const cleanHtmlText = (str) => {
     .trim();
 };
 
+const formatPostedDate = (postedAt) => {
+  if (!postedAt) return "Recently";
+  try {
+    const date = new Date(postedAt);
+    if (isNaN(date.getTime())) return String(postedAt);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    if (diffMs < 0) return "Just now";
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 0) {
+      if (diffHours <= 1) return "Just now";
+      return `${diffHours} hours ago`;
+    }
+    if (diffDays === 1) return "1 day ago";
+    if (diffDays < 7) return `${diffDays} days ago`;
+    return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  } catch {
+    return String(postedAt);
+  }
+};
+
+const getApplicationCategory = (app) => {
+  if (!app) return "All";
+
+  const rawTab = String(app.tab || app.statusCategory || "").trim().toUpperCase().replace(/[\s-]/g, "_");
+  if (rawTab === "SUBMITTED" || rawTab === "COMPLETED" || rawTab === "SUCCESS") return "Submitted";
+  if (rawTab === "IN_PROGRESS" || rawTab === "QUEUED" || rawTab === "PREPARING") return "In Progress";
+  if (rawTab === "NEEDS_ACTION" || rawTab === "ACTION_REQUIRED") return "Needs Action";
+  if (rawTab === "FAILED" || rawTab === "ERROR" || rawTab === "REJECTED") return "Failed";
+  if (rawTab === "SKIPPED" || rawTab === "IGNORED") return "Skipped";
+
+  const rawStatus = String(app.status || app.state || app.applicationStatus || "").trim().toUpperCase().replace(/[\s-]/g, "_");
+  if (["SUBMITTED", "COMPLETED", "SUCCESS", "APPLIED"].includes(rawStatus)) return "Submitted";
+  if (["PREPARING", "QUEUED", "IN_PROGRESS", "RUNNING", "PROCESSING"].includes(rawStatus)) return "In Progress";
+  if (["NEEDS_ACTION", "ACTION_REQUIRED"].includes(rawStatus)) return "Needs Action";
+  if (["FAILED", "ERROR", "REJECTED"].includes(rawStatus)) return "Failed";
+  if (["SKIPPED", "IGNORED"].includes(rawStatus)) return "Skipped";
+
+  return "Submitted";
+};
+
 const extractCleanJobTitle = (rawTitle, rawText, index = 0) => {
   let title = cleanHtmlText(rawTitle || "");
   const text = cleanHtmlText(rawText || "");
@@ -272,6 +314,10 @@ const transformMatchToJob = (match, index = 0) => {
     Array.isArray(match.requiredSkills) && match.requiredSkills.length > 0
       ? match.requiredSkills.map(cleanHtmlText)
       : Array.isArray(match.skills) && match.skills.length > 0
+        ? match.skills.map(cleanHtmlText)
+        : Array.isArray(match.extracted_skills) && match.extracted_skills.length > 0
+          ? match.extracted_skills.map(cleanHtmlText)
+          : [];
         ? match.skills.map(cleanHtmlText)
         : Array.isArray(match.extracted_skills) && match.extracted_skills.length > 0
           ? match.extracted_skills.map(cleanHtmlText)
@@ -2470,25 +2516,25 @@ const Dashboard = () => {
                       <div className="flex flex-col text-[12.5px]">
                         <span className="text-[#64748B]">Experience</span>
                         <span className="font-semibold text-[#0F172A] mt-0.5">
-                          {selectedJobModal.experience}
+                          {selectedJobModal.experience || "Not specified"}
                         </span>
                       </div>
                       <div className="flex flex-col text-[12.5px]">
                         <span className="text-[#64748B]">Work mode</span>
                         <span className="font-semibold text-[#0F172A] mt-0.5">
-                          {selectedJobModal.workMode}
+                          {selectedJobModal.workMode || selectedJobModal.workplace || "Remote"}
                         </span>
                       </div>
                       <div className="flex flex-col text-[12.5px]">
                         <span className="text-[#64748B]">Employment type</span>
                         <span className="font-semibold text-[#0F172A] mt-0.5">
-                          {selectedJobModal.type}
+                          {selectedJobModal.type || selectedJobModal.employmentType || "Full-time"}
                         </span>
                       </div>
                       <div className="flex flex-col text-[12.5px]">
                         <span className="text-[#64748B]">Location</span>
                         <span className="font-semibold text-[#0F172A] mt-0.5">
-                          {selectedJobModal.fullLocation}
+                          {selectedJobModal.fullLocation || selectedJobModal.location || "Remote"}
                         </span>
                       </div>
                     </div>
@@ -2718,6 +2764,7 @@ const Dashboard = () => {
                     }
                     compact={false}
                   />
+                </div>
                 </div>
               </div>
 
