@@ -261,28 +261,6 @@ export const applyToJobs = async ({ resumeId, jobIds }) => {
       console.log('⚠️ Skipped Jobs (0): []');
     }
 
-    // Automatically mark queued and skipped (already submitted/in-progress) jobs as applied
-    const appliedIdsToMark = [...queued];
-    for (const item of skipped) {
-      const reason = String(item?.reason || '').toUpperCase();
-      if (
-        reason.includes('SUBMITTED') ||
-        reason.includes('PROGRESS') ||
-        reason.includes('APPLIED') ||
-        reason.includes('DUPLICATE')
-      ) {
-        const itemJobId = extractNumericJobId({ jobId: item.jobId || item.job_id });
-        if (itemJobId !== null) {
-          appliedIdsToMark.push(itemJobId);
-        }
-      }
-    }
-    if (appliedIdsToMark.length === 0 && validNumericJobIds.length === 1) {
-      // If single request returned 202 accepted with empty queued/skipped arrays, mark the job as applied
-      appliedIdsToMark.push(validNumericJobIds[0]);
-    }
-    const updatedAppliedList = markJobsAsApplied(appliedIdsToMark);
-    console.log('💾 Updated Local Applied Job IDs List:', updatedAppliedList);
     console.groupEnd();
 
     return {
@@ -455,6 +433,93 @@ export const isApplicationStatusActiveOrCompleted = (rawStatus) => {
  *   applicationMap: Map<number, Object>,
  *   rawList: Array<Object>
  * }>}
+/**
+ * Extract the actual Job ID (jobId) from an application record object.
+ * NEVER returns the application record's own primary key (id).
+ *
+ * @param {Object} record
+ * @returns {number|string|null}
+ */
+export const extractJobIdFromApplicationRecord = (record) => {
+  if (!record || typeof record !== 'object') return null;
+
+  const candidates = [
+    record.jobId,
+    record.job_id,
+    record.job?.jobId,
+    record.job?.job_id,
+    record.job?.id,
+    record.job?.JDid,
+    record.job?.jd_id,
+    record.jd_id,
+    record.JDid,
+  ];
+
+  for (const cand of candidates) {
+    if (cand === undefined || cand === null || cand === '') continue;
+    if (typeof cand === 'number' && !isNaN(cand) && cand > 0) return cand;
+    if (typeof cand === 'string' && cand.trim() !== '') {
+      const num = Number(cand.trim());
+      if (!isNaN(num) && num > 0) return num;
+      return cand.trim();
+    }
+  }
+
+  return null;
+};
+
+/**
+ * Retrieve the matching backend application record for a job card object.
+ * Maps card job ID candidates to application.jobId. NEVER matches application.id.
+ *
+ * @param {Object} job
+ * @param {Map<number|string, Object>} [applicationMap]
+ * @returns {Object|null}
+ */
+export const getMatchingApplicationForJob = (job, applicationMap) => {
+  if (!job || !applicationMap || typeof applicationMap.has !== 'function' || applicationMap.size === 0) {
+    return null;
+  }
+
+  const numericJobId = extractNumericJobId(job);
+  if (numericJobId !== null && applicationMap.has(numericJobId)) {
+    return applicationMap.get(numericJobId);
+  }
+
+  const stringCandidates = [
+    job.jobId,
+    job.job_id,
+    job.JDid,
+    job.jd_id,
+    job.id,
+    job.rawMatch?.jobId,
+    job.rawMatch?.job_id,
+    job.rawMatch?.JDid,
+    job.rawMatch?.jd_id,
+    job.rawMatch?.id,
+  ];
+
+  for (const cand of stringCandidates) {
+    if (cand !== undefined && cand !== null && cand !== '') {
+      const strCand = String(cand).trim();
+      if (applicationMap.has(strCand)) {
+        return applicationMap.get(strCand);
+      }
+    }
+  }
+
+  return null;
+};
+
+/**
+ * GET /api/applications?tab=all&page=0&size=50
+ * Fetches user application records to determine per-job status.
+ * Handles nested response shapes (data.applications.items, data.items, etc.)
+ *
+ * @returns {Promise<{
+ *   applicationMap: Map<number|string, Object>,
+ *   rawList: Array<Object>
+ * }>}
  */
 export const getApplicationStatuses = async () => {
   console.group('🔍 [API CALL] GET /api/applications');
@@ -470,7 +535,8 @@ export const getApplicationStatuses = async () => {
     if (Array.isArray(data)) {
       rawList = data;
     } else if (data && typeof data === 'object') {
-      if (Array.isArray(data.items)) rawList = data.items;
+      if (Array.isArray(data.applications?.items)) rawList = data.applications.items;
+      else if (Array.isArray(data.items)) rawList = data.items;
       else if (Array.isArray(data.content)) rawList = data.content;
       else if (Array.isArray(data.applications)) rawList = data.applications;
       else if (Array.isArray(data.data)) rawList = data.data;
@@ -478,7 +544,13 @@ export const getApplicationStatuses = async () => {
     }
 
     // Check pagination metadata if available
-    const totalPages = data?.totalPages || data?.page?.totalPages || 1;
+    const totalPages =
+      data?.applications?.totalPages ||
+      data?.applications?.page?.totalPages ||
+      data?.totalPages ||
+      data?.page?.totalPages ||
+      1;
+
     if (totalPages > 1) {
       console.log(`📑 Total pages available: ${totalPages}. Fetching remaining pages...`);
       for (let p = 1; p < totalPages && p < 10; p++) {
@@ -488,7 +560,14 @@ export const getApplicationStatuses = async () => {
           let pList = [];
           if (Array.isArray(pData)) pList = pData;
           else if (pData && typeof pData === 'object') {
-            pList = pData.items || pData.content || pData.applications || pData.data || pData.results || [];
+            pList =
+              pData.applications?.items ||
+              pData.items ||
+              pData.content ||
+              pData.applications ||
+              pData.data ||
+              pData.results ||
+              [];
           }
           rawList.push(...pList);
         } catch (pErr) {
@@ -499,7 +578,8 @@ export const getApplicationStatuses = async () => {
 
     console.log(`📋 Total application records retrieved: ${rawList.length}`);
 
-    // Map each numeric jobId and string job_id to its latest application record
+    // Map each actual job ID (jobId) to its latest application record.
+    // NEVER map by application ID (record.id).
     const applicationMap = new Map();
 
     const getRecordTime = (rec) => {
@@ -508,8 +588,6 @@ export const getApplicationStatuses = async () => {
         const t = new Date(time).getTime();
         if (!isNaN(t)) return t;
       }
-      const idNum = Number(rec?.id);
-      if (!isNaN(idNum) && idNum > 0) return idNum;
       return 0;
     };
 
@@ -529,24 +607,37 @@ export const getApplicationStatuses = async () => {
 
     for (let i = 0; i < rawList.length; i++) {
       const record = rawList[i];
-      const numericJobId =
-        extractNumericJobId(record) ||
-        extractNumericJobId({ jobId: record.jobId || record.job_id || record.job?.id || record.jd_id });
+      const actualJobId = extractJobIdFromApplicationRecord(record);
 
-      const stringJobId =
-        (typeof record.job_id === 'string' && record.job_id.trim()) ||
-        (typeof record.jobId === 'string' && record.jobId.trim()) ||
-        (typeof record.id === 'string' && record.id.trim()) ||
-        (typeof record.job?.job_id === 'string' && record.job.job_id.trim()) ||
-        (typeof record.job?.id === 'string' && record.job.id.trim()) ||
-        null;
+      if (actualJobId !== null && actualJobId !== undefined && actualJobId !== '') {
+        updateMapForId(actualJobId, record, i);
+        updateMapForId(String(actualJobId), record, i);
+        if (typeof actualJobId === 'string' && !isNaN(Number(actualJobId)) && Number(actualJobId) > 0) {
+          updateMapForId(Number(actualJobId), record, i);
+        }
+      }
+    }
 
-      if (numericJobId !== null) {
-        updateMapForId(numericJobId, record, i);
+    // Sync local storage applied_job_ids with authoritative backend applications list
+    try {
+      const activeNumericJobIds = [];
+      applicationMap.forEach((rec, key) => {
+        const norm = normalizeApplicationStatus(rec?.status || rec?.state || rec?.applicationStatus);
+        if (norm && ['PREPARING', 'QUEUED', 'IN_PROGRESS', 'NEEDS_ACTION', 'SUBMITTED', 'COMPLETED', 'SUCCESS', 'APPLIED'].includes(norm)) {
+          const numId = typeof key === 'number' ? key : extractJobIdFromApplicationRecord(rec);
+          if (typeof numId === 'number' && !isNaN(numId) && numId > 0 && !activeNumericJobIds.includes(numId)) {
+            activeNumericJobIds.push(numId);
+          }
+        }
+      });
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('applied_job_ids', JSON.stringify(activeNumericJobIds));
       }
-      if (stringJobId) {
-        updateMapForId(stringJobId, record, i);
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem('applied_job_ids', JSON.stringify(activeNumericJobIds));
       }
+    } catch {
+      // ignore
     }
 
     console.log(`🎯 Unique jobs mapped to latest status: ${applicationMap.size}`);
@@ -565,63 +656,29 @@ export const getApplicationStatuses = async () => {
 
 /**
  * Determines whether the Apply Now button should be HIDDEN for a given job object.
- * Strictly driven by backend application status API response.
+ * Driven strictly by backend application status API response (applicationMap).
  *
  * @param {Object} job
  * @param {Map<number|string, Object>} [applicationMap]
  * @returns {boolean} True if Apply Now button should be HIDDEN.
  */
 export const isApplyNowHiddenForJob = (job, applicationMap = new Map()) => {
-  if (!job || !applicationMap || typeof applicationMap.has !== 'function') return false;
+  if (!job) return false;
 
-  let record = null;
+  // Retrieve matching application record using actual jobId candidates
+  const record = getMatchingApplicationForJob(job, applicationMap);
 
-  // 1. Try numeric ID lookup
-  const numericJobId = extractNumericJobId(job);
-  if (numericJobId !== null && applicationMap.has(numericJobId)) {
-    record = applicationMap.get(numericJobId);
-  }
+  if (record) {
+    const rawStatus = record?.status || record?.state || record?.applicationStatus;
+    const norm = normalizeApplicationStatus(rawStatus);
 
-  // 2. Try string / UUID lookup if no record found by numeric ID
-  if (!record) {
-    const stringCandidates = [
-      job.job_id,
-      job.jobId,
-      job.id,
-      job.JDid,
-      job.jd_id,
-      job.rawMatch?.job_id,
-      job.rawMatch?.jobId,
-      job.rawMatch?.id,
-    ];
-    for (const cand of stringCandidates) {
-      if (cand !== undefined && cand !== null && cand !== '') {
-        const strCand = String(cand).trim();
-        if (applicationMap.has(strCand)) {
-          record = applicationMap.get(strCand);
-          break;
-        }
-      }
+    if (norm && ['PREPARING', 'QUEUED', 'IN_PROGRESS', 'NEEDS_ACTION', 'SUBMITTED', 'COMPLETED', 'SUCCESS', 'APPLIED'].includes(norm)) {
+      return true;
     }
+    return false; // Found record, but status is FAILED or SKIPPED
   }
 
-  if (!record) {
-    return false;
-  }
-
-  const rawStatus = record?.status || record?.state || record?.applicationStatus;
-  const norm = normalizeApplicationStatus(rawStatus);
-
-  if (!norm) return false;
-
-  if (['PREPARING', 'QUEUED', 'IN_PROGRESS', 'NEEDS_ACTION', 'SUBMITTED', 'COMPLETED', 'SUCCESS', 'APPLIED'].includes(norm)) {
-    return true;
-  }
-
-  if (['FAILED', 'SKIPPED'].includes(norm)) {
-    return false;
-  }
-
+  // Job is NOT in backend applicationMap -> SHOW Apply Now
   return false;
 };
 
@@ -632,6 +689,8 @@ export default {
   isJobAlreadyApplied,
   extractNumericJobId,
   extractNumericResumeId,
+  extractJobIdFromApplicationRecord,
+  getMatchingApplicationForJob,
   applyToJobs,
   applyToJobsInBatches,
   normalizeApplicationStatus,

@@ -1089,7 +1089,6 @@ const Dashboard = () => {
     ];
   }, [dashboardMetrics, billingInfo]);
 
-<<<<<<< HEAD
   // Dynamic Application Tabs with Counts (Exclusively From GET /api/dashboard applicationCounts or recentApplications)
   const applicationTabs = useMemo(() => {
     const counts = dashboardMetrics?.applicationCounts || {};
@@ -1109,20 +1108,6 @@ const Dashboard = () => {
       { name: "Skipped", count: countForCategory("skipped", "Skipped") },
     ];
   }, [dashboardMetrics?.applicationCounts, applications]);
-=======
-  // Dynamic Application Tabs with Counts (Exclusively From GET /api/dashboard applicationCounts)
-  const applicationTabs = useMemo(() => {
-    const counts = dashboardMetrics?.applicationCounts || {};
-    return [
-      { name: "All", count: typeof counts.all === "number" ? counts.all : applications.length },
-      { name: "Submitted", count: typeof counts.submitted === "number" ? counts.submitted : 0 },
-      { name: "In Progress", count: typeof counts.inProgress === "number" ? counts.inProgress : 0 },
-      { name: "Needs Action", count: typeof counts.needsAction === "number" ? counts.needsAction : 0 },
-      { name: "Failed", count: typeof counts.failed === "number" ? counts.failed : 0 },
-      { name: "Skipped", count: typeof counts.skipped === "number" ? counts.skipped : 0 },
-    ];
-  }, [dashboardMetrics?.applicationCounts, applications.length]);
->>>>>>> 0d9db91d16ce4863241ace413ce4667a6ea6dd16
 
   // Filtered Applications Table List
   const filteredApplications = useMemo(() => {

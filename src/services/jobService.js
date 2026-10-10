@@ -24,7 +24,7 @@ export const JOBS_API_URL = JOB_ENDPOINTS?.LIST || '/api/jobs';
  * @param {string} [params.sort='best_match'] - 'best_match' (highest ATS score first) or 'newest' (newest first)
  * @param {number} [params.page=0] - 0-indexed page number
  * @param {number} [params.size=20] - Page size (1 to 50, default 20)
- * @returns {Promise<{ items: Array, page: number, size: number, totalItems: number, totalPages: number }>}
+ * @returns {Promise<Object>}
  */
 export const getJobs = async (params = {}) => {
   // Clean and prepare query parameters
@@ -199,7 +199,7 @@ export const getJobById = async (jobId) => {
  *   ]
  * }
  *
- * @returns {Promise<{ jobsFound: number, qualifiedMatches: number, applicationsSubmitted: number, applicationsRemaining: number, applicationAllowance: number, topMatches: Array, raw: Object }>}
+ * @returns {Promise<Object>}
  */
 export const getDashboard = async () => {
   console.log('[jobService] Calling GET /api/dashboard');
@@ -207,26 +207,15 @@ export const getDashboard = async () => {
   console.log('[jobService] GET /api/dashboard Raw Response Data:', response.data);
 
   const data = response.data || {};
-<<<<<<< HEAD
-  return {
-    ...data,
-=======
   const formatted = {
->>>>>>> 0d9db91d16ce4863241ace413ce4667a6ea6dd16
     jobsFound: typeof data.jobsFound === 'number' ? data.jobsFound : 0,
     qualifiedMatches: typeof data.qualifiedMatches === 'number' ? data.qualifiedMatches : 0,
     applicationsSubmitted: typeof data.applicationsSubmitted === 'number' ? data.applicationsSubmitted : 0,
     applicationsRemaining: typeof data.applicationsRemaining === 'number' ? data.applicationsRemaining : 0,
     applicationAllowance: typeof data.applicationAllowance === 'number' ? data.applicationAllowance : 0,
-<<<<<<< HEAD
     topMatches: Array.isArray(data.topMatches) ? data.topMatches : (Array.isArray(data.jobs) ? data.jobs : []),
     recentApplications: Array.isArray(data.recentApplications) ? data.recentApplications : (Array.isArray(data.applications) ? data.applications : []),
-    applicationCounts: data.applicationCounts || data.counts || null,
-    raw: data,
-=======
-    topMatches: Array.isArray(data.topMatches) ? data.topMatches : [],
-    recentApplications: Array.isArray(data.recentApplications) ? data.recentApplications : [],
-    applicationCounts: data.applicationCounts || {
+    applicationCounts: data.applicationCounts || data.counts || {
       all: 0,
       submitted: 0,
       inProgress: 0,
@@ -235,7 +224,7 @@ export const getDashboard = async () => {
       skipped: 0,
     },
     ...data,
->>>>>>> 0d9db91d16ce4863241ace413ce4667a6ea6dd16
+    raw: data,
   };
 
   try {

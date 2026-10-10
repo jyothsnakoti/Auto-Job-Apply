@@ -54,6 +54,8 @@ export {
   isJobAlreadyApplied,
   getApplicationStatuses,
   isApplyNowHiddenForJob,
+  extractJobIdFromApplicationRecord,
+  getMatchingApplicationForJob,
   normalizeApplicationStatus,
   isApplicationStatusActiveOrCompleted,
 } from './applicationService';

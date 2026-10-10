@@ -24,6 +24,8 @@ import {
   isJobAlreadyApplied,
   getApplicationStatuses,
   isApplyNowHiddenForJob,
+  getMatchingApplicationForJob,
+  extractJobIdFromApplicationRecord,
   normalizeApplicationStatus,
 } from "../services/api";
 import {
@@ -2699,12 +2701,19 @@ const BrowseJobs = () => {
                               );
                             }
 
+                            const actualJobId = extractNumericJobId(job) || job.jobId || job.job_id || job.id;
+                            const record = getMatchingApplicationForJob(job, applicationMap);
                             const hideApply = isApplyNowHiddenForJob(job, applicationMap);
 
+                            console.log("[BrowseJobs] Application status match", {
+                              cardJobId: actualJobId,
+                              matchedApplicationJobId: record ? (extractJobIdFromApplicationRecord(record) ?? null) : null,
+                              applicationId: record?.id ?? null,
+                              status: record?.status ?? record?.state ?? null,
+                              hideApplyNow: hideApply
+                            });
+
                             if (hideApply) {
-                              const numericId = extractNumericJobId(job);
-                              const stringId = job.id || job.job_id;
-                              const record = (numericId !== null && applicationMap.get(numericId)) || (stringId && applicationMap.get(stringId));
                               const rawStatus = record?.status || record?.state || record?.applicationStatus;
                               const norm = normalizeApplicationStatus(rawStatus);
 
