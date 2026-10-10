@@ -21,6 +21,10 @@ import {
   getJobById,
   getResumeMatchesStatus,
   refreshResumeMatches,
+  getApplications,
+  getApplicationCounts,
+  getStoredApplicationsData,
+  getApplicationStatusCategory,
 } from "../services/api";
 
 import dashboard1Icon from "../assets/dashboard1.svg";
@@ -268,10 +272,10 @@ const transformMatchToJob = (match, index = 0) => {
     Array.isArray(match.requiredSkills) && match.requiredSkills.length > 0
       ? match.requiredSkills.map(cleanHtmlText)
       : Array.isArray(match.skills) && match.skills.length > 0
-      ? match.skills.map(cleanHtmlText)
-      : Array.isArray(match.extracted_skills) && match.extracted_skills.length > 0
-      ? match.extracted_skills.map(cleanHtmlText)
-      : [];
+        ? match.skills.map(cleanHtmlText)
+        : Array.isArray(match.extracted_skills) && match.extracted_skills.length > 0
+          ? match.extracted_skills.map(cleanHtmlText)
+          : [];
 
   const preferredSkills =
     Array.isArray(match.preferredSkills) && match.preferredSkills.length > 0
@@ -279,14 +283,14 @@ const transformMatchToJob = (match, index = 0) => {
       : [];
 
   let matchText = rawScore !== null ? `${rawScore}% match` : "ATS Match";
-  let matchColor = "bg-[#EEF2FF] text-[#4F46E5]";
+  let matchColor = "bg-[#F1F5F9] text-[#64748B]";
   if (rawScore !== null) {
-    if (rawScore < 60) {
-      matchColor = "bg-slate-100 text-slate-700";
-    } else if (rawScore < 75) {
+    if (rawScore >= 85) {
+      matchColor = "bg-[#ECFDF5] text-[#059669]";
+    } else if (rawScore >= 75) {
       matchColor = "bg-[#FFFBEB] text-[#D97706]";
     } else {
-      matchColor = "bg-[#ECFDF5] text-[#059669]";
+      matchColor = "bg-[#F1F5F9] text-[#64748B]";
     }
   }
 
@@ -428,10 +432,10 @@ const getMatchLabel = (job) => {
 };
 
 const getMatchBadgeColor = (percent) => {
-  if (percent >= 85) return "bg-[#ECFDF5] text-[#059669]";
-  if (percent >= 70) return "bg-[#EFF6FF] text-[#2563EB]";
-  if (percent >= 50) return "bg-[#FFFBEB] text-[#D97706]";
-  return "bg-[#FEF2F2] text-[#DC2626]";
+  const num = Number(percent) || 0;
+  if (num >= 85) return "bg-[#ECFDF5] text-[#059669]";
+  if (num >= 75) return "bg-[#FFFBEB] text-[#D97706]";
+  return "bg-[#F1F5F9] text-[#64748B]";
 };
 
 const getMatchedSkills = (job) => {
@@ -475,6 +479,22 @@ const formatMatchTime = (isoString) => {
   }
 };
 
+const formatRelativeDate = (dateVal) => {
+  if (!dateVal) return "Recently";
+  try {
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return "Recently";
+    const diffMs = Date.now() - d.getTime();
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    if (diffHours < 1) return "Just now";
+    if (diffHours < 24) return "Recently";
+    if (diffHours < 48) return "Yesterday";
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  } catch {
+    return "Recently";
+  }
+};
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const [userName, setUserName] = useState("");
@@ -486,9 +506,25 @@ const Dashboard = () => {
   // Helper to open job modal and fetch full job details from GET /api/jobs/{originalJobId}
   const handleOpenJobModal = async (job) => {
     if (!job) return;
-    setSelectedJobModal(job);
+    const normalizedJob = {
+      ...job,
+      id: job.jobId || job.id,
+      jobId: job.jobId || job.id,
+      job_id: job.jobId || job.job_id || job.id,
+      title: job.jobTitle || job.title,
+      company: job.companyName || job.company,
+      companyDomain: job.companyDomain || "",
+      matchPercent:
+        typeof (job.atsScore ?? job.matchPercent) === "number"
+          ? Math.round(job.atsScore ?? job.matchPercent)
+          : (typeof job.rawScore === "number" ? Math.round(job.rawScore) : 0),
+      rawScore: job.atsScore ?? job.rawScore,
+      atsMatch: job.atsScore !== undefined ? `${Math.round(job.atsScore)}%` : job.atsMatch,
+      status: job.status,
+    };
+    setSelectedJobModal(normalizedJob);
 
-    const originalJobId = getJobId(job);
+    const originalJobId = getJobId(normalizedJob);
     console.log("[Dashboard] Opening job modal. Original Job ID:", originalJobId);
 
     if (originalJobId) {
@@ -576,18 +612,56 @@ const Dashboard = () => {
     }
   });
 
-  // Dynamic User Applications State (Loaded from GET /api/dashboard recentApplications)
+  // Dynamic User Applications State (Loaded exclusively from GET /api/applications)
   const [applications, setApplications] = useState(() => {
     try {
-      const cachedDashboard = getStoredDashboardData();
-      if (Array.isArray(cachedDashboard?.recentApplications)) {
-        return cachedDashboard.recentApplications;
+      const cached = getStoredApplicationsData();
+      if (Array.isArray(cached?.items) && cached.items.length > 0) {
+        return cached.items;
+      }
+      if (Array.isArray(cached?.applications?.items) && cached.applications.items.length > 0) {
+        return cached.applications.items;
       }
     } catch {
       // ignore
     }
     return [];
   });
+
+  // Dynamic Application Counts from GET /api/applications (e.g. { all: 2, inProgress: 2, ... })
+  const [applicationCounts, setApplicationCounts] = useState(() => {
+    try {
+      const cached = getStoredApplicationsData();
+      if (cached?.counts) return cached.counts;
+    } catch {
+      // ignore
+    }
+    return null;
+  });
+
+  const [isLoadingApplications, setIsLoadingApplications] = useState(false);
+
+  // Load fresh applications & counts from GET /api/applications
+  const loadApplications = useCallback(async () => {
+    try {
+      setIsLoadingApplications(true);
+      const data = await getApplications();
+      if (data) {
+        if (Array.isArray(data.items)) {
+          setApplications(data.items);
+        } else if (Array.isArray(data.applications?.items)) {
+          setApplications(data.applications.items);
+        }
+        if (data.counts) {
+          setApplicationCounts(data.counts);
+        }
+      }
+    } catch (err) {
+      console.warn("[Dashboard] Error loading applications from GET /api/applications:", err);
+    } finally {
+      setIsLoadingApplications(false);
+    }
+  }, []);
 
   // Enhance Resume States
   const [isEnhancing, setIsEnhancing] = useState(false);
@@ -624,7 +698,10 @@ const Dashboard = () => {
   const reloadJobsAndDashboard = useCallback(async () => {
     try {
       setIsLoadingJobs(true);
-      const dashData = await getDashboard().catch(() => null);
+      const [dashData] = await Promise.all([
+        getDashboard().catch(() => null),
+        loadApplications().catch(() => null),
+      ]);
       if (dashData) {
         setDashboardMetrics(dashData);
         if (Array.isArray(dashData.topMatches)) {
@@ -633,16 +710,13 @@ const Dashboard = () => {
             .filter(Boolean);
           setJobs(transformed);
         }
-        if (Array.isArray(dashData.recentApplications)) {
-          setApplications(dashData.recentApplications);
-        }
       }
     } catch (err) {
       console.warn("[Dashboard] Error reloading dashboard data after match refresh:", err);
     } finally {
       setIsLoadingJobs(false);
     }
-  }, []);
+  }, [loadApplications]);
 
   // Poll GET /api/resumes/matches/status (with automatic background refresh)
   const fetchMatchStatus = useCallback(
@@ -801,7 +875,7 @@ const Dashboard = () => {
               sessionStorage.setItem("userFullName", resolvedName);
             }
           })
-          .catch(() => {});
+          .catch(() => { });
 
         // Fetch Dashboard Data from GET /api/dashboard
         const data = await getDashboard();
@@ -824,13 +898,6 @@ const Dashboard = () => {
             setJobs([]);
           }
 
-          // Populate Recent Applications dynamically from /api/dashboard
-          if (Array.isArray(data.recentApplications)) {
-            setApplications(data.recentApplications);
-          } else {
-            setApplications([]);
-          }
-
           if (data.jobsFound > 0 || (Array.isArray(data.topMatches) && data.topMatches.length > 0)) {
             setHasResume(true);
           }
@@ -846,6 +913,7 @@ const Dashboard = () => {
     };
 
     loadDashboard();
+    loadApplications();
 
     const handleDashboardUpdated = (e) => {
       if (isMounted && e?.detail) {
@@ -859,25 +927,37 @@ const Dashboard = () => {
             setHasResume(true);
           }
         }
-        if (Array.isArray(e.detail.recentApplications)) {
-          setApplications(e.detail.recentApplications);
+      }
+    };
+
+    const handleApplicationsDataUpdated = (e) => {
+      if (isMounted && e?.detail) {
+        if (Array.isArray(e.detail.items)) {
+          setApplications(e.detail.items);
+        } else if (Array.isArray(e.detail.applications?.items)) {
+          setApplications(e.detail.applications.items);
+        }
+        if (e.detail.counts) {
+          setApplicationCounts(e.detail.counts);
         }
       }
     };
 
     const handleApplicationsUpdated = () => {
-      loadDashboard();
+      loadApplications();
     };
 
     window.addEventListener("dashboardDataUpdated", handleDashboardUpdated);
+    window.addEventListener("applicationsDataUpdated", handleApplicationsDataUpdated);
     window.addEventListener("applicationsUpdated", handleApplicationsUpdated);
 
     return () => {
       isMounted = false;
       window.removeEventListener("dashboardDataUpdated", handleDashboardUpdated);
+      window.removeEventListener("applicationsDataUpdated", handleApplicationsDataUpdated);
       window.removeEventListener("applicationsUpdated", handleApplicationsUpdated);
     };
-  }, []);
+  }, [loadApplications]);
 
   // 2. Fetch Dynamic Billing Status from API
   useEffect(() => {
@@ -1047,26 +1127,54 @@ const Dashboard = () => {
     ];
   }, [dashboardMetrics, billingInfo]);
 
-  // Dynamic Application Tabs with Counts (Exclusively From GET /api/dashboard applicationCounts)
+  // Compute counts directly from active applications list as fallback / verification
+  const computedItemCounts = useMemo(() => {
+    const counts = {
+      all: applications.length,
+      submitted: 0,
+      inProgress: 0,
+      needsAction: 0,
+      failed: 0,
+      skipped: 0,
+    };
+    applications.forEach((app) => {
+      const cat = getApplicationStatusCategory(app);
+      if (cat === "Submitted") counts.submitted += 1;
+      else if (cat === "In Progress") counts.inProgress += 1;
+      else if (cat === "Needs Action") counts.needsAction += 1;
+      else if (cat === "Failed") counts.failed += 1;
+      else if (cat === "Skipped") counts.skipped += 1;
+    });
+    return counts;
+  }, [applications]);
+
+  // Dynamic Application Tabs with Counts (Exclusively From GET /api/applications endpoint)
   const applicationTabs = useMemo(() => {
-    const counts = dashboardMetrics?.applicationCounts || {};
+    const c = applicationCounts || {};
+
+    const resolveCount = (primaryKey, secondaryKey, fallbackKey) => {
+      if (typeof c[primaryKey] === "number") return c[primaryKey];
+      if (secondaryKey && typeof c[secondaryKey] === "number") return c[secondaryKey];
+      return computedItemCounts[fallbackKey || primaryKey] ?? 0;
+    };
+
     return [
-      { name: "All", count: typeof counts.all === "number" ? counts.all : applications.length },
-      { name: "Submitted", count: typeof counts.submitted === "number" ? counts.submitted : 0 },
-      { name: "In Progress", count: typeof counts.inProgress === "number" ? counts.inProgress : 0 },
-      { name: "Needs Action", count: typeof counts.needsAction === "number" ? counts.needsAction : 0 },
-      { name: "Failed", count: typeof counts.failed === "number" ? counts.failed : 0 },
-      { name: "Skipped", count: typeof counts.skipped === "number" ? counts.skipped : 0 },
+      { name: "All", count: resolveCount("all", null, "all") },
+      { name: "Submitted", count: resolveCount("submitted", null, "submitted") },
+      { name: "In Progress", count: resolveCount("inProgress", "in_progress", "inProgress") },
+      { name: "Needs Action", count: resolveCount("needsAction", "needs_action", "needsAction") },
+      { name: "Failed", count: resolveCount("failed", null, "failed") },
+      { name: "Skipped", count: resolveCount("skipped", null, "skipped") },
     ];
-  }, [dashboardMetrics?.applicationCounts, applications.length]);
+  }, [applicationCounts, computedItemCounts]);
 
   // Filtered Applications Table List
   const filteredApplications = useMemo(() => {
     if (selectedAppTab === "All") return applications;
-    return applications.filter(
-      (app) =>
-        (app.statusCategory || app.status || "Submitted") === selectedAppTab
-    );
+    return applications.filter((app) => {
+      const category = getApplicationStatusCategory(app);
+      return category === selectedAppTab;
+    });
   }, [applications, selectedAppTab]);
 
   // Enhance Resume Action Handler (POST /api/jobs/{jobId}/enhance -> GET /api/jobs/{jobId}/enhance)
@@ -1371,8 +1479,66 @@ const Dashboard = () => {
               })}
             </div>
 
-            {/* Applications Table or Dynamic Empty State */}
-            {filteredApplications.length === 0 ? (
+            {/* Applications Table or Dynamic Empty / Loading State */}
+            {isLoadingApplications && filteredApplications.length === 0 ? (
+              <div className="overflow-x-auto w-full py-4">
+                <table className="w-full text-left border-collapse min-w-[750px]">
+                  <thead>
+                    <tr className="border-b border-slate-100">
+                      <th className="pb-3 pr-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                        Company
+
+                      </th>
+                      <th className="pb-3 pl-8 pr-6 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                        Job Title
+                      </th>
+                      <th className="pb-3 px-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                        ATS Match
+                      </th>
+                      <th className="pb-3 px-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                        Resume
+                      </th>
+                      <th className="pb-3 pl-8 pr-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="pb-3 px-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                        Applied
+                      </th>
+                      <th className="pb-3 pl-3 pr-2 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider text-right">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 animate-pulse">
+                    {[1, 2].map((n) => (
+                      <tr key={n} className="py-4">
+                        <td className="py-4 pr-3">
+                          <div className="w-5 h-5 bg-slate-200 rounded-sm" />
+                        </td>
+                        <td className="py-4 pl-8 pr-3">
+                          <div className="h-4 bg-slate-200 rounded w-72" />
+                        </td>
+                        <td className="py-4 px-3">
+                          <div className="h-4 bg-slate-200 rounded w-10" />
+                        </td>
+                        <td className="py-4 px-3">
+                          <div className="h-4 bg-slate-200 rounded w-16" />
+                        </td>
+                        <td className="py-4 pl-8 pr-3">
+                          <div className="h-4 bg-slate-200 rounded w-24" />
+                        </td>
+                        <td className="py-4 px-3">
+                          <div className="h-4 bg-slate-200 rounded w-16" />
+                        </td>
+                        <td className="py-4 pl-3 text-right pr-2">
+                          <div className="h-7 bg-slate-200 rounded w-14 ml-auto" />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : filteredApplications.length === 0 ? (
               <div className="p-8 rounded-[16px] border border-dashed border-slate-200 bg-slate-50/50 flex flex-col items-center justify-center text-center gap-2.5 my-2">
                 <div className="w-12 h-12 rounded-full bg-[#EEF2FF] flex items-center justify-center text-[#4F46E5]">
                   <svg
@@ -1390,12 +1556,24 @@ const Dashboard = () => {
                   </svg>
                 </div>
                 <h3 className="text-base font-bold text-[#0F172A]">
-                  No Applications Yet
+                  {selectedAppTab === "All"
+                    ? "No Applications Yet"
+                    : `No ${selectedAppTab} Applications`}
                 </h3>
                 <p className="text-xs text-[#64748B] max-w-sm">
-                  You haven't submitted any job applications yet. Auto-apply to matched jobs or apply manually to start tracking them here.
+                  {selectedAppTab === "All"
+                    ? "You haven't submitted or tracked any job applications yet. Auto-apply to matched jobs or apply manually to start tracking them here."
+                    : selectedAppTab === "Submitted"
+                      ? "You don't have any submitted applications yet. Once an application is submitted, its details will appear here."
+                      : selectedAppTab === "In Progress"
+                        ? "No applications are currently in progress. Applications being processed will show up here."
+                        : selectedAppTab === "Needs Action"
+                          ? "No applications require your action right now."
+                          : selectedAppTab === "Failed"
+                            ? "No failed applications found."
+                            : "No skipped applications found."}
                 </p>
-                {jobs.length > 0 && (
+                {selectedAppTab === "All" && jobs.length > 0 && (
                   <button
                     type="button"
                     onClick={() => navigate("/auto-apply")}
@@ -1410,129 +1588,182 @@ const Dashboard = () => {
                 <table className="w-full text-left border-collapse min-w-[750px]">
                   <thead>
                     <tr className="border-b border-slate-100">
-                      <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
-                        Company
+                      <th className="pb-3 pr-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                        Company Name
                       </th>
-                      <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                      <th className="pb-3 pl-8 pr-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
                         Job Title
                       </th>
-                      <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                      <th className="pb-3 px-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
                         ATS Match
                       </th>
-                      <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                      <th className="pb-3 px-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
                         Resume
                       </th>
-                      <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                      <th className="pb-3 pl-8 pr-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
                         Status
                       </th>
-                      <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                      <th className="pb-3 px-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
                         Applied
                       </th>
-                      <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider text-right pr-2">
+                      <th className="pb-3 pl-3 pr-2 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider text-right">
                         Actions
                       </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {filteredApplications.map((app) => (
-                      <tr
-                        key={app.id || app.job_id || Math.random()}
-                        className="hover:bg-slate-50/60 transition-colors cursor-pointer"
-                        onClick={() => handleOpenJobModal(app)}
-                      >
-                        {/* Company */}
-                        <td className="py-4 pr-3">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-[28px] h-[28px] rounded-[6px] bg-white flex items-center justify-center shrink-0 border border-slate-100 p-1">
-                              <img
-                                src={app.logo || aiLogo}
-                                alt={app.company}
-                                className="w-[20px] h-[20px] object-contain"
-                              />
-                            </div>
-                            <span className="text-[14px] font-bold text-[#0F172A]">
-                              {app.company}
-                            </span>
-                          </div>
-                        </td>
+                    {filteredApplications.map((app) => {
+                      const rawAts = app.atsScore ?? app.matchPercent ?? app.atsMatch;
+                      const atsPercent =
+                        rawAts !== null && rawAts !== undefined && !isNaN(Number(rawAts))
+                          ? Math.round(Number(rawAts))
+                          : 0;
 
-                        {/* Job Title */}
-                        <td className="py-4 px-3 text-[13.5px] font-medium text-[#334155]">
-                          {app.jobTitle || app.title}
-                        </td>
+                      const rawStatus = (app.status || app.statusCategory || app.applicationStatus || app.state || "IN_PROGRESS")
+                        .toString()
+                        .trim()
+                        .toUpperCase()
+                        .replace(/[\s-]+/g, "_");
 
-                        {/* ATS Match */}
-                        <td className="py-4 px-3">
-                          <span
-                            className={`text-[13px] font-bold ${(app.matchPercent || 0) >= 80
-                                ? "text-[#059669]"
-                                : (app.matchPercent || 0) >= 60
-                                  ? "text-[#D97706]"
-                                  : "text-[#4F46E5]"
-                              }`}
-                          >
-                            {app.atsMatch || `${app.matchPercent || 0}%`}
-                          </span>
-                        </td>
+                      const category = getApplicationStatusCategory(app);
 
-                        {/* Resume */}
-                        <td className="py-4 px-3">
-                          <div className="flex items-center gap-1.5">
-                            <DocumentIcon color="#6366F1" />
-                            <span className="text-[13px] font-medium text-[#6366F1]">
-                              {app.resume || "Tailored"}
-                            </span>
-                          </div>
-                        </td>
+                      let statusTextColor = "text-[#2563EB]";
+                      let statusDotColor = "bg-[#2563EB]";
 
-                        {/* Status */}
-                        <td className="py-4 px-3">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`w-2 h-2 rounded-full ${app.status === "Submitted"
-                                  ? "bg-[#059669]"
-                                  : app.status === "In Progress"
-                                    ? "bg-[#2563EB]"
-                                    : app.status === "Failed"
-                                      ? "bg-[#DC2626]"
-                                      : "bg-[#D97706]"
-                                }`}
-                            />
-                            <span
-                              className={`text-[13px] font-medium ${app.status === "Submitted"
-                                  ? "text-[#059669]"
-                                  : app.status === "In Progress"
-                                    ? "text-[#2563EB]"
-                                    : app.status === "Failed"
-                                      ? "text-[#DC2626]"
-                                      : "text-[#D97706]"
-                                }`}
+                      if (category === "Submitted") {
+                        statusTextColor = "text-[#059669]";
+                        statusDotColor = "bg-[#059669]";
+                      } else if (category === "In Progress") {
+                        if (["QUEUED", "QUED", "PREPARING"].includes(rawStatus)) {
+                          statusTextColor = "text-[#D97706]";
+                          statusDotColor = "bg-[#D97706]";
+                        } else {
+                          statusTextColor = "text-[#2563EB]";
+                          statusDotColor = "bg-[#2563EB]";
+                        }
+                      } else if (category === "Needs Action") {
+                        statusTextColor = "text-[#EA580C]";
+                        statusDotColor = "bg-[#EA580C]";
+                      } else if (category === "Failed") {
+                        statusTextColor = "text-[#DC2626]";
+                        statusDotColor = "bg-[#DC2626]";
+                      } else if (category === "Skipped") {
+                        statusTextColor = "text-[#64748B]";
+                        statusDotColor = "bg-[#64748B]";
+                      }
+
+                      const resumeLabel = app.resumeType
+                        ? (String(app.resumeType).charAt(0).toUpperCase() + String(app.resumeType).slice(1).toLowerCase())
+                        : (app.resume || "Tailored");
+
+                      const appliedDateLabel =
+                        app.applied ||
+                        (app.appliedAt
+                          ? formatRelativeDate(app.appliedAt)
+                          : app.createdAt
+                            ? formatRelativeDate(app.createdAt)
+                            : "Recently");
+
+                      const resolvedCompanyName =
+                        app.companyName || app.company || "Company";
+
+                      return (
+                        <tr
+                          key={app.id || app.jobId || app.job_id || Math.random()}
+                          className="hover:bg-slate-50/60 transition-colors cursor-pointer"
+                          onClick={() => handleOpenJobModal(app)}
+                        >
+                          {/* Company */}
+                          <td className="py-4 pr-3">
+                            <div
+                              className="flex items-center gap-2.5"
+                              title={resolvedCompanyName}
                             >
-                              {app.status || "Submitted"}
+                              {app.companyDomain ? (
+                                <img
+                                  src={`https://logo.clearbit.com/${app.companyDomain}`}
+                                  alt={resolvedCompanyName}
+                                  className="w-[28px] h-[28px] rounded-[6px] object-contain shrink-0 border border-slate-100 p-0.5 bg-white"
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = "none";
+                                    if (e.currentTarget.nextElementSibling) {
+                                      e.currentTarget.nextElementSibling.style.display = "flex";
+                                    }
+                                  }}
+                                />
+                              ) : null}
+                              <div
+                                style={{ display: app.companyDomain ? "none" : "flex" }}
+                                className="w-[28px] h-[28px] rounded-[6px] bg-[#EEF2FF] border border-[#E0E7FF] text-[#4F46E5] font-bold text-[12px] items-center justify-center shrink-0 select-none"
+                              >
+                                {resolvedCompanyName.trim().charAt(0).toUpperCase()}
+                              </div>
+                              <span className="text-[13.5px] font-semibold text-[#0F172A] truncate max-w-[150px]">
+                                {resolvedCompanyName}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Job Title */}
+                          <td className="py-4 pl-8 pr-3 text-[13.5px] font-medium text-[#334155] max-w-[420px]">
+                            <div className="text-[13.5px] font-semibold text-[#0F172A] truncate" title={app.jobTitle || app.title}>
+                              {app.jobTitle || app.title || "Job Position"}
+                            </div>
+                            <div className="text-[12px] text-[#64748B] font-normal truncate mt-0.5">
+                              {resolvedCompanyName}
+                            </div>
+                          </td>
+
+                          {/* ATS Match */}
+                          <td className="py-4 px-3">
+                            <span
+                              className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-[12.5px] font-semibold ${getMatchBadgeColor(
+                                atsPercent
+                              )}`}
+                            >
+                              {`${atsPercent}%`}
                             </span>
-                          </div>
-                        </td>
+                          </td>
 
-                        {/* Applied */}
-                        <td className="py-4 px-3 text-[13px] text-[#64748B]">
-                          {app.applied || "Recently"}
-                        </td>
+                          {/* Resume */}
+                          <td className="py-4 px-3">
+                            <div className="flex items-center gap-1.5">
+                              <DocumentIcon color="#6366F1" />
+                              <span className="text-[13px] font-medium text-[#6366F1]">
+                                {resumeLabel}
+                              </span>
+                            </div>
+                          </td>
 
-                        {/* Actions */}
-                        <td className="py-4 pl-3 text-right pr-2">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpenJobModal(app);
-                            }}
-                            className="h-[30px] px-3.5 rounded-[8px] border border-[#E2E8F0] bg-white text-[12.5px] font-medium text-[#334155] hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
-                          >
-                            View
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                          {/* Status */}
+                          <td className="py-4 pl-8 pr-3">
+                            <div className={`flex items-center gap-1.5 text-[12.5px] font-semibold ${statusTextColor}`}>
+                              <span className={`w-2 h-2 rounded-full ${statusDotColor} shrink-0`} />
+                              <span>{rawStatus}</span>
+                            </div>
+                          </td>
+
+                          {/* Applied */}
+                          <td className="py-4 px-3 text-[13px] text-[#64748B]">
+                            {appliedDateLabel}
+                          </td>
+
+                          {/* Actions */}
+                          <td className="py-4 pl-3 text-right pr-2">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenJobModal(app);
+                              }}
+                              className="h-[30px] px-3.5 rounded-[8px] border border-[#E2E8F0] bg-white text-[12.5px] font-medium text-[#334155] hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
+                            >
+                              View
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -2487,7 +2718,7 @@ const Dashboard = () => {
                     }
                     compact={false}
                   />
-                 </div>
+                </div>
               </div>
 
               {/* Modal Footer */}

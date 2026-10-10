@@ -441,6 +441,7 @@ export const getStoredResumeId = () => {
 export const getJobId = (job) => {
   if (!job) return '';
   const id =
+    job.jobId ||
     job.job_id ||
     job.JDid ||
     job.jd_id ||
