@@ -1724,7 +1724,7 @@ const BrowseJobs = () => {
             {/* Page Heading */}
             <div className="flex flex-col gap-1 min-w-0">
               <h1 className="text-[20px] md:text-[22px] font-bold text-black tracking-tight">
-                Browse Jobs
+                Browse & Apply
               </h1>
               <p className="text-[13px] text-[#64748B]">
                 Discover and browse all job opportunities matched to your resume from our live matching engine.

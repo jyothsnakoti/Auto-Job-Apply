@@ -445,40 +445,40 @@ const AutoApply = () => {
 
   const planTitle = rawPlanName
     ? (rawPlanName.toLowerCase().includes("plan") || rawPlanName.toLowerCase().includes("pack")
-        ? rawPlanName
-        : `${rawPlanName.charAt(0).toUpperCase() + rawPlanName.slice(1)} Plan`)
+      ? rawPlanName
+      : `${rawPlanName.charAt(0).toUpperCase() + rawPlanName.slice(1)} Plan`)
     : (hasPlan ? "Pro Plan" : "Free Plan");
 
   const applicationAllowance =
     typeof billingInfo?.applicationAllowance === "number"
       ? billingInfo.applicationAllowance
       : typeof billingInfo?.applicationLimit === "number"
-      ? billingInfo.applicationLimit
-      : typeof billingInfo?.allowance === "number"
-      ? billingInfo.allowance
-      : typeof billingInfo?.limit === "number"
-      ? billingInfo.limit
-      : typeof billingInfo?.totalApplications === "number"
-      ? billingInfo.totalApplications
-      : 100;
+        ? billingInfo.applicationLimit
+        : typeof billingInfo?.allowance === "number"
+          ? billingInfo.allowance
+          : typeof billingInfo?.limit === "number"
+            ? billingInfo.limit
+            : typeof billingInfo?.totalApplications === "number"
+              ? billingInfo.totalApplications
+              : 100;
 
   const usedApplications =
     typeof billingInfo?.usedApplications === "number"
       ? billingInfo.usedApplications
       : typeof billingInfo?.applicationsUsed === "number"
-      ? billingInfo.applicationsUsed
-      : typeof billingInfo?.used === "number"
-      ? billingInfo.used
-      : 48;
+        ? billingInfo.applicationsUsed
+        : typeof billingInfo?.used === "number"
+          ? billingInfo.used
+          : 48;
 
   const remainingApplications =
     typeof billingInfo?.remainingApplications === "number"
       ? billingInfo.remainingApplications
       : typeof billingInfo?.applicationsRemaining === "number"
-      ? billingInfo.applicationsRemaining
-      : typeof billingInfo?.remaining === "number"
-      ? billingInfo.remaining
-      : Math.max(0, applicationAllowance - usedApplications);
+        ? billingInfo.applicationsRemaining
+        : typeof billingInfo?.remaining === "number"
+          ? billingInfo.remaining
+          : Math.max(0, applicationAllowance - usedApplications);
 
   const rawInterval = (billingInfo?.billingInterval || "month").toLowerCase().trim();
   const intervalDisplay =
@@ -507,7 +507,7 @@ const AutoApply = () => {
           {/* Page Heading */}
           <div className="flex flex-col gap-1">
             <h1 className="text-[20px] md:text-[22px] font-bold text-black tracking-tight">
-              Auto Apply
+              Bulk Auto Apply
             </h1>
             <p className="text-[13px] text-[#64748B]">
               Select job matches and let us handle the rest. We'll tailor your resume, complete applications and submit them automatically.
@@ -565,17 +565,15 @@ const AutoApply = () => {
                 <button
                   type="button"
                   onClick={() => toggleDropdown("date")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "date" || selectedDate !== "All time"
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "date" || selectedDate !== "All time"
                       ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
                       : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
+                    }`}
                 >
                   <span>Date</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "date" ? "rotate-180" : ""
-                    }`}
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "date" ? "rotate-180" : ""
+                      }`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -596,18 +594,16 @@ const AutoApply = () => {
                             setSelectedDate(opt);
                             setActiveDropdown(null);
                           }}
-                          className={`flex items-center gap-2.5 px-3 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] ${
-                            isSelected
+                          className={`flex items-center gap-2.5 px-3 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] ${isSelected
                               ? "font-semibold text-[#0F172A] bg-slate-50"
                               : "text-slate-700"
-                          }`}
+                            }`}
                         >
                           <div
-                            className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
-                              isSelected
+                            className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${isSelected
                                 ? "border-[#0F4C3A] bg-[#0F4C3A] text-white"
                                 : "border-slate-300"
-                            }`}
+                              }`}
                           >
                             {isSelected && (
                               <svg
@@ -634,17 +630,15 @@ const AutoApply = () => {
                 <button
                   type="button"
                   onClick={() => toggleDropdown("location")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "location" || selectedLocations.length > 0
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "location" || selectedLocations.length > 0
                       ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
                       : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
+                    }`}
                 >
                   <span>Location</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "location" ? "rotate-180" : ""
-                    }`}
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "location" ? "rotate-180" : ""
+                      }`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -696,11 +690,10 @@ const AutoApply = () => {
                               className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
                             >
                               <div
-                                className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${
-                                  isChecked
+                                className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
                                     ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
                                     : "border-slate-300 bg-white"
-                                }`}
+                                  }`}
                               >
                                 {isChecked && (
                                   <svg
@@ -728,17 +721,15 @@ const AutoApply = () => {
                 <button
                   type="button"
                   onClick={() => toggleDropdown("role")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "role" || selectedRoles.length > 0
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "role" || selectedRoles.length > 0
                       ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
                       : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
+                    }`}
                 >
                   <span>Role</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "role" ? "rotate-180" : ""
-                    }`}
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "role" ? "rotate-180" : ""
+                      }`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -761,11 +752,10 @@ const AutoApply = () => {
                           className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
                         >
                           <div
-                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${
-                              isChecked
+                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
                                 ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
                                 : "border-slate-300 bg-white"
-                            }`}
+                              }`}
                           >
                             {isChecked && (
                               <svg
@@ -792,17 +782,15 @@ const AutoApply = () => {
                 <button
                   type="button"
                   onClick={() => toggleDropdown("jobType")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "jobType" || selectedJobTypes.length > 0
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "jobType" || selectedJobTypes.length > 0
                       ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
                       : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
+                    }`}
                 >
                   <span>Job Type</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "jobType" ? "rotate-180" : ""
-                    }`}
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "jobType" ? "rotate-180" : ""
+                      }`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -825,11 +813,10 @@ const AutoApply = () => {
                           className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
                         >
                           <div
-                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${
-                              isChecked
+                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
                                 ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
                                 : "border-slate-300 bg-white"
-                            }`}
+                              }`}
                           >
                             {isChecked && (
                               <svg
@@ -856,17 +843,15 @@ const AutoApply = () => {
                 <button
                   type="button"
                   onClick={() => toggleDropdown("workplace")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "workplace" || selectedWorkplace.length > 0
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "workplace" || selectedWorkplace.length > 0
                       ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
                       : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
+                    }`}
                 >
                   <span>Workplace</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "workplace" ? "rotate-180" : ""
-                    }`}
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "workplace" ? "rotate-180" : ""
+                      }`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -889,11 +874,10 @@ const AutoApply = () => {
                           className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
                         >
                           <div
-                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${
-                              isChecked
+                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
                                 ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
                                 : "border-slate-300 bg-white"
-                            }`}
+                              }`}
                           >
                             {isChecked && (
                               <svg
@@ -920,17 +904,15 @@ const AutoApply = () => {
                 <button
                   type="button"
                   onClick={() => toggleDropdown("companies")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                    activeDropdown === "companies" || selectedCompanies.length > 0
+                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "companies" || selectedCompanies.length > 0
                       ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
                       : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                  }`}
+                    }`}
                 >
                   <span>Companies</span>
                   <svg
-                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${
-                      activeDropdown === "companies" ? "rotate-180" : ""
-                    }`}
+                    className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "companies" ? "rotate-180" : ""
+                      }`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -982,11 +964,10 @@ const AutoApply = () => {
                               className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
                             >
                               <div
-                                className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${
-                                  isChecked
+                                className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
                                     ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
                                     : "border-slate-300 bg-white"
-                                }`}
+                                  }`}
                               >
                                 {isChecked && (
                                   <svg
@@ -1013,14 +994,14 @@ const AutoApply = () => {
 
           {/* Main 2-Column Content: Left Jobs Selection List + Right Plan & Settings */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 w-full items-start">
-            
+
             {/* Left Column (8 cols): Select Jobs to Auto Apply Card */}
             <div className="lg:col-span-8 bg-white rounded-[20px] border border-[#E2E8F0] p-6 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col gap-4">
-              
+
               {/* Card Header */}
               <div className="flex flex-col gap-0.5">
                 <h2 className="text-[17px] font-bold text-[#0F172A] tracking-tight">
-                  Select Jobs to Auto Apply
+                  Select Jobs to Bulk Auto Apply
                 </h2>
                 <p className="text-[13px] text-[#64748B]">
                   Choose from your matched jobs or use filters to find more opportunities.
@@ -1036,13 +1017,12 @@ const AutoApply = () => {
                   className="flex items-center gap-2 text-[13px] font-medium text-[#475569] hover:text-[#0F172A] cursor-pointer group select-none transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <div
-                    className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 transition-all ${
-                      isAllSelected
+                    className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 transition-all ${isAllSelected
                         ? "bg-[#2563EB] text-white"
                         : isIndeterminate
                           ? "bg-[#2563EB] text-white"
                           : "border-2 border-slate-300 bg-white group-hover:border-slate-400"
-                    }`}
+                      }`}
                   >
                     {isAllSelected && (
                       <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5">
@@ -1108,11 +1088,10 @@ const AutoApply = () => {
                         <div className="flex items-center gap-3.5 min-w-0 flex-1">
                           {/* Circle Checkbox */}
                           <div
-                            className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-all ${
-                              isSelected
+                            className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-all ${isSelected
                                 ? "bg-[#2563EB] text-white"
                                 : "border-2 border-slate-300 bg-white group-hover:border-slate-400"
-                            }`}
+                              }`}
                           >
                             {isSelected && (
                               <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5">
@@ -1225,7 +1204,7 @@ const AutoApply = () => {
 
             {/* Right Column (4 cols): Application Plan Card & Auto Apply Settings Card */}
             <div className="lg:col-span-4 flex flex-col gap-6 w-full">
-              
+
               {/* 1. Your Application Plan Card */}
               <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-5.5 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col gap-3">
                 <div className="flex items-center justify-between">
@@ -1265,7 +1244,7 @@ const AutoApply = () => {
 
               {/* 2. Auto Apply Settings Card */}
               <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-6 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col gap-5">
-                
+
                 {/* Header with Gear Icon */}
                 <div className="flex items-start gap-3">
                   <div className="w-7 h-7 rounded-[8px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 mt-0.5 text-slate-600">
@@ -1277,7 +1256,7 @@ const AutoApply = () => {
 
                   <div className="flex flex-col">
                     <h3 className="text-[14.5px] font-bold text-[#0F172A]">
-                      Auto Apply Settings
+                      Bulk Auto Apply Settings
                     </h3>
                     <p className="text-[12px] text-[#64748B] mt-0.5">
                       Configure how applications will be processed.
@@ -1287,7 +1266,7 @@ const AutoApply = () => {
 
                 {/* Settings Fields */}
                 <div className="flex flex-col gap-4">
-                  
+
                   {/* Setting 1: Resume Version */}
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[12.5px] font-semibold text-[#0F172A]">
@@ -1395,7 +1374,7 @@ const AutoApply = () => {
                     <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
                       <path d="M8 5v14l11-7z" />
                     </svg>
-                    <span>Start Auto Apply ({selectedJobIds.length} jobs)</span>
+                    <span>Start Bulk Auto Apply ({selectedJobIds.length} jobs)</span>
                   </button>
 
                   <span className="text-[11.5px] text-[#94A3B8] text-center">
