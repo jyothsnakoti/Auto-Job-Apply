@@ -45,6 +45,18 @@ import mapIcon from "../assets/map.svg";
 import shopifyLogo from "../assets/shopify.svg";
 import tickIcon from "../assets/tick.svg";
 
+// Helper to identify static / placeholder dummy logos that should never be rendered
+const isStaticLogo = (logoUrl) => {
+  if (!logoUrl || typeof logoUrl !== "string") return true;
+  return (
+    logoUrl.includes("ai.svg") ||
+    logoUrl.includes("amazon") ||
+    logoUrl.includes("google.svg") ||
+    logoUrl.includes("microsoft.svg") ||
+    logoUrl.includes("shopify.svg")
+  );
+};
+
 // Verified tick icon
 const VerifiedTick = () => (
   <img
@@ -1819,7 +1831,7 @@ const Dashboard = () => {
                   Retry Loading
                 </button>
               </div>
-            ) : displayedApplications.length === 0 ? (
+            ) : filteredApplications.length === 0 ? (
               <div className="p-8 rounded-[16px] border border-dashed border-slate-200 bg-slate-50/50 flex flex-col items-center justify-center text-center gap-2.5 my-2">
                 <div className="w-12 h-12 rounded-full bg-[#EEF2FF] flex items-center justify-center text-[#4F46E5]">
                   <svg

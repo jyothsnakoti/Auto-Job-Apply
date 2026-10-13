@@ -9,17 +9,16 @@ export default defineConfig({
     tailwindcss(),
   ],
 
+  resolve: {
+    dedupe: ['react', 'react-dom'],
+  },
+
   server: {
     host: '0.0.0.0',
     port: 5173,
 
     // Allow external hosts such as ngrok
     allowedHosts: true,
-
-    hmr: {
-      host: '192.168.165.188',
-      port: 5173,
-    },
 
     proxy: {
       '/api': {
