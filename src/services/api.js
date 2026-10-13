@@ -16,7 +16,6 @@ export * from './enhancedAtsService';
 export * from './jobService';
 export * from './dashboardService';
 export * from './applicationService';
-export * from './applicationService';
 export {
   getStoredAuthToken,
   getStoredRefreshToken,

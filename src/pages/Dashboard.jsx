@@ -310,18 +310,14 @@ const transformMatchToJob = (match, index = 0) => {
     location = "Remote / Flexible";
   }
 
-  const requiredSkills =
-    Array.isArray(match.requiredSkills) && match.requiredSkills.length > 0
-      ? match.requiredSkills.map(cleanHtmlText)
-      : Array.isArray(match.skills) && match.skills.length > 0
-        ? match.skills.map(cleanHtmlText)
-        : Array.isArray(match.extracted_skills) && match.extracted_skills.length > 0
-          ? match.extracted_skills.map(cleanHtmlText)
-          : [];
-        ? match.skills.map(cleanHtmlText)
-        : Array.isArray(match.extracted_skills) && match.extracted_skills.length > 0
-          ? match.extracted_skills.map(cleanHtmlText)
-          : [];
+ const requiredSkills =
+  Array.isArray(match.requiredSkills) && match.requiredSkills.length > 0
+    ? match.requiredSkills.map(cleanHtmlText)
+    : Array.isArray(match.skills) && match.skills.length > 0
+      ? match.skills.map(cleanHtmlText)
+      : Array.isArray(match.extracted_skills) && match.extracted_skills.length > 0
+        ? match.extracted_skills.map(cleanHtmlText)
+        : [];
 
   const preferredSkills =
     Array.isArray(match.preferredSkills) && match.preferredSkills.length > 0
@@ -541,6 +537,24 @@ const formatRelativeDate = (dateVal) => {
   }
 };
 
+const mapTabToQueryParam = (tabName) => {
+  switch (tabName) {
+    case "In Progress":
+      return "in_progress";
+    case "Needs Action":
+      return "needs_action";
+    case "Submitted":
+      return "submitted";
+    case "Failed":
+      return "failed";
+    case "Skipped":
+      return "skipped";
+    case "All":
+    default:
+      return undefined; // Omit tab parameter for All according to existing implementation & backend behavior
+  }
+};
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const [userName, setUserName] = useState("");
@@ -686,13 +700,27 @@ const Dashboard = () => {
   });
 
   const [isLoadingApplications, setIsLoadingApplications] = useState(false);
+  const activeTabRequestRef = useRef("All");
+  const selectedAppTabRef = useRef("All");
 
-  // Load fresh applications & counts from GET /api/applications
-  const loadApplications = useCallback(async () => {
+  useEffect(() => {
+    selectedAppTabRef.current = selectedAppTab;
+  }, [selectedAppTab]);
+
+  // Load fresh applications & counts from GET /api/applications with tab query
+  const loadApplications = useCallback(async (targetTab) => {
+    const tabName = targetTab || selectedAppTabRef.current || "All";
+    activeTabRequestRef.current = tabName;
     try {
       setIsLoadingApplications(true);
-      const data = await getApplications();
-      if (data) {
+      const tabParam = mapTabToQueryParam(tabName);
+      const params = {
+        page: 0,
+        size: 10,
+        ...(tabParam ? { tab: tabParam } : {}),
+      };
+      const data = await getApplications(params);
+      if (activeTabRequestRef.current === tabName && data) {
         if (Array.isArray(data.items)) {
           setApplications(data.items);
         } else if (Array.isArray(data.applications?.items)) {
@@ -705,9 +733,17 @@ const Dashboard = () => {
     } catch (err) {
       console.warn("[Dashboard] Error loading applications from GET /api/applications:", err);
     } finally {
-      setIsLoadingApplications(false);
+      if (activeTabRequestRef.current === tabName) {
+        setIsLoadingApplications(false);
+      }
     }
   }, []);
+
+  const handleTabClick = (tabName) => {
+    if (tabName === selectedAppTab) return;
+    setSelectedAppTab(tabName);
+    loadApplications(tabName);
+  };
 
   // Enhance Resume States
   const [isEnhancing, setIsEnhancing] = useState(false);
@@ -978,19 +1014,21 @@ const Dashboard = () => {
 
     const handleApplicationsDataUpdated = (e) => {
       if (isMounted && e?.detail) {
-        if (Array.isArray(e.detail.items)) {
-          setApplications(e.detail.items);
-        } else if (Array.isArray(e.detail.applications?.items)) {
-          setApplications(e.detail.applications.items);
-        }
         if (e.detail.counts) {
           setApplicationCounts(e.detail.counts);
+        }
+        if (!e.detail?.tab || e.detail.tab === selectedAppTabRef.current) {
+          if (Array.isArray(e.detail.items)) {
+            setApplications(e.detail.items);
+          } else if (Array.isArray(e.detail.applications?.items)) {
+            setApplications(e.detail.applications.items);
+          }
         }
       }
     };
 
     const handleApplicationsUpdated = () => {
-      loadApplications();
+      loadApplications(selectedAppTabRef.current);
     };
 
     window.addEventListener("dashboardDataUpdated", handleDashboardUpdated);
@@ -1173,55 +1211,30 @@ const Dashboard = () => {
     ];
   }, [dashboardMetrics, billingInfo]);
 
-  // Compute counts directly from active applications list as fallback / verification
-  const computedItemCounts = useMemo(() => {
-    const counts = {
-      all: applications.length,
-      submitted: 0,
-      inProgress: 0,
-      needsAction: 0,
-      failed: 0,
-      skipped: 0,
-    };
-    applications.forEach((app) => {
-      const cat = getApplicationStatusCategory(app);
-      if (cat === "Submitted") counts.submitted += 1;
-      else if (cat === "In Progress") counts.inProgress += 1;
-      else if (cat === "Needs Action") counts.needsAction += 1;
-      else if (cat === "Failed") counts.failed += 1;
-      else if (cat === "Skipped") counts.skipped += 1;
-    });
-    return counts;
-  }, [applications]);
-
-  // Dynamic Application Tabs with Counts (Exclusively From GET /api/applications endpoint)
+  // Dynamic Application Tabs with Counts (Exclusively From GET /api/applications counts object)
   const applicationTabs = useMemo(() => {
     const c = applicationCounts || {};
 
-    const resolveCount = (primaryKey, secondaryKey, fallbackKey) => {
+    const resolveCount = (primaryKey, secondaryKey) => {
       if (typeof c[primaryKey] === "number") return c[primaryKey];
       if (secondaryKey && typeof c[secondaryKey] === "number") return c[secondaryKey];
-      return computedItemCounts[fallbackKey || primaryKey] ?? 0;
+      return 0;
     };
 
     return [
-      { name: "All", count: resolveCount("all", null, "all") },
-      { name: "Submitted", count: resolveCount("submitted", null, "submitted") },
-      { name: "In Progress", count: resolveCount("inProgress", "in_progress", "inProgress") },
-      { name: "Needs Action", count: resolveCount("needsAction", "needs_action", "needsAction") },
-      { name: "Failed", count: resolveCount("failed", null, "failed") },
-      { name: "Skipped", count: resolveCount("skipped", null, "skipped") },
+      { name: "All", count: resolveCount("all") },
+      { name: "Submitted", count: resolveCount("submitted") },
+      { name: "In Progress", count: resolveCount("inProgress", "in_progress") },
+      { name: "Needs Action", count: resolveCount("needsAction", "needs_action") },
+      { name: "Failed", count: resolveCount("failed") },
+      { name: "Skipped", count: resolveCount("skipped") },
     ];
-  }, [applicationCounts, computedItemCounts]);
+  }, [applicationCounts]);
 
-  // Filtered Applications Table List
-  const filteredApplications = useMemo(() => {
-    if (selectedAppTab === "All") return applications;
-    return applications.filter((app) => {
-      const category = getApplicationStatusCategory(app);
-      return category === selectedAppTab;
-    });
-  }, [applications, selectedAppTab]);
+  // Applications Table List (Backend's returned applications.items is the source of truth)
+  const displayedApplications = useMemo(() => {
+    return Array.isArray(applications) ? applications : [];
+  }, [applications]);
 
   // Enhance Resume Action Handler (POST /api/jobs/{jobId}/enhance -> GET /api/jobs/{jobId}/enhance)
   const handleEnhanceResume = async () => {
@@ -1508,7 +1521,7 @@ const Dashboard = () => {
                   <button
                     key={tab.name}
                     type="button"
-                    onClick={() => setSelectedAppTab(tab.name)}
+                    onClick={() => handleTabClick(tab.name)}
                     className={`h-[34px] px-3.5 rounded-full text-[12.5px] font-medium flex items-center gap-1.5 transition-all cursor-pointer ${isActive
                       ? "bg-[#0F172A] text-white shadow-xs"
                       : "bg-[#F1F5F9] text-[#64748B] hover:bg-slate-200"
@@ -1526,7 +1539,7 @@ const Dashboard = () => {
             </div>
 
             {/* Applications Table or Dynamic Empty / Loading State */}
-            {isLoadingApplications && filteredApplications.length === 0 ? (
+            {isLoadingApplications && displayedApplications.length === 0 ? (
               <div className="overflow-x-auto w-full py-4">
                 <table className="w-full text-left border-collapse min-w-[750px]">
                   <thead>
@@ -1584,7 +1597,7 @@ const Dashboard = () => {
                   </tbody>
                 </table>
               </div>
-            ) : filteredApplications.length === 0 ? (
+            ) : displayedApplications.length === 0 ? (
               <div className="p-8 rounded-[16px] border border-dashed border-slate-200 bg-slate-50/50 flex flex-col items-center justify-center text-center gap-2.5 my-2">
                 <div className="w-12 h-12 rounded-full bg-[#EEF2FF] flex items-center justify-center text-[#4F46E5]">
                   <svg
@@ -1658,7 +1671,7 @@ const Dashboard = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {filteredApplications.map((app) => {
+                    {displayedApplications.map((app, appIdx) => {
                       const rawAts = app.atsScore ?? app.matchPercent ?? app.atsMatch;
                       const atsPercent =
                         rawAts !== null && rawAts !== undefined && !isNaN(Number(rawAts))
@@ -1715,7 +1728,7 @@ const Dashboard = () => {
 
                       return (
                         <tr
-                          key={app.id || app.jobId || app.job_id || Math.random()}
+                          key={app.id || app.jobId || app.job_id || `${app.jobTitle || 'job'}-${appIdx}`}
                           className="hover:bg-slate-50/60 transition-colors cursor-pointer"
                           onClick={() => handleOpenJobModal(app)}
                         >
@@ -2764,7 +2777,6 @@ const Dashboard = () => {
                     }
                     compact={false}
                   />
-                </div>
                 </div>
               </div>
 
