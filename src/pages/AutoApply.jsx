@@ -3,14 +3,20 @@ import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
 
-import googleLogo from "../assets/google.svg";
-import microsoftLogo from "../assets/microsoft.svg";
-import amazonLogo from "../assets/amazon.svg";
-import aiLogo from "../assets/ai.svg";
 import mapIcon from "../assets/map.svg";
 import tickIcon from "../assets/tick.svg";
 
-import shopifyLogo from "../assets/shopify.svg";
+// Helper to identify static / placeholder dummy logos that should never be rendered
+const isStaticLogo = (logoUrl) => {
+  if (!logoUrl || typeof logoUrl !== "string") return true;
+  return (
+    logoUrl.includes("ai.svg") ||
+    logoUrl.includes("amazon") ||
+    logoUrl.includes("google.svg") ||
+    logoUrl.includes("microsoft.svg") ||
+    logoUrl.includes("shopify.svg")
+  );
+};
 import {
   getStoredJobMatches,
   getJobs,
@@ -471,6 +477,13 @@ const AutoApply = () => {
             const rawScore = typeof m.overall_score === 'number' ? m.overall_score : m.score;
             const matchPercent = rawScore ? Math.min(100, Math.max(1, Math.round(Number(rawScore)))) : 85;
             const jobId = m.job_id || m.JDid || m.id || `job-${idx + 1}`;
+            let logo = m.logo || m.companyLogo || m.logo_url || null;
+            if (isStaticLogo(logo)) {
+              logo = null;
+            }
+            if (!logo && (m.companyDomain || m.company_domain)) {
+              logo = `https://logo.clearbit.com/${m.companyDomain || m.company_domain}`;
+            }
             return {
               id: jobId,
               jobId: m.jobId || m.job_id || m.JDid || m.jd_id || m.id || jobId,
@@ -483,7 +496,7 @@ const AutoApply = () => {
               workMode: m.workMode || m.work_mode || "Remote",
               posted: m.posted || "Recent match",
               matchPercent,
-              logo: m.logo || aiLogo,
+              logo,
               description: m.description || m.preview || "Job description available.",
               responsibilities: m.responsibilities || [],
               requiredSkills: m.requiredSkills || m.skills || [],
@@ -503,6 +516,13 @@ const AutoApply = () => {
               const rawScore = typeof m.overall_score === 'number' ? m.overall_score : m.matchScore;
               const matchPercent = rawScore ? Math.min(100, Math.max(1, Math.round(Number(rawScore)))) : 85;
               const jobId = m.jobId || m.job_id || m.id || `job-${idx + 1}`;
+              let logo = m.logo || m.companyLogo || m.logo_url || null;
+              if (isStaticLogo(logo)) {
+                logo = null;
+              }
+              if (!logo && (m.companyDomain || m.company_domain)) {
+                logo = `https://logo.clearbit.com/${m.companyDomain || m.company_domain}`;
+              }
               return {
                 id: jobId,
                 jobId: m.jobId || m.job_id || m.JDid || m.jd_id || m.id || jobId,
@@ -515,7 +535,7 @@ const AutoApply = () => {
                 workMode: m.workplace || m.workMode || "Remote",
                 posted: m.postedAt || "Recent match",
                 matchPercent,
-                logo: m.logo || aiLogo,
+                logo,
                 description: m.description || "Job description available.",
                 responsibilities: m.responsibilities || [],
                 requiredSkills: m.requiredSkills || [],
@@ -1426,13 +1446,20 @@ const AutoApply = () => {
                           )}
 
                           {/* Company Logo */}
-                          <div className="w-[38px] h-[38px] rounded-[10px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2">
-                            <img
-                              src={job.logo || aiLogo}
-                              alt={job.company}
-                              className="w-full h-full object-contain"
-                            />
-                          </div>
+                          {job.logo && !isStaticLogo(job.logo) ? (
+                            <div className="w-[38px] h-[38px] rounded-[10px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2">
+                              <img
+                                src={job.logo}
+                                alt={job.company}
+                                className="w-full h-full object-contain"
+                                onError={(e) => {
+                                  if (e.currentTarget.parentElement) {
+                                    e.currentTarget.parentElement.style.display = "none";
+                                  }
+                                }}
+                              />
+                            </div>
+                          ) : null}
 
                           {/* Job Title & Subline */}
                           <div className="flex flex-col min-w-0">
@@ -1775,13 +1802,20 @@ const AutoApply = () => {
             {/* Modal Header */}
             <div className="p-6 pb-4 border-b border-slate-100 flex items-start justify-between gap-4">
               <div className="flex items-start gap-3.5 flex-1 min-w-0 pr-2">
-                <div className="w-[44px] h-[44px] rounded-[12px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2 mt-0.5">
-                  <img
-                    src={selectedJobModal.logo}
-                    alt={selectedJobModal.company}
-                    className="w-full h-full object-contain"
-                  />
-                </div>
+                {selectedJobModal.logo && !isStaticLogo(selectedJobModal.logo) ? (
+                  <div className="w-[44px] h-[44px] rounded-[12px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2 mt-0.5">
+                    <img
+                      src={selectedJobModal.logo}
+                      alt={selectedJobModal.company}
+                      className="w-full h-full object-contain"
+                      onError={(e) => {
+                        if (e.currentTarget.parentElement) {
+                          e.currentTarget.parentElement.style.display = "none";
+                        }
+                      }}
+                    />
+                  </div>
+                ) : null}
 
                 <div className="flex flex-col flex-1 min-w-0">
                   <h2 className="text-[17px] font-bold text-[#0F172A] tracking-tight leading-snug break-words">

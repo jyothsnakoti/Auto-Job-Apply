@@ -1,5 +1,117 @@
-import { apiClient } from './authService';
-import { API_BASE_URL } from './endpoints';
+import { apiClient, fetchWithAuth } from './authService';
+import { APPLICATION_ENDPOINTS, API_BASE_URL } from './endpoints';
+
+/**
+ * Storage key for cached applications data
+ */
+const APPLICATIONS_STORAGE_KEY = 'applicationsData';
+
+/**
+ * Helper to get cached applications data from localStorage / sessionStorage
+ * @returns {Object|null}
+ */
+export const getStoredApplicationsData = () => {
+  try {
+    const raw =
+      localStorage.getItem(APPLICATIONS_STORAGE_KEY) ||
+      sessionStorage.getItem(APPLICATIONS_STORAGE_KEY);
+    if (raw) {
+      return JSON.parse(raw);
+    }
+  } catch (err) {
+    console.warn('[applicationService] Error reading cached applications data:', err);
+  }
+  return null;
+};
+
+/**
+ * Helper to cache applications data and dispatch update events
+ * @param {Object} data
+ */
+export const setStoredApplicationsData = (data) => {
+  if (!data || typeof data !== 'object') return;
+  try {
+    const serialized = JSON.stringify(data);
+    localStorage.setItem(APPLICATIONS_STORAGE_KEY, serialized);
+    sessionStorage.setItem(APPLICATIONS_STORAGE_KEY, serialized);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('applicationsDataUpdated', { detail: data })
+      );
+      window.dispatchEvent(new CustomEvent('applicationsUpdated'));
+    }
+  } catch (err) {
+    console.warn('[applicationService] Error caching applications data:', err);
+  }
+};
+
+/**
+ * Normalizes raw status string to one of the tab category names:
+ * 'All' | 'Submitted' | 'In Progress' | 'Needs Action' | 'Failed' | 'Skipped'
+ *
+ * @param {string} status
+ * @returns {string}
+ */
+export const getApplicationStatusCategory = (appOrStatus, maybeTab) => {
+  let status = appOrStatus;
+  let tab = maybeTab;
+
+  if (appOrStatus && typeof appOrStatus === 'object') {
+    tab = appOrStatus.tab || maybeTab;
+    status = appOrStatus.status || appOrStatus.statusCategory || appOrStatus.applicationStatus || appOrStatus.state;
+  }
+
+  // 1. If explicit 'tab' is provided by backend (e.g. tab: "IN_PROGRESS" or "NEEDS_ACTION")
+  if (tab) {
+    const t = String(tab).trim().toUpperCase().replace(/[\s-]+/g, '_');
+    if (['IN_PROGRESS', 'INPROGRESS', 'QUEUED', 'PREPARING', 'PROCESSING', 'PENDING'].includes(t)) {
+      return 'In Progress';
+    }
+    if (['NEEDS_ACTION', 'NEED_ACTION', 'ACTION_REQUIRED', 'ACTION_NEEDED', 'REQUIRES_ACTION'].includes(t)) {
+      return 'Needs Action';
+    }
+    if (['SUBMITTED', 'APPLIED', 'COMPLETE', 'COMPLETED', 'SUCCESS'].includes(t)) {
+      return 'Submitted';
+    }
+    if (['FAILED', 'ERROR', 'REJECTED', 'UNSUCCESSFUL'].includes(t)) {
+      return 'Failed';
+    }
+    if (['SKIPPED', 'IGNORED', 'CANCELLED', 'CANCELED'].includes(t)) {
+      return 'Skipped';
+    }
+  }
+
+  if (!status) return 'In Progress';
+  const s = String(status).trim().toUpperCase().replace(/[\s-]+/g, '_');
+
+  // Check Needs Action statuses
+  if (['NEEDS_ACTION', 'NEED_ACTION', 'ACTION_REQUIRED', 'ACTION_NEEDED', 'REQUIRES_ACTION'].includes(s)) {
+    return 'Needs Action';
+  }
+
+  // Check In Progress statuses (QUEUED, PREPARING, IN_PROGRESS, APPLYING, PENDING, PROCESSING)
+  if (['IN_PROGRESS', 'INPROGRESS', 'QUEUED', 'QUED', 'PREPARING', 'APPLYING', 'PENDING', 'PROCESSING'].includes(s)) {
+    return 'In Progress';
+  }
+
+  // Check Submitted statuses
+  if (['SUBMITTED', 'APPLIED', 'SUCCESS', 'COMPLETE', 'COMPLETED'].includes(s)) {
+    return 'Submitted';
+  }
+
+  // Check Failed statuses
+  if (['FAILED', 'ERROR', 'REJECTED', 'UNSUCCESSFUL'].includes(s)) {
+    return 'Failed';
+  }
+
+  // Check Skipped statuses
+  if (['SKIPPED', 'IGNORED', 'CANCELLED', 'CANCELED'].includes(s)) {
+    return 'Skipped';
+  }
+
+  return 'In Progress';
+};
 
 export const APPLICATIONS_API_URL = `${API_BASE_URL}/api/applications`;
 
@@ -1171,6 +1283,37 @@ export const getApplications = async ({ tab = 'all', page = 0, size = 10 } = {})
     throw error;
   }
 };
+
+/**
+ * Fetch application counts directly
+ * @returns {Promise<{ all: number, submitted: number, inProgress: number, needsAction: number, failed: number, skipped: number }>}
+ */
+export const getApplicationCounts = async () => {
+  try {
+    const data = await getApplications();
+    return data?.counts || {
+      all: 0,
+      submitted: 0,
+      inProgress: 0,
+      needsAction: 0,
+      failed: 0,
+      skipped: 0,
+    };
+  } catch (err) {
+    console.warn('[applicationService] Error getting application counts:', err);
+    const cached = getStoredApplicationsData();
+    return cached?.counts || {
+      all: 0,
+      submitted: 0,
+      inProgress: 0,
+      needsAction: 0,
+      failed: 0,
+      skipped: 0,
+    };
+  }
+};
+
+
 
 /**
  * POST /api/applications/{id}/approve

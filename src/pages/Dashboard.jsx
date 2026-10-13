@@ -41,7 +41,6 @@ import dashboard4Icon from "../assets/dashboard4.svg";
 import googleLogo from "../assets/google.svg";
 import microsoftLogo from "../assets/microsoft.svg";
 import amazonLogo from "../assets/amazon.svg";
-import aiLogo from "../assets/ai.svg";
 import mapIcon from "../assets/map.svg";
 import shopifyLogo from "../assets/shopify.svg";
 import tickIcon from "../assets/tick.svg";
@@ -308,6 +307,9 @@ const transformMatchToJob = (match, index = 0) => {
       : null;
 
   let logo = match.logo || match.companyLogo || match.logo_url || null;
+  if (isStaticLogo(logo)) {
+    logo = null;
+  }
   if (!logo && match.companyDomain) {
     logo = `https://logo.clearbit.com/${match.companyDomain}`;
   }
@@ -1920,6 +1922,19 @@ const Dashboard = () => {
                         const jobTitle = app?.title || nestedJob?.title || app?.jobTitle || nestedJob?.jobTitle || "Job Position";
                         const companyDomain = app?.companyDomain || nestedJob?.companyDomain || null;
 
+                        const rawAppLogo =
+                          app?.logo ||
+                          nestedJob?.logo ||
+                          app?.companyLogo ||
+                          nestedJob?.companyLogo ||
+                          app?.logoUrl ||
+                          app?.logo_url ||
+                          null;
+                        const validAppLogo =
+                          rawAppLogo && !isStaticLogo(rawAppLogo)
+                            ? rawAppLogo
+                            : (companyDomain ? `https://logo.clearbit.com/${companyDomain}` : null);
+
                         const rawLocation = app?.location || nestedJob?.location || "";
                         const rawCountry = app?.country || nestedJob?.country || "";
                         let locationDisplay = "";
@@ -2045,6 +2060,7 @@ const Dashboard = () => {
                         const modalJobPayload = {
                           ...nestedJob,
                           ...app,
+                          logo: validAppLogo || null,
                           id: jobId || applicationId,
                           jobId: jobId,
                           title: jobTitle,
@@ -2093,14 +2109,20 @@ const Dashboard = () => {
                             {/* Company */}
                             <td className="py-4 pr-3">
                               <div className="flex items-center gap-2.5">
-                                <div className="w-[30px] h-[30px] rounded-[8px] bg-white flex items-center justify-center shrink-0 border border-slate-100 p-1">
-                                  <img
-                                    src={app.logo || (companyDomain ? `https://logo.clearbit.com/${companyDomain}` : aiLogo)}
-                                    onError={(e) => { e.currentTarget.src = aiLogo; }}
-                                    alt={company}
-                                    className="w-[20px] h-[20px] object-contain"
-                                  />
-                                </div>
+                                {validAppLogo ? (
+                                  <div className="w-[30px] h-[30px] rounded-[8px] bg-white flex items-center justify-center shrink-0 border border-slate-100 p-1">
+                                    <img
+                                      src={validAppLogo}
+                                      alt={company}
+                                      className="w-[20px] h-[20px] object-contain"
+                                      onError={(e) => {
+                                        if (e.currentTarget.parentElement) {
+                                          e.currentTarget.parentElement.style.display = "none";
+                                        }
+                                      }}
+                                    />
+                                  </div>
+                                ) : null}
                                 <div className="min-w-0">
                                   <div className="text-[14px] font-bold text-[#0F172A] truncate">
                                     {company}
@@ -2535,16 +2557,23 @@ const Dashboard = () => {
                 {/* Drawer Header */}
                 <div className="p-6 pb-4 border-b border-slate-100 flex items-start justify-between gap-4 shrink-0 bg-white">
                   <div className="flex items-start gap-3.5 flex-1 min-w-0 pr-2">
-                    <div className="w-[46px] h-[46px] rounded-[12px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2 mt-0.5">
-                      <img
-                        src={selectedJobModal.logo || aiLogo}
-                        alt={extractCleanCompany(
-                          selectedJobModal.company,
-                          selectedJobModal.description || selectedJobModal.fullJdText
-                        )}
-                        className="w-full h-full object-contain"
-                      />
-                    </div>
+                    {selectedJobModal.logo && !isStaticLogo(selectedJobModal.logo) ? (
+                      <div className="w-[46px] h-[46px] rounded-[12px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2 mt-0.5">
+                        <img
+                          src={selectedJobModal.logo}
+                          alt={extractCleanCompany(
+                            selectedJobModal.company,
+                            selectedJobModal.description || selectedJobModal.fullJdText
+                          )}
+                          className="w-full h-full object-contain"
+                          onError={(e) => {
+                            if (e.currentTarget.parentElement) {
+                              e.currentTarget.parentElement.style.display = "none";
+                            }
+                          }}
+                        />
+                      </div>
+                    ) : null}
 
                     <div className="flex flex-col flex-1 min-w-0">
                       <h2 className="text-[18px] font-bold text-[#0F172A] tracking-tight leading-snug break-words">

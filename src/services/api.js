@@ -16,6 +16,7 @@ export * from './enhancedAtsService';
 export * from './jobService';
 export * from './dashboardService';
 export * from './applicationService';
+export * from './applicationService';
 export {
   getStoredAuthToken,
   getStoredRefreshToken,
@@ -45,6 +46,11 @@ export {
   setStoredDashboardData,
 } from './dashboardService';
 export {
+  getApplications,
+  getApplicationCounts,
+  getStoredApplicationsData,
+  setStoredApplicationsData,
+  getApplicationStatusCategory,
   applyToJobs,
   applyToJobsInBatches,
   extractNumericJobId,
@@ -67,7 +73,6 @@ export {
   retryApplication,
   approveApplication,
   skipApplication,
-  getApplications,
 } from './applicationService';
 
 export { apiClient as api, apiClient, axiosInstance };
@@ -88,7 +93,7 @@ export { default as moreJobsService } from './moreJobsService';
 export { default as jobService } from './jobService';
 export { default as dashboardService } from './dashboardService';
 export { default as applicationService } from './applicationService';
-export { default as endpoints, ENDPOINTS, AUTH_ENDPOINTS, BILLING_ENDPOINTS, ONBOARDING_ENDPOINTS, PROFILE_ENDPOINTS, RESUME_ENDPOINTS, ENHANCE_RESUME_ENDPOINTS, MORE_JOBS_ENDPOINTS, JOB_ENDPOINTS, DASHBOARD_ENDPOINTS, API_BASE_URL, RESUME_API_BASE_URL } from './endpoints';
+export { default as endpoints, ENDPOINTS, AUTH_ENDPOINTS, BILLING_ENDPOINTS, ONBOARDING_ENDPOINTS, PROFILE_ENDPOINTS, RESUME_ENDPOINTS, ENHANCE_RESUME_ENDPOINTS, MORE_JOBS_ENDPOINTS, JOB_ENDPOINTS, DASHBOARD_ENDPOINTS, APPLICATION_ENDPOINTS, API_BASE_URL, RESUME_API_BASE_URL } from './endpoints';
 
 export default apiClient;
 
