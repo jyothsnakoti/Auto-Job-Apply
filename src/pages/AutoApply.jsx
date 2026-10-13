@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
@@ -22,6 +22,13 @@ import {
   applyToJobsInBatches,
   extractNumericJobId,
   extractNumericResumeId,
+  markJobsAsApplied,
+  getApplicationStatuses,
+  isJobSubmitted,
+  isApplyNowHiddenForJob,
+  getMatchingApplicationForJob,
+  normalizeApplicationStatus,
+  isApplicationActiveStatus,
 } from "../services/api";
 
 const dateOptions = [
@@ -116,24 +123,24 @@ const AutoApply = () => {
   const [selectedJobModal, setSelectedJobModal] = useState(null);
   const [isJobSaved, setIsJobSaved] = useState(false);
 
-  // Application Service States
-  const [isApplyingPanelJob, setIsApplyingPanelJob] = useState(false);
-  const [panelApplyStatus, setPanelApplyStatus] = useState(null);
+  // Floating Toast Notification State
+  const [toast, setToast] = useState({ show: false, message: "", type: "success" });
 
-  const handleApplyToPanelJob = async () => {
-    if (!selectedJobModal) return;
-
-    const numericJobId = extractNumericJobId(selectedJobModal);
-    if (!numericJobId) {
-      setPanelApplyStatus({
-        type: "error",
-        message: "Displayed job is missing a valid numeric backend Job ID.",
-      });
-      return;
+  useEffect(() => {
+    if (toast.show) {
+      const timer = setTimeout(() => {
+        setToast((prev) => ({ ...prev, show: false }));
+      }, 4000);
+      return () => clearTimeout(timer);
     }
+  }, [toast.show]);
 
-    if (isApplyingPanelJob) return;
+  const showToast = (message, type = "success") => {
+    setToast({ show: true, message, type });
+  };
 
+  // Helper to resolve primary/selected numeric resume ID
+  const resolveNumericResumeId = async () => {
     let numericResumeId = null;
     try {
       const resumes = await getResumes();
@@ -147,12 +154,94 @@ const AutoApply = () => {
 
     if (!numericResumeId) {
       const storedId =
+        (typeof getStoredResumeId === "function" && getStoredResumeId()) ||
         localStorage.getItem("selected_resume_id") ||
         localStorage.getItem("resume_id") ||
         localStorage.getItem("resumeId");
       if (storedId) numericResumeId = extractNumericResumeId(storedId);
     }
+    return numericResumeId;
+  };
 
+  // Application Service States for Side Panel / Modal
+  const [isApplyingPanelJob, setIsApplyingPanelJob] = useState(false);
+  const [panelApplyStatus, setPanelApplyStatus] = useState(null);
+
+  // Application Status State & Sync (GET /api/applications is source of truth)
+  const [applicationMap, setApplicationMap] = useState(() => new Map());
+  const [submittedJobIdSet, setSubmittedJobIdSet] = useState(() => new Set());
+  const [isLoadingStatus, setIsLoadingStatus] = useState(true);
+  const [statusError, setStatusError] = useState(null);
+
+  const fetchApplicationStatuses = useCallback(async (forceRefresh = false) => {
+    setIsLoadingStatus(true);
+    setStatusError(null);
+    try {
+      const res = await getApplicationStatuses({ forceRefresh });
+      setApplicationMap(res.applicationMap || new Map());
+      setSubmittedJobIdSet(res.submittedJobIdSet || new Set());
+    } catch (err) {
+      console.error("[AutoApply] Failed to load application statuses:", err);
+      setStatusError(err.message || "Failed to load application statuses from server.");
+    } finally {
+      setIsLoadingStatus(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchApplicationStatuses();
+  }, [fetchApplicationStatuses]);
+
+  useEffect(() => {
+    const handleStatusSync = (e) => {
+      if (e?.detail?.applicationMap && e?.detail?.submittedJobIdSet) {
+        setApplicationMap(e.detail.applicationMap);
+        setSubmittedJobIdSet(e.detail.submittedJobIdSet);
+      } else {
+        fetchApplicationStatuses(true);
+      }
+    };
+    window.addEventListener("applicationStatusesUpdated", handleStatusSync);
+    window.addEventListener("appliedJobIdsUpdated", handleStatusSync);
+    window.addEventListener("storage", handleStatusSync);
+    return () => {
+      window.removeEventListener("applicationStatusesUpdated", handleStatusSync);
+      window.removeEventListener("appliedJobIdsUpdated", handleStatusSync);
+      window.removeEventListener("storage", handleStatusSync);
+    };
+  }, [fetchApplicationStatuses]);
+
+  // If selected job was or becomes submitted, clear modal selection to avoid stale application state
+  useEffect(() => {
+    if (selectedJobModal && isJobSubmitted(selectedJobModal, submittedJobIdSet, applicationMap)) {
+      setSelectedJobModal(null);
+    }
+  }, [selectedJobModal, submittedJobIdSet, applicationMap]);
+
+  const handleApplyToPanelJob = async () => {
+    if (!selectedJobModal) return;
+
+    if (isJobSubmitted(selectedJobModal, submittedJobIdSet, applicationMap)) {
+      setPanelApplyStatus({
+        type: "error",
+        message: "This job has already been submitted.",
+      });
+      showToast("This job has already been submitted.", "warning");
+      return;
+    }
+
+    const numericJobId = extractNumericJobId(selectedJobModal);
+    if (!numericJobId) {
+      setPanelApplyStatus({
+        type: "error",
+        message: "Displayed job is missing a valid numeric backend Job ID.",
+      });
+      return;
+    }
+
+    if (isApplyingPanelJob) return;
+
+    const numericResumeId = await resolveNumericResumeId();
     if (!numericResumeId) {
       setPanelApplyStatus({
         type: "error",
@@ -170,6 +259,7 @@ const AutoApply = () => {
       const skippedArr = res.skipped || [];
 
       if (queuedCount > 0) {
+        markJobsAsApplied(res.queued);
         setPanelApplyStatus({
           type: "success",
           message: `Application queued successfully! (${queuedCount} queued)`,
@@ -177,7 +267,10 @@ const AutoApply = () => {
 
         getBillingStatus()
           .then((status) => {
-            if (status) setBillingInfo(status);
+            if (status) {
+              setBillingInfo(status);
+              window.dispatchEvent(new CustomEvent("billingStatusUpdated", { detail: status }));
+            }
           })
           .catch(() => {});
       } else if (skippedArr.length > 0) {
@@ -192,6 +285,8 @@ const AutoApply = () => {
           message: "Application skipped (No new jobs queued).",
         });
       }
+
+      await fetchApplicationStatuses(true);
     } catch (err) {
       console.error("[AutoApply] Panel apply error:", err);
       setPanelApplyStatus({
@@ -200,6 +295,145 @@ const AutoApply = () => {
       });
     } finally {
       setIsApplyingPanelJob(false);
+    }
+  };
+
+  // Bulk Auto Apply State & Handler
+  const [isBulkApplying, setIsBulkApplying] = useState(false);
+  const [bulkApplyStatus, setBulkApplyStatus] = useState(null);
+
+  const handleStartBulkAutoApply = async () => {
+    if (isBulkApplying) return;
+
+    if (isLoadingStatus) {
+      showToast("Please wait while application statuses are loaded...", "warning");
+      return;
+    }
+
+    if (selectedJobIds.length === 0) {
+      showToast("Please select at least 1 job to auto apply.", "warning");
+      return;
+    }
+
+    if (selectedJobIds.length > 5) {
+      showToast("You can only select up to 5 jobs for Auto Bulk Apply.", "warning");
+      return;
+    }
+
+    setIsBulkApplying(true);
+    setBulkApplyStatus(null);
+
+    try {
+      const billing = await getBillingStatus().catch(() => null);
+      const remaining =
+        typeof billing?.remainingApplications === "number"
+          ? billing.remainingApplications
+          : typeof billing?.remaining === "number"
+            ? billing.remaining
+            : typeof billingInfo?.remainingApplications === "number"
+              ? billingInfo.remainingApplications
+              : 100;
+
+      if (remaining <= 0) {
+        const msg = "Insufficient application credits. Please upgrade your plan in Subscriptions.";
+        showToast(msg, "error");
+        setBulkApplyStatus({ type: "error", message: msg });
+        setIsBulkApplying(false);
+        return;
+      }
+
+      const numericResumeId = await resolveNumericResumeId();
+      if (!numericResumeId) {
+        const msg = "No resume found. Please go to Profile to upload/select a resume.";
+        showToast(msg, "error");
+        setBulkApplyStatus({ type: "error", message: msg });
+        setIsBulkApplying(false);
+        return;
+      }
+
+      // Map selected job IDs to actual backend numeric job IDs and revalidate against submitted status
+      const selectedJobsList = eligibleJobs.filter((j) => selectedJobIds.includes(j.id));
+      const validNumericJobIds = [];
+
+      for (const j of selectedJobsList) {
+        // Strictly exclude already submitted jobs and active applications
+        if (isJobSubmitted(j, submittedJobIdSet, applicationMap)) {
+          continue;
+        }
+        if (isApplyNowHiddenForJob(j, applicationMap, submittedJobIdSet)) {
+          continue;
+        }
+        const numId = extractNumericJobId(j);
+        if (numId !== null && !validNumericJobIds.includes(numId)) {
+          validNumericJobIds.push(numId);
+        }
+      }
+
+      if (validNumericJobIds.length === 0) {
+        const msg = "None of the selected jobs are eligible for submission (already submitted or active).";
+        showToast(msg, "warning");
+        setBulkApplyStatus({ type: "warning", message: msg });
+        setIsBulkApplying(false);
+        return;
+      }
+
+      // Enforce up to 5 jobs limit and user quota
+      const jobIdsToApply = validNumericJobIds.slice(0, Math.min(5, remaining));
+
+      console.log(`[AutoApply] Submitting bulk auto apply for ${jobIdsToApply.length} jobs:`, jobIdsToApply);
+
+      // Hits the same applications endpoint (/api/applications) used in browse jobs
+      const res = await applyToJobs({
+        resumeId: numericResumeId,
+        jobIds: jobIdsToApply,
+      });
+
+      const queuedCount = res.queued?.length || 0;
+      const skippedArr = res.skipped || [];
+
+      if (queuedCount > 0) {
+        markJobsAsApplied(res.queued);
+        const msg = `Application queued successfully! (${queuedCount} queued)`;
+        showToast(msg, "success");
+        setBulkApplyStatus({ type: "success", message: msg });
+
+        // Remove successfully queued jobs from selection
+        setSelectedJobIds((prev) =>
+          prev.filter((id) => {
+            const matched = jobs.find((j) => j.id === id);
+            const nId = matched ? extractNumericJobId(matched) : null;
+            return nId ? !res.queued.includes(nId) : true;
+          })
+        );
+
+        // Update billing status
+        getBillingStatus()
+          .then((status) => {
+            if (status) {
+              setBillingInfo(status);
+              window.dispatchEvent(new CustomEvent("billingStatusUpdated", { detail: status }));
+            }
+          })
+          .catch(() => {});
+      } else if (skippedArr.length > 0) {
+        const reason = skippedArr[0]?.reason || "ALREADY_SUBMITTED";
+        const msg = `Application skipped: ${reason}`;
+        showToast(msg, "warning");
+        setBulkApplyStatus({ type: "warning", message: msg });
+      } else {
+        const msg = "Application skipped (No new jobs queued).";
+        showToast(msg, "warning");
+        setBulkApplyStatus({ type: "warning", message: msg });
+      }
+
+      await fetchApplicationStatuses(true);
+    } catch (err) {
+      console.error("[AutoApply] Bulk auto apply error:", err);
+      const msg = err.message || "Failed to submit bulk applications.";
+      showToast(msg, "error");
+      setBulkApplyStatus({ type: "error", message: msg });
+    } finally {
+      setIsBulkApplying(false);
     }
   };
 
@@ -239,6 +473,9 @@ const AutoApply = () => {
             const jobId = m.job_id || m.JDid || m.id || `job-${idx + 1}`;
             return {
               id: jobId,
+              jobId: m.jobId || m.job_id || m.JDid || m.jd_id || m.id || jobId,
+              rawMatch: m,
+              numericId: extractNumericJobId(m),
               title: m.title || m.preview || m.job_title || "Software Engineer",
               company: m.company || m.company_name || "Hiring Organization",
               location: m.location || m.city || "Remote",
@@ -256,7 +493,7 @@ const AutoApply = () => {
           });
           if (isMounted) {
             setJobs(formatted);
-            setSelectedJobIds(formatted.map((j) => j.id));
+            setSelectedJobIds([]);
           }
         } else {
           // Fetch from GET /api/jobs if user has jobs
@@ -268,6 +505,9 @@ const AutoApply = () => {
               const jobId = m.jobId || m.job_id || m.id || `job-${idx + 1}`;
               return {
                 id: jobId,
+                jobId: m.jobId || m.job_id || m.JDid || m.jd_id || m.id || jobId,
+                rawMatch: m,
+                numericId: extractNumericJobId(m),
                 title: m.title || m.jobTitle || "Software Engineer",
                 company: m.companyName || m.company || "Hiring Organization",
                 location: m.location || "Remote",
@@ -285,7 +525,7 @@ const AutoApply = () => {
             });
             if (isMounted) {
               setJobs(formatted);
-              setSelectedJobIds(formatted.map((j) => j.id));
+              setSelectedJobIds([]);
             }
           }
         }
@@ -420,22 +660,62 @@ const AutoApply = () => {
     }
   };
 
-  const toggleJobSelection = (id) => {
-    if (selectedJobIds.includes(id)) {
-      setSelectedJobIds(selectedJobIds.filter((jId) => jId !== id));
-    } else {
-      setSelectedJobIds([...selectedJobIds, id]);
-    }
-  };
+  // Filter out jobs that already have a SUBMITTED application
+  const eligibleJobs = useMemo(() => {
+    return jobs.filter((job) => !isJobSubmitted(job, submittedJobIdSet, applicationMap));
+  }, [jobs, submittedJobIdSet, applicationMap]);
 
-  const isAllSelected = jobs.length > 0 && selectedJobIds.length === jobs.length;
+  // Selectable jobs for bulk auto apply (excludes submitted AND active in-progress jobs)
+  const selectableJobs = useMemo(() => {
+    return eligibleJobs.filter(
+      (job) => !isApplyNowHiddenForJob(job, applicationMap, submittedJobIdSet)
+    );
+  }, [eligibleJobs, applicationMap, submittedJobIdSet]);
+
+  // Automatically deselect any job that is no longer selectable (submitted or active)
+  useEffect(() => {
+    setSelectedJobIds((prev) =>
+      prev.filter((id) => {
+        const matched = eligibleJobs.find((j) => j.id === id);
+        if (!matched) return false;
+        if (isJobSubmitted(matched, submittedJobIdSet, applicationMap)) return false;
+        if (isApplyNowHiddenForJob(matched, applicationMap, submittedJobIdSet)) return false;
+        return true;
+      })
+    );
+  }, [eligibleJobs, submittedJobIdSet, applicationMap]);
+
+  const maxSelectable = Math.min(5, selectableJobs.length);
+  const isAllSelected = selectedJobIds.length === maxSelectable && maxSelectable > 0;
   const isIndeterminate = selectedJobIds.length > 0 && !isAllSelected;
 
+  const toggleJobSelection = (id) => {
+    if (selectedJobIds.includes(id)) {
+      setSelectedJobIds((prev) => prev.filter((jId) => jId !== id));
+      return;
+    }
+
+    const targetJob = eligibleJobs.find((j) => j.id === id);
+    if (!targetJob) return;
+
+    if (isApplyNowHiddenForJob(targetJob, applicationMap, submittedJobIdSet)) {
+      showToast("This job application is already in progress.", "warning");
+      return;
+    }
+
+    if (selectedJobIds.length >= 5) {
+      showToast("You can only select up to 5 jobs for Auto Bulk Apply.", "warning");
+      return;
+    }
+
+    setSelectedJobIds((prev) => [...prev, id]);
+  };
+
   const handleToggleSelectAll = () => {
-    if (isAllSelected) {
+    if (selectedJobIds.length > 0) {
       setSelectedJobIds([]);
     } else {
-      setSelectedJobIds(jobs.map((j) => j.id));
+      setSelectedJobIds(selectableJobs.slice(0, 5).map((j) => j.id));
     }
   };
 
@@ -1013,7 +1293,7 @@ const AutoApply = () => {
                 <button
                   type="button"
                   onClick={handleToggleSelectAll}
-                  disabled={jobs.length === 0}
+                  disabled={selectableJobs.length === 0}
                   className="flex items-center gap-2 text-[13px] font-medium text-[#475569] hover:text-[#0F172A] cursor-pointer group select-none transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <div
@@ -1035,27 +1315,27 @@ const AutoApply = () => {
                       </svg>
                     )}
                   </div>
-                  <span>{selectedJobIds.length} of {jobs.length} jobs selected</span>
+                  <span>{selectedJobIds.length} of {Math.min(5, selectableJobs.length)} jobs selected (max 5)</span>
                 </button>
 
-                {jobs.length > 0 && (
+                {selectableJobs.length > 0 && (
                   <button
                     type="button"
                     onClick={handleToggleSelectAll}
                     className="text-[12.5px] font-semibold text-[#2563EB] hover:text-[#1D4ED8] hover:underline cursor-pointer transition-colors"
                   >
-                    {isAllSelected ? "Unselect all" : "Select all"}
+                    {selectedJobIds.length > 0 ? "Unselect all" : `Select top ${Math.min(5, selectableJobs.length)}`}
                   </button>
                 )}
               </div>
 
               {/* Job List Container */}
               <div className="flex flex-col divide-y divide-slate-100 mt-1">
-                {isLoadingJobs ? (
+                {isLoadingJobs || isLoadingStatus ? (
                   <div className="py-12 text-center">
-                    <p className="text-[13.5px] font-medium text-[#64748B]">Loading job matches...</p>
+                    <p className="text-[13.5px] font-medium text-[#64748B]">Loading job matches and application statuses...</p>
                   </div>
-                ) : jobs.length === 0 ? (
+                ) : eligibleJobs.length === 0 ? (
                   <div className="py-12 text-center flex flex-col items-center gap-2">
                     <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
                       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -1063,42 +1343,87 @@ const AutoApply = () => {
                         <path d="m20 20-3.5-3.5" />
                       </svg>
                     </div>
-                    <p className="text-[14px] font-semibold text-[#0F172A]">No job matches available</p>
-                    <p className="text-[12.5px] text-[#64748B] max-w-sm">
-                      Upload your resume in Profile to view and select job matches for Auto Apply.
+                    <p className="text-[14px] font-semibold text-[#0F172A]">
+                      {jobs.length > 0 ? "All matched jobs already submitted" : "No job matches available"}
                     </p>
-                    <button
-                      type="button"
-                      onClick={() => navigate("/profile")}
-                      className="mt-2 text-[13px] font-semibold text-white bg-[#2563EB] hover:bg-[#1D4ED8] px-4 py-2 rounded-xl transition-colors cursor-pointer"
-                    >
-                      Go to Profile
-                    </button>
+                    <p className="text-[12.5px] text-[#64748B] max-w-sm">
+                      {jobs.length > 0
+                        ? "All matched jobs currently have submitted applications. Check your Applications dashboard for updates."
+                        : "Upload your resume in Profile to view and select job matches for Auto Apply."}
+                    </p>
+                    {jobs.length === 0 && (
+                      <button
+                        type="button"
+                        onClick={() => navigate("/profile")}
+                        className="mt-2 text-[13px] font-semibold text-white bg-[#2563EB] hover:bg-[#1D4ED8] px-4 py-2 rounded-xl transition-colors cursor-pointer"
+                      >
+                        Go to Profile
+                      </button>
+                    )}
                   </div>
                 ) : (
-                  jobs.map((job) => {
+                  eligibleJobs.map((job) => {
                     const isSelected = selectedJobIds.includes(job.id);
+                    const isHidden = isApplyNowHiddenForJob(job, applicationMap, submittedJobIdSet);
+                    const appRecord = getMatchingApplicationForJob(job, applicationMap);
+                    const normStatus = normalizeApplicationStatus(appRecord?.status || appRecord?.state || appRecord?.applicationStatus);
+
                     return (
                       <div
                         key={job.id}
-                        className="py-4.5 flex items-center justify-between gap-4 hover:bg-slate-50/70 -mx-6 px-6 transition-colors group cursor-pointer"
-                        onClick={() => toggleJobSelection(job.id)}
+                        className={`py-4.5 flex items-center justify-between gap-4 -mx-6 px-6 transition-colors group ${
+                          isHidden ? "bg-slate-50/40 cursor-default opacity-85" : "hover:bg-slate-50/70 cursor-pointer"
+                        }`}
+                        onClick={() => {
+                          if (isHidden) {
+                            showToast("This job application is already in progress.", "warning");
+                            return;
+                          }
+                          toggleJobSelection(job.id);
+                        }}
                       >
-                        {/* Left: Checkbox + Logo + Title & Info */}
+                        {/* Left: Checkbox / Active Badge + Logo + Title & Info */}
                         <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                          {/* Circle Checkbox */}
-                          <div
-                            className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-all ${isSelected
-                                ? "bg-[#2563EB] text-white"
-                                : "border-2 border-slate-300 bg-white group-hover:border-slate-400"
+                          {/* Circle Checkbox or In-Progress Badge */}
+                          {isHidden ? (
+                            <span
+                              className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border shrink-0 ${
+                                normStatus === "QUEUED"
+                                  ? "bg-indigo-50 text-indigo-700 border-indigo-200/80"
+                                  : normStatus === "IN_PROGRESS"
+                                  ? "bg-blue-50 text-blue-700 border-blue-200/80"
+                                  : normStatus === "NEEDS_ACTION"
+                                  ? "bg-amber-50 text-amber-700 border-amber-200/80"
+                                  : normStatus === "PREPARING"
+                                  ? "bg-purple-50 text-purple-700 border-purple-200/80"
+                                  : "bg-slate-100 text-slate-600 border-slate-200"
                               }`}
-                          >
-                            {isSelected && (
-                              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5">
-                                <polyline points="20 6 9 17 4 12" />
-                              </svg>
-                            )}
-                          </div>
+                            >
+                              {normStatus === "QUEUED"
+                                ? "Queued"
+                                : normStatus === "IN_PROGRESS"
+                                ? "In Progress"
+                                : normStatus === "NEEDS_ACTION"
+                                ? "Needs Action"
+                                : normStatus === "PREPARING"
+                                ? "Preparing"
+                                : "Active"}
+                            </span>
+                          ) : (
+                            <div
+                              className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-all ${
+                                isSelected
+                                  ? "bg-[#2563EB] text-white"
+                                  : "border-2 border-slate-300 bg-white group-hover:border-slate-400"
+                              }`}
+                            >
+                              {isSelected && (
+                                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5">
+                                  <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                              )}
+                            </div>
+                          )}
 
                           {/* Company Logo */}
                           <div className="w-[38px] h-[38px] rounded-[10px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2">
@@ -1366,19 +1691,67 @@ const AutoApply = () => {
 
                 {/* Start Auto Apply Action Button */}
                 <div className="flex flex-col gap-2 pt-2">
+                  {bulkApplyStatus && (
+                    <div
+                      className={`p-3 rounded-xl border text-[12.5px] font-medium flex items-center justify-between gap-2 ${
+                        bulkApplyStatus.type === "success"
+                          ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                          : bulkApplyStatus.type === "warning" || bulkApplyStatus.type === "skipped"
+                          ? "bg-amber-50 border-amber-200 text-amber-800"
+                          : "bg-rose-50 border-rose-200 text-rose-800"
+                      }`}
+                    >
+                      <span>{bulkApplyStatus.message}</span>
+                      <button
+                        type="button"
+                        onClick={() => setBulkApplyStatus(null)}
+                        className="text-xs font-bold text-slate-400 hover:text-slate-600 shrink-0 cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+
                   <button
                     type="button"
-                    disabled={selectedJobIds.length === 0}
+                    onClick={handleStartBulkAutoApply}
+                    disabled={selectedJobIds.length === 0 || isBulkApplying || isLoadingStatus}
                     className="h-[46px] w-full rounded-[12px] bg-[#2563EB] hover:bg-[#1D4ED8] disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-[14px] font-medium flex items-center justify-center gap-2 shadow-xs active:scale-[0.99] transition-all cursor-pointer"
                   >
-                    <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
-                      <path d="M8 5v14l11-7z" />
-                    </svg>
-                    <span>Start Bulk Auto Apply ({selectedJobIds.length} jobs)</span>
+                    {isLoadingStatus ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                        </svg>
+                        <span>Checking application statuses...</span>
+                      </>
+                    ) : isBulkApplying ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                        </svg>
+                        <span>Applying to {selectedJobIds.length} {selectedJobIds.length === 1 ? "Job" : "Jobs"}...</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                        <span>
+                          Start Auto Bulk Apply ({selectedJobIds.length} {selectedJobIds.length === 1 ? "Job" : "Jobs"})
+                        </span>
+                      </>
+                    )}
                   </button>
 
                   <span className="text-[11.5px] text-[#94A3B8] text-center">
-                    This will use {selectedJobIds.length.toString().padStart(2, "0")} applications from your quota.
+                    {selectedJobIds.length === 0
+                      ? "Select up to 5 jobs to start bulk auto apply."
+                      : `This will use ${selectedJobIds.length.toString().padStart(2, "0")} application${
+                          selectedJobIds.length === 1 ? "" : "s"
+                        } from your quota.`}
                   </span>
                 </div>
 
@@ -1593,32 +1966,118 @@ const AutoApply = () => {
                   </button>
                 </div>
               )}
-              <button
-                type="button"
-                onClick={handleApplyToPanelJob}
-                disabled={isApplyingPanelJob}
-                className="w-full h-[44px] rounded-[12px] bg-[#2563EB] hover:bg-[#1D4ED8] disabled:opacity-60 text-white text-[13.5px] font-medium flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.99] transition-all cursor-pointer disabled:cursor-not-allowed"
-              >
-                {isApplyingPanelJob ? (
-                  <span className="flex items-center gap-2">
-                    <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                    </svg>
-                    <span>Submitting application...</span>
-                  </span>
-                ) : (
-                  <>
-                    <span>Apply now</span>
-                    <span>→</span>
-                  </>
-                )}
-              </button>
+              {(() => {
+                if (isLoadingStatus) {
+                  return (
+                    <button
+                      type="button"
+                      disabled
+                      className="w-full h-[44px] rounded-[12px] bg-slate-100 border border-slate-200 text-slate-400 text-[13.5px] font-medium flex items-center justify-center gap-2 cursor-not-allowed"
+                    >
+                      <svg className="animate-spin h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                      </svg>
+                      <span>Checking status...</span>
+                    </button>
+                  );
+                }
+
+                const isHidden = isApplyNowHiddenForJob(selectedJobModal, applicationMap, submittedJobIdSet);
+
+                if (isHidden) {
+                  const record = getMatchingApplicationForJob(selectedJobModal, applicationMap);
+                  const rawStatus = record?.status || record?.state || record?.applicationStatus;
+                  const norm = normalizeApplicationStatus(rawStatus);
+
+                  let displayLabel = "Already Applied";
+                  if (norm === "SUBMITTED") displayLabel = "Submitted";
+                  else if (norm === "QUEUED") displayLabel = "Queued";
+                  else if (norm === "IN_PROGRESS") displayLabel = "In Progress";
+                  else if (norm === "NEEDS_ACTION") displayLabel = "Needs Action";
+                  else if (norm === "PREPARING") displayLabel = "Preparing";
+
+                  return (
+                    <button
+                      type="button"
+                      disabled
+                      className="w-full h-[44px] rounded-[12px] bg-slate-100 border border-slate-200 text-slate-500 text-[13.5px] font-semibold flex items-center justify-center cursor-not-allowed"
+                    >
+                      {displayLabel}
+                    </button>
+                  );
+                }
+
+                return (
+                  <button
+                    type="button"
+                    onClick={handleApplyToPanelJob}
+                    disabled={isApplyingPanelJob}
+                    className="w-full h-[44px] rounded-[12px] bg-[#2563EB] hover:bg-[#1D4ED8] disabled:opacity-60 text-white text-[13.5px] font-medium flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.99] transition-all cursor-pointer disabled:cursor-not-allowed"
+                  >
+                    {isApplyingPanelJob ? (
+                      <span className="flex items-center gap-2">
+                        <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                        </svg>
+                        <span>Submitting application...</span>
+                      </span>
+                    ) : (
+                      <>
+                        <span>Apply now</span>
+                        <span>→</span>
+                      </>
+                    )}
+                  </button>
+                );
+              })()}
 
               <p className="text-[11.5px] text-[#94A3B8] text-center">
                 Your application quota will be reserved before submission.
               </p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Toast Notification */}
+      {toast.show && (
+        <div className="fixed top-20 right-6 md:right-8 z-[100] animate-in fade-in slide-in-from-top-3 duration-300">
+          <div
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl border shadow-[0_4px_20px_-2px_rgba(0,0,0,0.15)] ${
+              toast.type === "error"
+                ? "bg-rose-50 border-rose-200 text-rose-800"
+                : toast.type === "skipped" || toast.type === "warning"
+                ? "bg-amber-50 border-amber-200 text-amber-900"
+                : "bg-[#EEF2FF] border-[#C7D2FE] text-[#4338CA]"
+            }`}
+          >
+            <div
+              className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
+                toast.type === "error"
+                  ? "bg-rose-100 text-rose-600"
+                  : toast.type === "skipped" || toast.type === "warning"
+                  ? "bg-amber-100 text-amber-700"
+                  : "bg-[#E0E7FF] text-[#4F46E5]"
+              }`}
+            >
+              {toast.type === "error" ? (
+                <span className="text-sm font-bold">✕</span>
+              ) : toast.type === "skipped" || toast.type === "warning" ? (
+                <span className="text-sm font-bold">!</span>
+              ) : (
+                <span className="text-sm font-bold">✓</span>
+              )}
+            </div>
+            <span className="text-[13px] font-medium">{toast.message}</span>
+            <button
+              type="button"
+              onClick={() => setToast({ show: false, message: "", type: "success" })}
+              className="text-slate-400 hover:text-slate-600 ml-2 cursor-pointer"
+            >
+              ✕
+            </button>
           </div>
         </div>
       )}

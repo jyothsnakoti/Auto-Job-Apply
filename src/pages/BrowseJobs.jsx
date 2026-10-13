@@ -23,6 +23,8 @@ import {
   getStoredAppliedJobIds,
   isJobAlreadyApplied,
   getApplicationStatuses,
+  isJobSubmitted,
+  isApplicationActiveStatus,
   isApplyNowHiddenForJob,
   getMatchingApplicationForJob,
   extractJobIdFromApplicationRecord,
@@ -557,6 +559,7 @@ const BrowseJobs = () => {
   // Application Service States & Toast Notifications
   const [appliedJobIds, setAppliedJobIds] = useState(() => getStoredAppliedJobIds());
   const [applicationMap, setApplicationMap] = useState(() => new Map());
+  const [submittedJobIdSet, setSubmittedJobIdSet] = useState(() => new Set());
   const [isStatusLoading, setIsStatusLoading] = useState(true);
   const [statusError, setStatusError] = useState(null);
   const [applyingCardIds, setApplyingCardIds] = useState({});
@@ -565,12 +568,13 @@ const BrowseJobs = () => {
   const [isAutoApplyingAll, setIsAutoApplyingAll] = useState(false);
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
 
-  const fetchApplicationStatuses = useCallback(async () => {
+  const fetchApplicationStatuses = useCallback(async (forceRefresh = false) => {
     setIsStatusLoading(true);
     setStatusError(null);
     try {
-      const { applicationMap: map } = await getApplicationStatuses();
-      setApplicationMap(map);
+      const res = await getApplicationStatuses({ forceRefresh });
+      setApplicationMap(res.applicationMap || new Map());
+      setSubmittedJobIdSet(res.submittedJobIdSet || new Set());
     } catch (err) {
       console.error("[BrowseJobs] Failed to fetch application statuses:", err);
       setStatusError(err.message || "Failed to load application statuses from server.");
@@ -584,17 +588,31 @@ const BrowseJobs = () => {
   }, [fetchApplicationStatuses]);
 
   useEffect(() => {
-    const handleAppliedUpdated = () => {
+    const handleStatusSync = (e) => {
       setAppliedJobIds(getStoredAppliedJobIds());
-      fetchApplicationStatuses();
+      if (e?.detail?.applicationMap && e?.detail?.submittedJobIdSet) {
+        setApplicationMap(e.detail.applicationMap);
+        setSubmittedJobIdSet(e.detail.submittedJobIdSet);
+      } else {
+        fetchApplicationStatuses(true);
+      }
     };
-    window.addEventListener("appliedJobIdsUpdated", handleAppliedUpdated);
-    window.addEventListener("storage", handleAppliedUpdated);
+    window.addEventListener("applicationStatusesUpdated", handleStatusSync);
+    window.addEventListener("appliedJobIdsUpdated", handleStatusSync);
+    window.addEventListener("storage", handleStatusSync);
     return () => {
-      window.removeEventListener("appliedJobIdsUpdated", handleAppliedUpdated);
-      window.removeEventListener("storage", handleAppliedUpdated);
+      window.removeEventListener("applicationStatusesUpdated", handleStatusSync);
+      window.removeEventListener("appliedJobIdsUpdated", handleStatusSync);
+      window.removeEventListener("storage", handleStatusSync);
     };
   }, [fetchApplicationStatuses]);
+
+  // If currently selected job was submitted, clear selection to avoid stale application state
+  useEffect(() => {
+    if (selectedJobModal && isJobSubmitted(selectedJobModal, submittedJobIdSet, applicationMap)) {
+      setSelectedJobModal(null);
+    }
+  }, [selectedJobModal, submittedJobIdSet, applicationMap]);
 
   useEffect(() => {
     if (toast.show) {
@@ -648,6 +666,11 @@ const BrowseJobs = () => {
     if (e) e.stopPropagation();
     if (!job) return;
 
+    if (isJobSubmitted(job, submittedJobIdSet, applicationMap)) {
+      showToast("This job has already been submitted.", "warning");
+      return;
+    }
+
     const numericJobId = extractNumericJobId(job);
     const cardKey = job.id || job.jobId || numericJobId || `job-${Math.random()}`;
 
@@ -680,7 +703,7 @@ const BrowseJobs = () => {
         showToast("Application skipped (No new jobs queued).", "warning");
       }
 
-      fetchApplicationStatuses();
+      await fetchApplicationStatuses(true);
 
       getBillingStatus()
         .then((status) => {
@@ -704,6 +727,15 @@ const BrowseJobs = () => {
    */
   const handleApplyToPanelJob = async () => {
     if (!selectedJobModal) return;
+
+    if (isJobSubmitted(selectedJobModal, submittedJobIdSet, applicationMap)) {
+      setPanelApplyStatus({
+        type: "error",
+        message: "This job has already been submitted.",
+      });
+      showToast("This job has already been submitted.", "warning");
+      return;
+    }
 
     const numericJobId = extractNumericJobId(selectedJobModal);
     if (!numericJobId) {
@@ -735,7 +767,7 @@ const BrowseJobs = () => {
       const queuedCount = res.queued?.length || 0;
       const skippedArr = res.skipped || [];
 
-      fetchApplicationStatuses();
+      await fetchApplicationStatuses(true);
 
       if (queuedCount > 0) {
         const msg = `Application queued! Redirecting to Applications...`;
@@ -803,9 +835,9 @@ const BrowseJobs = () => {
         return;
       }
 
-      const currentJobsList = jobsCache[activePage] || [];
+      const currentJobsList = displayedJobs || [];
       const eligibleJobs = currentJobsList.filter(
-        (j) => !isApplyNowHiddenForJob(j, applicationMap)
+        (j) => !isApplyNowHiddenForJob(j, applicationMap, submittedJobIdSet) && !isJobSubmitted(j, submittedJobIdSet, applicationMap)
       );
 
       const validJobs = eligibleJobs
@@ -829,7 +861,7 @@ const BrowseJobs = () => {
       const queuedCount = batchResult.queued.length;
       const skippedCount = batchResult.skipped.length;
 
-      fetchApplicationStatuses();
+      await fetchApplicationStatuses(true);
 
       showToast(
         `Batch Auto Apply: ${queuedCount} Queued, ${skippedCount} Skipped across ${batchResult.totalProcessed} jobs.`,
@@ -1520,6 +1552,11 @@ const BrowseJobs = () => {
   // Filter all cached jobs across all loaded pages
   const allFilteredJobs = useMemo(() => {
     return allCachedJobs.filter((job) => {
+      // Exclude already submitted jobs from Browse & Apply
+      if (isJobSubmitted(job, submittedJobIdSet, applicationMap)) {
+        return false;
+      }
+
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const matchTitle = (job.title || "").toLowerCase().includes(q);
@@ -1588,6 +1625,8 @@ const BrowseJobs = () => {
     });
   }, [
     allCachedJobs,
+    submittedJobIdSet,
+    applicationMap,
     searchQuery,
     selectedDate,
     selectedLocations,
@@ -1604,41 +1643,35 @@ const BrowseJobs = () => {
       ? totalPages
       : totalFilteredPages;
 
-  // Active slice of jobs for the current page
+  // Active slice of jobs for the current page (strictly derived from allFilteredJobs)
   const displayedJobs = useMemo(() => {
     const startIdx = (activePage - 1) * pageSize;
     const endIdx = startIdx + pageSize;
-    const sliced = allFilteredJobs.slice(startIdx, endIdx);
-    if (sliced.length > 0) return sliced;
+    return allFilteredJobs.slice(startIdx, endIdx);
+  }, [allFilteredJobs, activePage, pageSize]);
 
-    const isFilterActive =
-      Boolean(searchQuery.trim()) ||
-      selectedLocations.length > 0 ||
-      selectedCompanies.length > 0 ||
-      selectedRoles.length > 0 ||
-      selectedWorkplace.length > 0 ||
-      selectedJobTypes.length > 0 ||
-      (selectedDate && selectedDate !== "All time");
-
-    if (!isFilterActive) {
-      const directPage = jobsCache[activePage];
-      if (Array.isArray(directPage) && directPage.length > 0) {
-        return directPage;
+  // Auto-fetch next page if filtering submitted jobs left the current page with empty slots
+  useEffect(() => {
+    const neededCount = activePage * pageSize;
+    if (!isLoadingJobs && !isLoadingPage && hasMoreJobs && allFilteredJobs.length < neededCount) {
+      const cachedPages = Object.keys(jobsCache).map(Number).filter((n) => !isNaN(n));
+      const maxCached = cachedPages.length > 0 ? Math.max(...cachedPages) : 0;
+      const nextPage = maxCached + 1;
+      if (nextPage <= totalPages && !fetchingPagesRef.current.has(nextPage)) {
+        if (loadPageRef.current) {
+          loadPageRef.current(nextPage);
+        }
       }
     }
-    return [];
   }, [
-    allFilteredJobs,
+    allFilteredJobs.length,
     activePage,
     pageSize,
+    hasMoreJobs,
+    isLoadingJobs,
+    isLoadingPage,
+    totalPages,
     jobsCache,
-    searchQuery,
-    selectedLocations,
-    selectedCompanies,
-    selectedRoles,
-    selectedWorkplace,
-    selectedJobTypes,
-    selectedDate,
   ]);
 
   // Aliased for full compatibility with existing JSX
@@ -2703,7 +2736,7 @@ const BrowseJobs = () => {
 
                             const actualJobId = extractNumericJobId(job) || job.jobId || job.job_id || job.id;
                             const record = getMatchingApplicationForJob(job, applicationMap);
-                            const hideApply = isApplyNowHiddenForJob(job, applicationMap);
+                            const hideApply = isApplyNowHiddenForJob(job, applicationMap, submittedJobIdSet);
 
                             console.log("[BrowseJobs] Application status match", {
                               cardJobId: actualJobId,
@@ -3378,7 +3411,7 @@ const BrowseJobs = () => {
                   );
                 }
 
-                const isHidden = isApplyNowHiddenForJob(selectedJobModal, applicationMap);
+                const isHidden = isApplyNowHiddenForJob(selectedJobModal, applicationMap, submittedJobIdSet);
 
                 if (isHidden) {
                   const numericId = extractNumericJobId(selectedJobModal);

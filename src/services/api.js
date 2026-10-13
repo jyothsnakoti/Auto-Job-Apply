@@ -53,11 +53,21 @@ export {
   markJobsAsApplied,
   isJobAlreadyApplied,
   getApplicationStatuses,
+  isJobSubmitted,
+  isApplicationSubmittedStatus,
+  isApplicationActiveStatus,
+  isApplicationRetryableStatus,
+  clearApplicationStatusCache,
   isApplyNowHiddenForJob,
   extractJobIdFromApplicationRecord,
   getMatchingApplicationForJob,
   normalizeApplicationStatus,
   isApplicationStatusActiveOrCompleted,
+  extractApplicationId,
+  retryApplication,
+  approveApplication,
+  skipApplication,
+  getApplications,
 } from './applicationService';
 
 export { apiClient as api, apiClient, axiosInstance };

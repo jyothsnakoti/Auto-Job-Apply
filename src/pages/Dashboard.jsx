@@ -21,7 +21,17 @@ import {
   getJobById,
   getResumeMatchesStatus,
   refreshResumeMatches,
+  extractApplicationId,
+  retryApplication,
+  approveApplication,
+  skipApplication,
+  getApplications,
+  normalizeApplicationStatus,
+  extractNumericResumeId,
+  isJobAlreadyApplied,
 } from "../services/api";
+import { downloadResume } from "../services/resumeService";
+import { downloadEnhancedResume } from "../services/enhancedResumeDownloadService";
 
 import dashboard1Icon from "../assets/dashboard1.svg";
 import dashboard2Icon from "../assets/dashboard2.svg";
@@ -46,9 +56,9 @@ const VerifiedTick = () => (
 );
 
 // Document / Resume Icon
-const DocumentIcon = ({ color = "#6366F1" }) => (
+const DocumentIcon = ({ color = "#6366F1", className = "" }) => (
   <svg
-    className="w-3.5 h-3.5 shrink-0"
+    className={`w-3.5 h-3.5 shrink-0 ${className}`}
     viewBox="0 0 24 24"
     fill="none"
     stroke={color}
@@ -102,24 +112,33 @@ const formatPostedDate = (postedAt) => {
   }
 };
 
+export const TAB_PARAM_MAP = {
+  "All": "all",
+  "Submitted": "submitted",
+  "In Progress": "in_progress",
+  "Needs Action": "needs_action",
+  "Failed": "failed",
+  "Skipped": "skipped",
+};
+
 const getApplicationCategory = (app) => {
   if (!app) return "All";
 
-  const rawTab = String(app.tab || app.statusCategory || "").trim().toUpperCase().replace(/[\s-]/g, "_");
-  if (rawTab === "SUBMITTED" || rawTab === "COMPLETED" || rawTab === "SUCCESS") return "Submitted";
-  if (rawTab === "IN_PROGRESS" || rawTab === "QUEUED" || rawTab === "PREPARING") return "In Progress";
-  if (rawTab === "NEEDS_ACTION" || rawTab === "ACTION_REQUIRED") return "Needs Action";
-  if (rawTab === "FAILED" || rawTab === "ERROR" || rawTab === "REJECTED") return "Failed";
-  if (rawTab === "SKIPPED" || rawTab === "IGNORED") return "Skipped";
+  const rawTab = normalizeApplicationStatus(app.tab || app.statusCategory || app.category || "");
+  if (["SUBMITTED", "COMPLETED", "SUCCESS", "APPLIED"].includes(rawTab)) return "Submitted";
+  if (["PREPARING", "QUEUED", "IN_PROGRESS", "RUNNING", "PROCESSING"].includes(rawTab)) return "In Progress";
+  if (["NEEDS_ACTION", "ACTION_REQUIRED"].includes(rawTab)) return "Needs Action";
+  if (["FAILED", "ERROR", "REJECTED"].includes(rawTab)) return "Failed";
+  if (["SKIPPED", "IGNORED"].includes(rawTab)) return "Skipped";
 
-  const rawStatus = String(app.status || app.state || app.applicationStatus || "").trim().toUpperCase().replace(/[\s-]/g, "_");
+  const rawStatus = normalizeApplicationStatus(app.status || app.state || app.applicationStatus || app.statusText || "");
   if (["SUBMITTED", "COMPLETED", "SUCCESS", "APPLIED"].includes(rawStatus)) return "Submitted";
   if (["PREPARING", "QUEUED", "IN_PROGRESS", "RUNNING", "PROCESSING"].includes(rawStatus)) return "In Progress";
   if (["NEEDS_ACTION", "ACTION_REQUIRED"].includes(rawStatus)) return "Needs Action";
   if (["FAILED", "ERROR", "REJECTED"].includes(rawStatus)) return "Failed";
   if (["SKIPPED", "IGNORED"].includes(rawStatus)) return "Skipped";
 
-  return "Submitted";
+  return "All";
 };
 
 const extractCleanJobTitle = (rawTitle, rawText, index = 0) => {
@@ -517,6 +536,27 @@ const formatMatchTime = (isoString) => {
   }
 };
 
+const formatPostedDateTime = (timestamp) => {
+  if (!timestamp) return "Date unavailable";
+  try {
+    const date = new Date(timestamp);
+    if (isNaN(date.getTime())) return "Date unavailable";
+    const datePart = date.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+    const timePart = date.toLocaleTimeString(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+    return `${datePart} · ${timePart}`;
+  } catch {
+    return "Date unavailable";
+  }
+};
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const [userName, setUserName] = useState("");
@@ -548,6 +588,13 @@ const Dashboard = () => {
               return {
                 ...prevModal,
                 ...details,
+                isApplied: prevModal.isApplied !== undefined ? prevModal.isApplied : details.isApplied,
+                applied: prevModal.applied !== undefined ? prevModal.applied : details.applied,
+                alreadyApplied: prevModal.alreadyApplied !== undefined ? prevModal.alreadyApplied : details.alreadyApplied,
+                applicationId: prevModal.applicationId || details.applicationId || null,
+                status: prevModal.status || details.status || null,
+                normStatus: prevModal.normStatus || details.normStatus || null,
+                statusLabel: prevModal.statusLabel || details.statusLabel || null,
                 title: details.title || details.jobTitle || prevModal.title,
                 company: details.companyName || details.company || prevModal.company,
                 companyDomain: details.companyDomain || prevModal.companyDomain,
@@ -618,18 +665,32 @@ const Dashboard = () => {
     }
   });
 
-  // Dynamic User Applications State (Loaded from GET /api/dashboard recentApplications)
-  const [applications, setApplications] = useState(() => {
+  // Dynamic User Applications State (Loaded via GET /api/applications?tab=...&page=...&size=...)
+  const [applications, setApplications] = useState([]);
+  const [appPage, setAppPage] = useState(0);
+  const [appPageSize] = useState(10);
+  const [appTotalPages, setAppTotalPages] = useState(1);
+  const [appTotalItems, setAppTotalItems] = useState(0);
+  const [appTabCounts, setAppTabCounts] = useState(() => {
     try {
-      const cachedDashboard = getStoredDashboardData();
-      if (Array.isArray(cachedDashboard?.recentApplications)) {
-        return cachedDashboard.recentApplications;
-      }
+      const cached = getStoredDashboardData();
+      const c = cached?.applicationCounts || cached?.counts || {};
+      return {
+        all: typeof c.all === "number" ? c.all : 0,
+        submitted: typeof c.submitted === "number" ? c.submitted : 0,
+        inProgress: typeof c.inProgress === "number" ? c.inProgress : (typeof c.in_progress === "number" ? c.in_progress : 0),
+        needsAction: typeof c.needsAction === "number" ? c.needsAction : (typeof c.needs_action === "number" ? c.needs_action : 0),
+        failed: typeof c.failed === "number" ? c.failed : 0,
+        skipped: typeof c.skipped === "number" ? c.skipped : 0,
+      };
     } catch {
-      // ignore
+      return { all: 0, submitted: 0, inProgress: 0, needsAction: 0, failed: 0, skipped: 0 };
     }
-    return [];
   });
+  const [isLoadingApplications, setIsLoadingApplications] = useState(true);
+  const [applicationsError, setApplicationsError] = useState(null);
+  const [actionLoadingIds, setActionLoadingIds] = useState({});
+  const appReqSeqRef = useRef(0);
 
   // Enhance Resume States
   const [isEnhancing, setIsEnhancing] = useState(false);
@@ -662,7 +723,85 @@ const Dashboard = () => {
   });
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(!dashboardMetrics);
 
-  // Reload jobs and dashboard data when matching finishes
+  const [toast, setToast] = useState({ show: false, message: "", type: "success" });
+
+  const showToast = useCallback((message, type = "success") => {
+    setToast({ show: true, message, type });
+  }, []);
+
+  useEffect(() => {
+    if (toast.show) {
+      const timer = setTimeout(() => {
+        setToast((prev) => ({ ...prev, show: false }));
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast.show]);
+
+  // Fetch applications from GET /api/applications?tab={tab}&page={page}&size={size}
+  const fetchApplicationsData = useCallback(
+    async (tabName = selectedAppTab, pageNum = appPage, isPolling = false) => {
+      const tabParam = TAB_PARAM_MAP[tabName] || "all";
+      if (!isPolling) {
+        setIsLoadingApplications(true);
+        setApplicationsError(null);
+      }
+
+      const reqSeq = ++appReqSeqRef.current;
+
+      try {
+        const result = await getApplications({
+          tab: tabParam,
+          page: pageNum,
+          size: appPageSize,
+        });
+
+        // Prevent race conditions and stale responses
+        if (reqSeq !== appReqSeqRef.current) return;
+
+        if (result) {
+          setApplications(Array.isArray(result.items) ? result.items : []);
+          if (result.counts) {
+            setAppTabCounts(result.counts);
+          }
+          if (result.pagination) {
+            setAppPage(result.pagination.page ?? pageNum);
+            setAppTotalPages(result.pagination.totalPages ?? 1);
+            setAppTotalItems(result.pagination.totalItems ?? (result.items || []).length);
+          }
+        }
+      } catch (err) {
+        if (reqSeq !== appReqSeqRef.current) return;
+        console.error("[Dashboard] Error fetching applications:", err);
+        if (!isPolling) {
+          setApplicationsError(err?.message || "Failed to load applications.");
+        }
+      } finally {
+        if (reqSeq === appReqSeqRef.current && !isPolling) {
+          setIsLoadingApplications(false);
+        }
+      }
+    },
+    [selectedAppTab, appPage, appPageSize]
+  );
+
+  // Fetch applications on tab or page change
+  useEffect(() => {
+    fetchApplicationsData(selectedAppTab, appPage, false);
+  }, [selectedAppTab, appPage, fetchApplicationsData]);
+
+  // While "In Progress" is open, refresh every 5-10s using polling
+  useEffect(() => {
+    if (selectedAppTab !== "In Progress") return;
+
+    const intervalId = setInterval(() => {
+      fetchApplicationsData("In Progress", appPage, true);
+    }, 6000);
+
+    return () => clearInterval(intervalId);
+  }, [selectedAppTab, appPage, fetchApplicationsData]);
+
+  // Reload jobs and dashboard data when matching finishes or actions occur
   const reloadJobsAndDashboard = useCallback(async () => {
     try {
       setIsLoadingJobs(true);
@@ -675,16 +814,275 @@ const Dashboard = () => {
             .filter(Boolean);
           setJobs(transformed);
         }
-        if (Array.isArray(dashData.recentApplications)) {
-          setApplications(dashData.recentApplications);
-        }
       }
+      await fetchApplicationsData(selectedAppTab, appPage, true);
     } catch (err) {
       console.warn("[Dashboard] Error reloading dashboard data after match refresh:", err);
     } finally {
       setIsLoadingJobs(false);
     }
-  }, []);
+  }, [fetchApplicationsData, selectedAppTab, appPage]);
+
+  // State tracking in-flight resume downloads per application ID
+  const [downloadingResumeAppIds, setDownloadingResumeAppIds] = useState({});
+
+  /**
+   * Download the tailored resume for a specific application record based on ID
+   */
+  const handleDownloadResumeForApp = async (app, e) => {
+    if (e) e.stopPropagation();
+    if (!app) return;
+
+    const appId =
+      extractApplicationId(app) ||
+      app?.id ||
+      app?.applicationId ||
+      app?.application_id ||
+      app?._id ||
+      `app-${Math.random()}`;
+
+    if (downloadingResumeAppIds[appId]) return;
+
+    const nestedJob =
+      app && typeof app === "object" && typeof app.job === "object" && app.job !== null
+        ? app.job
+        : app && typeof app === "object" && typeof app.jobDetails === "object" && app.jobDetails !== null
+        ? app.jobDetails
+        : {};
+
+    const jobTitle = app?.title || nestedJob?.title || app?.jobTitle || nestedJob?.jobTitle || "Job";
+    const company = app?.companyName || nestedJob?.companyName || app?.company || nestedJob?.company || "";
+    const cleanCompany = company ? `${company.replace(/[^a-zA-Z0-9_-]/g, "_")}_` : "";
+    const cleanTitle = jobTitle.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const fallbackPdfFilename = `${cleanCompany}${cleanTitle}_Tailored_Resume.pdf`;
+
+    setDownloadingResumeAppIds((prev) => ({ ...prev, [appId]: true }));
+
+    try {
+      // 1. Resolve candidate resume ID specifically attached to this application / job
+      const candidateResumeIds = [
+        app?.tailoredResumeId,
+        app?.tailored_resume_id,
+        app?.resumeId,
+        app?.resume_id,
+        app?.resume?.id,
+        app?.resume?.resumeId,
+        app?.tailoredResume?.id,
+        app?.tailoredResume?.resumeId,
+        nestedJob?.tailoredResumeId,
+        nestedJob?.tailored_resume_id,
+        nestedJob?.resumeId,
+        nestedJob?.resume_id,
+        app?.job?.resumeId,
+        app?.job?.tailoredResumeId,
+      ];
+
+      let targetResumeId = null;
+      for (const cand of candidateResumeIds) {
+        if (cand !== undefined && cand !== null && cand !== "") {
+          targetResumeId = cand;
+          break;
+        }
+      }
+
+      // If a specific resume ID is present, download directly via GET /api/resumes/{id}/download
+      if (targetResumeId !== null && targetResumeId !== undefined) {
+        console.log(`[Dashboard] Downloading tailored resume by ID (${targetResumeId}) for app ${appId}`);
+        await downloadResume(targetResumeId, fallbackPdfFilename);
+        showToast("Tailored resume downloaded successfully.", "success");
+        return;
+      }
+
+      // 2. If app has a direct resume URL
+      const resumeUrl = app?.tailoredResumeUrl || app?.resumeUrl || app?.resume_url || nestedJob?.resumeUrl;
+      if (resumeUrl) {
+        console.log(`[Dashboard] Downloading tailored resume from URL: ${resumeUrl}`);
+        const link = document.createElement("a");
+        link.href = resumeUrl;
+        link.download = fallbackPdfFilename;
+        link.target = "_blank";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showToast("Tailored resume downloaded successfully.", "success");
+        return;
+      }
+
+      // 3. If jobId exists, attempt downloading enhanced resume for this job via GET /api/jobs/{jobId}/enhance/download
+      const jobId = app?.jobId ?? nestedJob?.jobId ?? nestedJob?.id ?? app?.job_id;
+      if (jobId !== null && jobId !== undefined) {
+        try {
+          console.log(`[Dashboard] Attempting download of enhanced resume by jobId (${jobId})`);
+          await downloadEnhancedResume(jobId, `${cleanCompany}${cleanTitle}_Enhanced_Resume.docx`);
+          showToast("Tailored resume downloaded successfully.", "success");
+          return;
+        } catch (jobEnhErr) {
+          console.warn("[Dashboard] Enhanced resume by jobId not found:", jobEnhErr);
+        }
+      }
+
+      // 4. Fallback to active/stored primary resume ID
+      const primaryResumeId =
+        getStoredResumeId() ||
+        localStorage.getItem("selected_resume_id") ||
+        localStorage.getItem("resume_id");
+
+      if (primaryResumeId) {
+        console.log(`[Dashboard] Downloading primary resume ID as fallback: ${primaryResumeId}`);
+        await downloadResume(primaryResumeId, fallbackPdfFilename);
+        showToast("Resume downloaded successfully.", "success");
+        return;
+      }
+
+      // 5. Try fetching primary resume ID
+      try {
+        const fetchedPrimaryId = await getPrimaryResumeId();
+        if (fetchedPrimaryId) {
+          await downloadResume(fetchedPrimaryId, fallbackPdfFilename);
+          showToast("Resume downloaded successfully.", "success");
+          return;
+        }
+      } catch {
+        // ignore
+      }
+
+      showToast("No resume ID found for this application.", "error");
+    } catch (err) {
+      console.error("[Dashboard] Error downloading tailored resume:", err);
+      showToast(err.message || "Failed to download resume.", "error");
+    } finally {
+      setDownloadingResumeAppIds((prev) => {
+        const copy = { ...prev };
+        delete copy[appId];
+        return copy;
+      });
+    }
+  };
+
+  // Handle View Resume (delegates to handleDownloadResumeForApp)
+  const handleViewResume = async (app, e) => {
+    return handleDownloadResumeForApp(app, e);
+  };
+
+  // Handle Approve Application (POST /api/applications/{id}/approve)
+  const handleApproveApplication = async (app, e) => {
+    if (e) e.stopPropagation();
+    const appId =
+      extractApplicationId(app) ||
+      app?.id ||
+      app?.applicationId ||
+      app?.application_id ||
+      app?._id;
+
+    if (!appId) {
+      showToast("Application ID is missing. Unable to approve.", "error");
+      return;
+    }
+
+    if (actionLoadingIds[appId]) return;
+
+    try {
+      setActionLoadingIds((prev) => ({ ...prev, [appId]: "approve" }));
+      await approveApplication(appId);
+      showToast("Application approved successfully.", "success");
+      fetchApplicationsData(selectedAppTab, appPage, false);
+      window.dispatchEvent(new CustomEvent("applicationsUpdated"));
+    } catch (err) {
+      console.error("[Dashboard] Approve error:", err);
+      showToast(err.message || "Failed to approve application.", "error");
+    } finally {
+      setActionLoadingIds((prev) => {
+        const copy = { ...prev };
+        delete copy[appId];
+        return copy;
+      });
+    }
+  };
+
+  // Handle Skip Application (POST /api/applications/{id}/skip)
+  const handleSkipApplication = async (app, e) => {
+    if (e) e.stopPropagation();
+    const appId =
+      extractApplicationId(app) ||
+      app?.id ||
+      app?.applicationId ||
+      app?.application_id ||
+      app?._id;
+
+    if (!appId) {
+      showToast("Application ID is missing. Unable to skip.", "error");
+      return;
+    }
+
+    if (actionLoadingIds[appId]) return;
+
+    try {
+      setActionLoadingIds((prev) => ({ ...prev, [appId]: "skip" }));
+      await skipApplication(appId);
+      showToast("Application skipped.", "success");
+      fetchApplicationsData(selectedAppTab, appPage, false);
+      window.dispatchEvent(new CustomEvent("applicationsUpdated"));
+    } catch (err) {
+      console.error("[Dashboard] Skip error:", err);
+      showToast(err.message || "Failed to skip application.", "error");
+    } finally {
+      setActionLoadingIds((prev) => {
+        const copy = { ...prev };
+        delete copy[appId];
+        return copy;
+      });
+    }
+  };
+
+  // Handle Retry Application (POST /api/applications/{id}/retry)
+  const handleRetryApplication = async (app, e) => {
+    if (e) e.stopPropagation();
+    const appId =
+      extractApplicationId(app) ||
+      app?.id ||
+      app?.applicationId ||
+      app?.application_id ||
+      app?._id;
+
+    if (!appId) {
+      showToast("Application ID is missing. Unable to retry.", "error");
+      return;
+    }
+
+    if (actionLoadingIds[appId]) return;
+
+    try {
+      setActionLoadingIds((prev) => ({ ...prev, [appId]: "retry" }));
+      const result = await retryApplication(appId);
+      const successMsg =
+        result?.status === 202
+          ? (typeof result?.data === "string" && result.data.trim() ? result.data : "Application queued for retry")
+          : (typeof result?.data === "string" && result.data.trim() ? result.data : result?.message || "Application queued for retry");
+      showToast(successMsg, "success");
+      fetchApplicationsData(selectedAppTab, appPage, false);
+      window.dispatchEvent(new CustomEvent("applicationsUpdated"));
+    } catch (err) {
+      console.error("[Dashboard] Retry error:", err);
+      const status = err?.status || err?.response?.status;
+      if (status === 402) {
+        showToast("Insufficient application credits. Please upgrade your plan.", "error");
+        setTimeout(() => navigate("/upgrade-plan"), 1800);
+      } else {
+        const errorMsg =
+          err?.response?.data?.message ||
+          (typeof err?.response?.data === "string" && err.response.data.trim() ? err.response.data : null) ||
+          err?.message ||
+          "Failed to retry application.";
+        showToast(errorMsg, "error");
+      }
+    } finally {
+      setActionLoadingIds((prev) => {
+        const copy = { ...prev };
+        delete copy[appId];
+        return copy;
+      });
+    }
+  };
 
   // Poll GET /api/resumes/matches/status (with automatic background refresh)
   const fetchMatchStatus = useCallback(
@@ -866,13 +1264,6 @@ const Dashboard = () => {
             setJobs([]);
           }
 
-          // Populate Recent Applications dynamically from /api/dashboard
-          if (Array.isArray(data.recentApplications)) {
-            setApplications(data.recentApplications);
-          } else {
-            setApplications([]);
-          }
-
           if (data.jobsFound > 0 || (Array.isArray(data.topMatches) && data.topMatches.length > 0)) {
             setHasResume(true);
           }
@@ -901,14 +1292,11 @@ const Dashboard = () => {
             setHasResume(true);
           }
         }
-        if (Array.isArray(e.detail.recentApplications)) {
-          setApplications(e.detail.recentApplications);
-        }
       }
     };
 
     const handleApplicationsUpdated = () => {
-      loadDashboard();
+      fetchApplicationsData(selectedAppTab, appPage, false);
     };
 
     window.addEventListener("dashboardDataUpdated", handleDashboardUpdated);
@@ -1089,33 +1477,20 @@ const Dashboard = () => {
     ];
   }, [dashboardMetrics, billingInfo]);
 
-  // Dynamic Application Tabs with Counts (Exclusively From GET /api/dashboard applicationCounts or recentApplications)
+  // Dynamic Application Tabs with Counts (From GET /api/applications counts)
   const applicationTabs = useMemo(() => {
-    const counts = dashboardMetrics?.applicationCounts || {};
-
-    const countForCategory = (key, categoryName) => {
-      if (typeof counts[key] === "number") return counts[key];
-      if (categoryName === "All") return applications.length;
-      return applications.filter((app) => getApplicationCategory(app) === categoryName).length;
-    };
-
     return [
-      { name: "All", count: countForCategory("all", "All") },
-      { name: "Submitted", count: countForCategory("submitted", "Submitted") },
-      { name: "In Progress", count: countForCategory("inProgress", "In Progress") },
-      { name: "Needs Action", count: countForCategory("needsAction", "Needs Action") },
-      { name: "Failed", count: countForCategory("failed", "Failed") },
-      { name: "Skipped", count: countForCategory("skipped", "Skipped") },
+      { name: "All", count: appTabCounts.all },
+      { name: "Submitted", count: appTabCounts.submitted },
+      { name: "In Progress", count: appTabCounts.inProgress },
+      { name: "Needs Action", count: appTabCounts.needsAction },
+      { name: "Failed", count: appTabCounts.failed },
+      { name: "Skipped", count: appTabCounts.skipped },
     ];
-  }, [dashboardMetrics?.applicationCounts, applications]);
+  }, [appTabCounts]);
 
-  // Filtered Applications Table List
-  const filteredApplications = useMemo(() => {
-    if (selectedAppTab === "All") return applications;
-    return applications.filter(
-      (app) => getApplicationCategory(app) === selectedAppTab
-    );
-  }, [applications, selectedAppTab]);
+  // Applications Table List (Directly from backend for current tab)
+  const filteredApplications = applications;
 
   // Enhance Resume Action Handler (POST /api/jobs/{jobId}/enhance -> GET /api/jobs/{jobId}/enhance)
   const handleEnhanceResume = async () => {
@@ -1402,7 +1777,10 @@ const Dashboard = () => {
                   <button
                     key={tab.name}
                     type="button"
-                    onClick={() => setSelectedAppTab(tab.name)}
+                    onClick={() => {
+                      setSelectedAppTab(tab.name);
+                      setAppPage(0);
+                    }}
                     className={`h-[34px] px-3.5 rounded-full text-[12.5px] font-medium flex items-center gap-1.5 transition-all cursor-pointer ${isActive
                       ? "bg-[#0F172A] text-white shadow-xs"
                       : "bg-[#F1F5F9] text-[#64748B] hover:bg-slate-200"
@@ -1419,8 +1797,27 @@ const Dashboard = () => {
               })}
             </div>
 
-            {/* Applications Table or Dynamic Empty State */}
-            {filteredApplications.length === 0 ? (
+            {/* Applications Table, Loading State, Error State, or Dynamic Empty State */}
+            {isLoadingApplications ? (
+              <div className="py-12 flex flex-col items-center justify-center gap-3">
+                <svg className="w-6 h-6 animate-spin text-[#4F46E5]" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                <p className="text-xs font-medium text-[#64748B]">Loading applications...</p>
+              </div>
+            ) : applicationsError ? (
+              <div className="p-6 rounded-[16px] border border-red-100 bg-red-50/50 flex flex-col items-center justify-center text-center gap-2 my-2">
+                <p className="text-xs font-semibold text-red-600">{applicationsError}</p>
+                <button
+                  type="button"
+                  onClick={() => fetchApplicationsData(selectedAppTab, appPage, false)}
+                  className="px-3.5 py-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-xs transition-colors cursor-pointer"
+                >
+                  Retry Loading
+                </button>
+              </div>
+            ) : filteredApplications.length === 0 ? (
               <div className="p-8 rounded-[16px] border border-dashed border-slate-200 bg-slate-50/50 flex flex-col items-center justify-center text-center gap-2.5 my-2">
                 <div className="w-12 h-12 rounded-full bg-[#EEF2FF] flex items-center justify-center text-[#4F46E5]">
                   <svg
@@ -1438,12 +1835,32 @@ const Dashboard = () => {
                   </svg>
                 </div>
                 <h3 className="text-base font-bold text-[#0F172A]">
-                  No Applications Yet
+                  {selectedAppTab === "Needs Action"
+                    ? "No Actions Required"
+                    : selectedAppTab === "In Progress"
+                    ? "No Applications In Progress"
+                    : selectedAppTab === "Submitted"
+                    ? "No Submitted Applications"
+                    : selectedAppTab === "Failed"
+                    ? "No Failed Applications"
+                    : selectedAppTab === "Skipped"
+                    ? "No Skipped Applications"
+                    : "No Applications Yet"}
                 </h3>
                 <p className="text-xs text-[#64748B] max-w-sm">
-                  You haven't submitted any job applications yet. Auto-apply to matched jobs or apply manually to start tracking them here.
+                  {selectedAppTab === "Needs Action"
+                    ? "None of your job applications require attention or approval right now."
+                    : selectedAppTab === "In Progress"
+                    ? "There are currently no active applications being prepared or processed."
+                    : selectedAppTab === "Submitted"
+                    ? "You haven't submitted any job applications yet."
+                    : selectedAppTab === "Failed"
+                    ? "Great news! No applications have failed."
+                    : selectedAppTab === "Skipped"
+                    ? "You have not skipped any job applications."
+                    : "You haven't submitted any job applications yet. Auto-apply to matched jobs or apply manually to start tracking them here."}
                 </p>
-                {jobs.length > 0 && (
+                {selectedAppTab === "All" && jobs.length > 0 && (
                   <button
                     type="button"
                     onClick={() => navigate("/auto-apply")}
@@ -1454,168 +1871,522 @@ const Dashboard = () => {
                 )}
               </div>
             ) : (
-              <div className="overflow-x-auto w-full">
-                <table className="w-full text-left border-collapse min-w-[750px]">
-                  <thead>
-                    <tr className="border-b border-slate-100">
-                      <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
-                        Company
-                      </th>
-                      <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
-                        Job Title
-                      </th>
-                      <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
-                        ATS Match
-                      </th>
-                      <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
-                        Resume
-                      </th>
-                      <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
-                        Applied
-                      </th>
-                      <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider text-right pr-2">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {filteredApplications.map((app) => {
-                      const company = app.companyName || app.company || "Hiring Organization";
-                      const jobTitle = app.jobTitle || app.title || "Job Position";
-                      const rawScore = app.atsScore !== undefined && app.atsScore !== null ? app.atsScore : app.matchPercent;
-                      const scoreDisplay = rawScore !== undefined && rawScore !== null && !isNaN(Number(rawScore)) ? `${Math.round(Number(rawScore))}%` : "75%";
-                      const rawStatus = String(app.status || app.state || app.tab || "Submitted").toUpperCase().replace(/[\s-]/g, "_");
+              <>
+                <div className="overflow-x-auto w-full">
+                  <table className="w-full text-left border-collapse min-w-[750px]">
+                    <thead>
+                      <tr className="border-b border-slate-100">
+                        <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                          Company
+                        </th>
+                        <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                          Job Title
+                        </th>
+                        <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                          ATS Match
+                        </th>
+                        <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                          Resume
+                        </th>
+                        <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                          Status
+                        </th>
+                        <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                          Posted
+                        </th>
+                        <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider text-right pr-2">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredApplications.map((app, index) => {
+                        const nestedJob = (app && typeof app === "object" && typeof app.job === "object" && app.job !== null)
+                          ? app.job
+                          : (app && typeof app === "object" && typeof app.jobDetails === "object" && app.jobDetails !== null)
+                          ? app.jobDetails
+                          : {};
 
-                      let statusLabel = "Submitted";
-                      let dotColor = "bg-[#059669]";
-                      let textColor = "text-[#059669]";
+                        const applicationId =
+                          extractApplicationId(app) ||
+                          app?.id ||
+                          app?.applicationId ||
+                          app?.application_id ||
+                          app?._id;
 
-                      if (rawStatus === "PREPARING") {
-                        statusLabel = "Preparing";
-                        dotColor = "bg-[#7C3AED]";
-                        textColor = "text-[#7C3AED]";
-                      } else if (rawStatus === "QUEUED") {
-                        statusLabel = "Queued";
-                        dotColor = "bg-[#4F46E5]";
-                        textColor = "text-[#4F46E5]";
-                      } else if (rawStatus === "IN_PROGRESS") {
-                        statusLabel = "In Progress";
-                        dotColor = "bg-[#2563EB]";
-                        textColor = "text-[#2563EB]";
-                      } else if (rawStatus === "NEEDS_ACTION") {
-                        statusLabel = "Needs Action";
-                        dotColor = "bg-[#D97706]";
-                        textColor = "text-[#D97706]";
-                      } else if (rawStatus === "FAILED" || rawStatus === "ERROR") {
-                        statusLabel = "Failed";
-                        dotColor = "bg-[#DC2626]";
-                        textColor = "text-[#DC2626]";
-                      } else if (rawStatus === "SKIPPED") {
-                        statusLabel = "Skipped";
-                        dotColor = "bg-[#64748B]";
-                        textColor = "text-[#64748B]";
-                      } else if (rawStatus === "SUBMITTED" || rawStatus === "COMPLETED" || rawStatus === "SUCCESS") {
-                        statusLabel = "Submitted";
-                        dotColor = "bg-[#059669]";
-                        textColor = "text-[#059669]";
-                      } else {
-                        statusLabel = cleanHtmlText(app.status || "Submitted");
-                      }
+                        const jobId = app?.jobId ?? nestedJob?.jobId ?? nestedJob?.id ?? app?.job_id ?? null;
 
-                      const appliedDate = app.appliedAt ? formatPostedDate(app.appliedAt) : (app.applied || "Recently");
+                        const company = app?.companyName || nestedJob?.companyName || app?.company || nestedJob?.company || "Hiring Organization";
+                        const jobTitle = app?.title || nestedJob?.title || app?.jobTitle || nestedJob?.jobTitle || "Job Position";
+                        const companyDomain = app?.companyDomain || nestedJob?.companyDomain || null;
 
-                      const modalJobPayload = {
-                        ...app,
-                        title: jobTitle,
-                        company: company,
-                        companyDomain: app.companyDomain || "",
-                        location: app.location || "Remote",
-                        fullLocation: app.fullLocation || app.location || "Remote",
-                        workMode: app.workplace || app.workMode || "Remote",
-                        type: app.employmentType || app.type || "Full-time",
-                      };
+                        const rawLocation = app?.location || nestedJob?.location || "";
+                        const rawCountry = app?.country || nestedJob?.country || "";
+                        let locationDisplay = "";
+                        if (rawLocation && rawCountry) {
+                          if (rawLocation.toLowerCase().includes(rawCountry.toLowerCase())) {
+                            locationDisplay = rawLocation;
+                          } else {
+                            locationDisplay = `${rawLocation}, ${rawCountry}`;
+                          }
+                        } else if (rawLocation) {
+                          locationDisplay = rawLocation;
+                        } else if (rawCountry) {
+                          locationDisplay = rawCountry;
+                        }
 
-                      return (
-                        <tr
-                          key={app.id || app.jobId || app.job_id || Math.random()}
-                          className="hover:bg-slate-50/60 transition-colors cursor-pointer"
-                          onClick={() => handleOpenJobModal(modalJobPayload)}
-                        >
-                          {/* Company */}
-                          <td className="py-4 pr-3">
-                            <div className="flex items-center gap-2.5">
-                              <div className="w-[28px] h-[28px] rounded-[6px] bg-white flex items-center justify-center shrink-0 border border-slate-100 p-1">
-                                <img
-                                  src={app.logo || aiLogo}
-                                  alt={company}
-                                  className="w-[20px] h-[20px] object-contain"
-                                />
+                        const workplace = app?.workplace || nestedJob?.workplace || app?.workMode || nestedJob?.workMode || "";
+                        const formatWorkplace = (wp) => {
+                          if (!wp) return "";
+                          const upper = String(wp).trim().toUpperCase();
+                          if (upper === "ONSITE" || upper === "ON_SITE") return "On-site";
+                          if (upper === "REMOTE") return "Remote";
+                          if (upper === "HYBRID") return "Hybrid";
+                          return wp.charAt(0).toUpperCase() + wp.slice(1).toLowerCase();
+                        };
+                        const workplaceDisplay = formatWorkplace(workplace);
+
+                        const rawEmpType = app?.employmentType || nestedJob?.employmentType || app?.type || nestedJob?.type || "";
+                        const employmentTypeDisplay = rawEmpType && typeof rawEmpType === "string" && rawEmpType.toLowerCase() !== "null" && rawEmpType.toLowerCase() !== "undefined"
+                          ? rawEmpType.trim()
+                          : "";
+
+                        const rawScore =
+                          app?.matchScore ??
+                          nestedJob?.matchScore ??
+                          app?.atsScore ??
+                          nestedJob?.atsScore ??
+                          app?.matchPercent ??
+                          nestedJob?.matchPercent ??
+                          null;
+
+                        let scoreDisplay = "—";
+                        if (rawScore !== null && rawScore !== undefined && !isNaN(Number(rawScore))) {
+                          const num = Number(rawScore);
+                          scoreDisplay = Number.isInteger(num) ? `${num}%` : `${num.toFixed(1)}%`;
+                        }
+
+                        const normStatus = normalizeApplicationStatus(app.status || app.state || app.tab || "SUBMITTED");
+
+                        let statusLabel = "Submitted";
+                        let dotColor = "bg-[#059669]";
+                        let textColor = "text-[#059669]";
+
+                        if (normStatus === "PREPARING") {
+                          statusLabel = "Preparing";
+                          dotColor = "bg-[#7C3AED]";
+                          textColor = "text-[#7C3AED]";
+                        } else if (normStatus === "QUEUED") {
+                          statusLabel = "Queued";
+                          dotColor = "bg-[#4F46E5]";
+                          textColor = "text-[#4F46E5]";
+                        } else if (normStatus === "IN_PROGRESS") {
+                          statusLabel = "In Progress";
+                          dotColor = "bg-[#2563EB]";
+                          textColor = "text-[#2563EB]";
+                        } else if (normStatus === "NEEDS_ACTION") {
+                          statusLabel = "Needs Action";
+                          dotColor = "bg-[#D97706]";
+                          textColor = "text-[#D97706]";
+                        } else if (normStatus === "FAILED" || normStatus === "ERROR") {
+                          statusLabel = "Failed";
+                          dotColor = "bg-[#DC2626]";
+                          textColor = "text-[#DC2626]";
+                        } else if (normStatus === "SKIPPED") {
+                          statusLabel = "Skipped";
+                          dotColor = "bg-[#64748B]";
+                          textColor = "text-[#64748B]";
+                        } else if (normStatus === "SUBMITTED" || normStatus === "COMPLETED" || normStatus === "SUCCESS") {
+                          statusLabel = "Submitted";
+                          dotColor = "bg-[#059669]";
+                          textColor = "text-[#059669]";
+                        } else {
+                          statusLabel = cleanHtmlText(app.status || "Submitted");
+                        }
+
+                        const postedDateRaw =
+                          app?.postedAt ??
+                          nestedJob?.postedAt ??
+                          app?.posted_at ??
+                          nestedJob?.posted_at ??
+                          app?.appliedAt ??
+                          null;
+                        const postedDateDisplay = formatPostedDateTime(postedDateRaw);
+
+                        const rawResume =
+                          app?.resumeType ||
+                          app?.resume_type ||
+                          app?.resume ||
+                          nestedJob?.resumeType ||
+                          nestedJob?.resume_type ||
+                          nestedJob?.resume ||
+                          "TAILORED";
+                        let resumeDisplay = "TAILORED";
+                        if (typeof rawResume === "string" && rawResume.trim()) {
+                          const upper = rawResume.trim().toUpperCase();
+                          if (upper.includes("TAILOR")) {
+                            resumeDisplay = "TAILORED";
+                          } else if (upper.includes("ORIGIN")) {
+                            resumeDisplay = "ORIGINAL";
+                          } else {
+                            resumeDisplay = upper;
+                          }
+                        } else if (rawResume && typeof rawResume === "object") {
+                          const str = String(rawResume.name || rawResume.title || rawResume.type || rawResume.label || "").trim().toUpperCase();
+                          if (str.includes("TAILOR")) {
+                            resumeDisplay = "TAILORED";
+                          } else if (str.includes("ORIGIN")) {
+                            resumeDisplay = "ORIGINAL";
+                          } else if (str) {
+                            resumeDisplay = str;
+                          }
+                        }
+
+                        const modalJobPayload = {
+                          ...nestedJob,
+                          ...app,
+                          id: jobId || applicationId,
+                          jobId: jobId,
+                          title: jobTitle,
+                          company: company,
+                          companyName: company,
+                          companyDomain: companyDomain || "",
+                          location: locationDisplay || "Remote",
+                          fullLocation: locationDisplay || "Remote",
+                          workMode: workplaceDisplay || "Remote",
+                          type: employmentTypeDisplay || "Full-time",
+                          postedAt: postedDateRaw,
+                          matchScore: rawScore !== null && !isNaN(Number(rawScore)) ? Number(rawScore) : undefined,
+                          matchPercent: rawScore !== null && !isNaN(Number(rawScore)) ? Number(rawScore) : undefined,
+                          resumeType: resumeDisplay,
+                          resume: resumeDisplay,
+                          isApplied: true,
+                          applied: true,
+                          alreadyApplied: true,
+                          applicationId: applicationId,
+                          status: app.status || app.state || app.tab || "SUBMITTED",
+                          normStatus: normStatus,
+                          statusLabel: statusLabel,
+                        };
+
+                        const backendMessage =
+                          app.message ||
+                          app.backendMessage ||
+                          app.actionMessage ||
+                          app.errorMessage ||
+                          app.statusMessage ||
+                          app.notes ||
+                          app.reason ||
+                          "";
+
+                        const isAppActionLoading = applicationId ? actionLoadingIds[applicationId] : null;
+                        const isRetrying = isAppActionLoading === "retry";
+                        const isApproving = isAppActionLoading === "approve";
+                        const isSkipping = isAppActionLoading === "skip";
+
+                        return (
+                          <tr
+                            key={applicationId || index}
+                            className="hover:bg-slate-50/60 transition-colors cursor-pointer"
+                            onClick={() => handleOpenJobModal(modalJobPayload)}
+                          >
+                            {/* Company */}
+                            <td className="py-4 pr-3">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-[30px] h-[30px] rounded-[8px] bg-white flex items-center justify-center shrink-0 border border-slate-100 p-1">
+                                  <img
+                                    src={app.logo || (companyDomain ? `https://logo.clearbit.com/${companyDomain}` : aiLogo)}
+                                    onError={(e) => { e.currentTarget.src = aiLogo; }}
+                                    alt={company}
+                                    className="w-[20px] h-[20px] object-contain"
+                                  />
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="text-[14px] font-bold text-[#0F172A] truncate">
+                                    {company}
+                                  </div>
+                                  {locationDisplay && (
+                                    <div className="text-[11.5px] text-[#64748B] flex items-center gap-1 mt-0.5 truncate">
+                                      <svg className="w-3 h-3 shrink-0 text-[#94A3B8]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                      </svg>
+                                      <span className="truncate">{locationDisplay}</span>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                              <span className="text-[14px] font-bold text-[#0F172A]">
-                                {company}
+                            </td>
+
+                            {/* Job Title & Optional Workplace / Employment Type / Backend Message */}
+                            <td className="py-4 px-3 text-[13.5px] font-medium text-[#334155]">
+                              <div className="font-semibold text-[#0F172A] leading-snug">{jobTitle}</div>
+                              {(workplaceDisplay || employmentTypeDisplay) && (
+                                <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                                  {workplaceDisplay && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-[#475569]">
+                                      {workplaceDisplay}
+                                    </span>
+                                  )}
+                                  {employmentTypeDisplay && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-[#475569]">
+                                      {employmentTypeDisplay}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              {normStatus === "NEEDS_ACTION" && backendMessage && (
+                                <div className="mt-1 flex items-center gap-1.5 text-[11.5px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/80 w-fit max-w-full">
+                                  <svg className="w-3.5 h-3.5 shrink-0 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                  </svg>
+                                  <span className="truncate">{backendMessage}</span>
+                                </div>
+                              )}
+                            </td>
+
+                            {/* ATS Match */}
+                            <td className="py-4 px-3">
+                              <span className="text-[13px] font-bold text-[#4F46E5]">
+                                {scoreDisplay}
                               </span>
-                            </div>
-                          </td>
+                            </td>
 
-                          {/* Job Title */}
-                          <td className="py-4 px-3 text-[13.5px] font-medium text-[#334155]">
-                            {jobTitle}
-                          </td>
+                            {/* Resume */}
+                            <td className="py-4 px-3" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                type="button"
+                                onClick={(e) => handleDownloadResumeForApp(app, e)}
+                                disabled={Boolean(downloadingResumeAppIds[applicationId])}
+                                className="group inline-flex items-center gap-1.5 px-2.5 py-1 -ml-1 rounded-lg hover:bg-indigo-50 border border-transparent hover:border-indigo-100 transition-all cursor-pointer text-left disabled:opacity-60 disabled:cursor-wait"
+                                title={`Download ${resumeDisplay} Resume`}
+                              >
+                                {downloadingResumeAppIds[applicationId] ? (
+                                  <svg className="w-3.5 h-3.5 animate-spin text-[#6366F1]" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                                  </svg>
+                                ) : (
+                                  <DocumentIcon color="#6366F1" className="group-hover:scale-105 transition-transform" />
+                                )}
+                                <span className="text-[13px] font-medium text-[#6366F1] uppercase group-hover:underline flex items-center gap-1">
+                                  {downloadingResumeAppIds[applicationId] ? "Downloading..." : resumeDisplay}
+                                  {!downloadingResumeAppIds[applicationId] && (
+                                    <svg className="w-3 h-3 text-[#6366F1] opacity-0 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                      <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                    </svg>
+                                  )}
+                                </span>
+                              </button>
+                            </td>
 
-                          {/* ATS Match */}
-                          <td className="py-4 px-3">
-                            <span className="text-[13px] font-bold text-[#4F46E5]">
-                              {scoreDisplay}
-                            </span>
-                          </td>
+                            {/* Status */}
+                            <td className="py-4 px-3">
+                              <div className="flex items-center gap-2">
+                                <span className={`w-2 h-2 rounded-full ${dotColor}`} />
+                                <span className={`text-[13px] font-medium ${textColor}`}>
+                                  {statusLabel}
+                                </span>
+                              </div>
+                            </td>
 
-                          {/* Resume */}
-                          <td className="py-4 px-3">
-                            <div className="flex items-center gap-1.5">
-                              <DocumentIcon color="#6366F1" />
-                              <span className="text-[13px] font-medium text-[#6366F1]">
-                                {app.resumeType || app.resume || "Tailored"}
-                              </span>
-                            </div>
-                          </td>
+                            {/* Posted Date */}
+                            <td className="py-4 px-3 text-[12.5px] text-[#64748B] whitespace-nowrap">
+                              {postedDateDisplay}
+                            </td>
 
-                          {/* Status */}
-                          <td className="py-4 px-3">
-                            <div className="flex items-center gap-2">
-                              <span className={`w-2 h-2 rounded-full ${dotColor}`} />
-                              <span className={`text-[13px] font-medium ${textColor}`}>
-                                {statusLabel}
-                              </span>
-                            </div>
-                          </td>
+                            {/* Actions */}
+                            <td className="py-4 pl-3 text-right pr-2">
+                              {normStatus === "NEEDS_ACTION" ? (
+                                <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                  {/* View Resume */}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleViewResume(app, e)}
+                                    className="h-[30px] px-2.5 rounded-[8px] border border-slate-200 bg-white text-[12px] font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all inline-flex items-center gap-1 cursor-pointer active:scale-95"
+                                    title="View Resume"
+                                  >
+                                    <DocumentIcon color="#475569" />
+                                    <span>Resume</span>
+                                  </button>
 
-                          {/* Applied */}
-                          <td className="py-4 px-3 text-[13px] text-[#64748B]">
-                            {appliedDate}
-                          </td>
+                                  {/* Approve */}
+                                  <button
+                                    type="button"
+                                    disabled={Boolean(isAppActionLoading)}
+                                    onClick={(e) => handleApproveApplication(app, e)}
+                                    className={`h-[30px] px-3 rounded-[8px] text-[12px] font-semibold text-white transition-all inline-flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer ${
+                                      isApproving
+                                        ? "bg-emerald-400 cursor-not-allowed"
+                                        : "bg-emerald-600 hover:bg-emerald-700 active:scale-95"
+                                    }`}
+                                    title="Approve application"
+                                  >
+                                    {isApproving ? (
+                                      <>
+                                        <svg className="w-3.5 h-3.5 animate-spin text-white" fill="none" viewBox="0 0 24 24">
+                                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                        </svg>
+                                        <span>Approving...</span>
+                                      </>
+                                    ) : (
+                                      <span>Approve</span>
+                                    )}
+                                  </button>
 
-                          {/* Actions */}
-                          <td className="py-4 pl-3 text-right pr-2">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenJobModal(modalJobPayload);
-                              }}
-                              className="h-[30px] px-3.5 rounded-[8px] border border-[#E2E8F0] bg-white text-[12.5px] font-medium text-[#334155] hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-2xs cursor-pointer inline-flex items-center justify-center"
-                            >
-                              View
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                                  {/* Skip */}
+                                  <button
+                                    type="button"
+                                    disabled={Boolean(isAppActionLoading)}
+                                    onClick={(e) => handleSkipApplication(app, e)}
+                                    className={`h-[30px] px-2.5 rounded-[8px] border border-slate-200 bg-white text-[12px] font-medium text-slate-600 hover:bg-slate-100 transition-all inline-flex items-center justify-center gap-1 cursor-pointer active:scale-95 ${
+                                      isSkipping ? "opacity-50 cursor-not-allowed" : ""
+                                    }`}
+                                    title="Skip application"
+                                  >
+                                    {isSkipping ? "Skipping..." : "Skip"}
+                                  </button>
+                                </div>
+                              ) : normStatus === "FAILED" || normStatus === "ERROR" ? (
+                                <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                  {/* Retry */}
+                                  <button
+                                    type="button"
+                                    disabled={Boolean(isAppActionLoading)}
+                                    onClick={(e) => handleRetryApplication(app, e)}
+                                    className={`h-[30px] px-3 rounded-[8px] border text-[12px] font-semibold transition-all shadow-2xs inline-flex items-center justify-center gap-1.5 cursor-pointer ${
+                                      isRetrying
+                                        ? "bg-indigo-50 border-indigo-200 text-indigo-400 cursor-not-allowed"
+                                        : "border-[#E2E8F0] bg-white text-[#4F46E5] hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-700 active:scale-95"
+                                    }`}
+                                    title="Retry application"
+                                  >
+                                    {isRetrying ? (
+                                      <>
+                                        <svg className="w-3.5 h-3.5 animate-spin text-[#4F46E5]" fill="none" viewBox="0 0 24 24">
+                                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                        </svg>
+                                        <span>Retrying...</span>
+                                      </>
+                                    ) : (
+                                      <span>Retry</span>
+                                    )}
+                                  </button>
+
+                                  {/* Skip */}
+                                  <button
+                                    type="button"
+                                    disabled={Boolean(isAppActionLoading)}
+                                    onClick={(e) => handleSkipApplication(app, e)}
+                                    className={`h-[30px] px-2.5 rounded-[8px] border border-slate-200 bg-white text-[12px] font-medium text-slate-600 hover:bg-slate-100 transition-all inline-flex items-center justify-center gap-1 cursor-pointer active:scale-95 ${
+                                      isSkipping ? "opacity-50 cursor-not-allowed" : ""
+                                    }`}
+                                    title="Skip application"
+                                  >
+                                    {isSkipping ? "Skipping..." : "Skip"}
+                                  </button>
+                                </div>
+                              ) : normStatus === "SKIPPED" ? (
+                                <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                  {/* Retry for Skipped Application */}
+                                  <button
+                                    type="button"
+                                    disabled={Boolean(isAppActionLoading)}
+                                    onClick={(e) => handleRetryApplication(app, e)}
+                                    className={`h-[30px] px-3.5 rounded-[8px] border text-[12px] font-semibold transition-all shadow-2xs inline-flex items-center justify-center gap-1.5 cursor-pointer ${
+                                      isRetrying
+                                        ? "bg-indigo-50 border-indigo-200 text-indigo-400 cursor-not-allowed"
+                                        : "border-[#E2E8F0] bg-white text-[#4F46E5] hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-700 active:scale-95"
+                                    }`}
+                                    title="Retry skipped application"
+                                  >
+                                    {isRetrying ? (
+                                      <>
+                                        <svg className="w-3.5 h-3.5 animate-spin text-[#4F46E5]" fill="none" viewBox="0 0 24 24">
+                                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                        </svg>
+                                        <span>Retrying...</span>
+                                      </>
+                                    ) : (
+                                      <span>Retry</span>
+                                    )}
+                                  </button>
+                                </div>
+                              ) : normStatus === "QUEUED" ? (
+                                <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                  {/* Skip */}
+                                  <button
+                                    type="button"
+                                    disabled={Boolean(isAppActionLoading)}
+                                    onClick={(e) => handleSkipApplication(app, e)}
+                                    className={`h-[30px] px-3 rounded-[8px] border border-slate-200 bg-white text-[12px] font-medium text-slate-600 hover:bg-slate-100 transition-all inline-flex items-center justify-center gap-1 cursor-pointer active:scale-95 ${
+                                      isSkipping ? "opacity-50 cursor-not-allowed" : ""
+                                    }`}
+                                    title="Skip application"
+                                  >
+                                    {isSkipping ? "Skipping..." : "Skip"}
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-[13px] text-slate-300 font-normal pr-2">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Applications Pagination Controls */}
+                {(appTotalPages > 1 || appTotalItems > 0) && (
+                  <div className="flex items-center justify-between flex-wrap gap-3 pt-4 border-t border-slate-100">
+                    <div className="text-[12.5px] text-[#64748B]">
+                      Showing{" "}
+                      <span className="font-semibold text-[#0F172A]">
+                        {appTotalItems === 0 ? 0 : appPage * appPageSize + 1}
+                      </span>
+                      {" - "}
+                      <span className="font-semibold text-[#0F172A]">
+                        {Math.min((appPage + 1) * appPageSize, appTotalItems)}
+                      </span>{" "}
+                      of{" "}
+                      <span className="font-semibold text-[#0F172A]">
+                        {appTotalItems}
+                      </span>{" "}
+                      applications
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={appPage <= 0 || isLoadingApplications}
+                        onClick={() => setAppPage((p) => Math.max(0, p - 1))}
+                        className="h-[32px] px-3.5 rounded-[8px] border border-[#E2E8F0] bg-white text-[12px] font-semibold text-[#334155] hover:bg-slate-50 hover:text-[#0F172A] disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer shadow-2xs"
+                      >
+                        Previous
+                      </button>
+
+                      <span className="px-2 text-[12px] font-medium text-[#64748B]">
+                        Page <span className="font-semibold text-[#0F172A]">{appPage + 1}</span> of{" "}
+                        <span className="font-semibold text-[#0F172A]">{Math.max(1, appTotalPages)}</span>
+                      </span>
+
+                      <button
+                        type="button"
+                        disabled={appPage >= appTotalPages - 1 || isLoadingApplications}
+                        onClick={() => setAppPage((p) => p + 1)}
+                        className="h-[32px] px-3.5 rounded-[8px] border border-[#E2E8F0] bg-white text-[12px] font-semibold text-[#334155] hover:bg-slate-50 hover:text-[#0F172A] disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer shadow-2xs"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </main>
@@ -1666,6 +2437,88 @@ const Dashboard = () => {
         )
           ? scoreData.missing_preferred_skills.filter(Boolean)
           : [];
+
+        // Check if this job modal corresponds to an already applied application
+        const matchingApp = selectedJobModal?.applicationId
+          ? applications.find((a) => extractApplicationId(a) === selectedJobModal.applicationId)
+          : applications.find((a) => {
+              const aJobId = a?.jobId ?? a?.job?.jobId ?? a?.job?.id ?? a?.job_id;
+              return selectedJobId && aJobId && String(aJobId) === String(selectedJobId);
+            });
+
+        const isAlreadyApplied = Boolean(
+          selectedJobModal?.isApplied ||
+          selectedJobModal?.applied ||
+          selectedJobModal?.alreadyApplied ||
+          selectedJobModal?.applicationId ||
+          selectedJobModal?.application_id ||
+          matchingApp ||
+          isJobAlreadyApplied(selectedJobModal)
+        );
+
+        const effectiveStatus =
+          selectedJobModal?.status ||
+          matchingApp?.status ||
+          matchingApp?.state ||
+          matchingApp?.tab ||
+          (isAlreadyApplied ? "SUBMITTED" : "");
+
+        const modalNormStatus = normalizeApplicationStatus(effectiveStatus);
+
+        let modalStatusLabel = "Submitted";
+        let modalDotColor = "bg-[#059669]";
+        let modalTextColor = "text-[#059669]";
+        let modalBadgeBg = "bg-emerald-50 border-emerald-200 text-emerald-700";
+
+        if (modalNormStatus === "PREPARING") {
+          modalStatusLabel = "Preparing";
+          modalDotColor = "bg-[#7C3AED]";
+          modalTextColor = "text-[#7C3AED]";
+          modalBadgeBg = "bg-purple-50 border-purple-200 text-[#7C3AED]";
+        } else if (modalNormStatus === "QUEUED") {
+          modalStatusLabel = "Queued";
+          modalDotColor = "bg-[#4F46E5]";
+          modalTextColor = "text-[#4F46E5]";
+          modalBadgeBg = "bg-indigo-50 border-indigo-200 text-[#4F46E5]";
+        } else if (modalNormStatus === "IN_PROGRESS") {
+          modalStatusLabel = "In Progress";
+          modalDotColor = "bg-[#2563EB]";
+          modalTextColor = "text-[#2563EB]";
+          modalBadgeBg = "bg-blue-50 border-blue-200 text-[#2563EB]";
+        } else if (modalNormStatus === "NEEDS_ACTION") {
+          modalStatusLabel = "Needs Action";
+          modalDotColor = "bg-[#D97706]";
+          modalTextColor = "text-[#D97706]";
+          modalBadgeBg = "bg-amber-50 border-amber-200 text-[#D97706]";
+        } else if (modalNormStatus === "FAILED" || modalNormStatus === "ERROR") {
+          modalStatusLabel = "Failed";
+          modalDotColor = "bg-[#DC2626]";
+          modalTextColor = "text-[#DC2626]";
+          modalBadgeBg = "bg-red-50 border-red-200 text-[#DC2626]";
+        } else if (modalNormStatus === "SKIPPED") {
+          modalStatusLabel = "Skipped";
+          modalDotColor = "bg-[#64748B]";
+          modalTextColor = "text-[#64748B]";
+          modalBadgeBg = "bg-slate-50 border-slate-200 text-[#64748B]";
+        } else if (modalNormStatus === "SUBMITTED" || modalNormStatus === "COMPLETED" || modalNormStatus === "SUCCESS") {
+          modalStatusLabel = "Submitted";
+          modalDotColor = "bg-[#059669]";
+          modalTextColor = "text-[#059669]";
+          modalBadgeBg = "bg-emerald-50 border-emerald-200 text-emerald-700";
+        } else {
+          modalStatusLabel = cleanHtmlText(effectiveStatus || "Submitted");
+        }
+
+        const modalAppTarget = matchingApp || selectedJobModal;
+        const modalAppId =
+          selectedJobModal?.applicationId ||
+          extractApplicationId(matchingApp) ||
+          extractApplicationId(selectedJobModal);
+
+        const isModalActionLoading = modalAppId ? actionLoadingIds[modalAppId] : null;
+        const isModalRetrying = isModalActionLoading === "retry";
+        const isModalApproving = isModalActionLoading === "approve";
+        const isModalSkipping = isModalActionLoading === "skip";
 
         return (
           <div className="fixed inset-0 z-50 overflow-hidden">
@@ -1765,55 +2618,62 @@ const Dashboard = () => {
                       </svg>
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={handleEnhanceResume}
-                      disabled={isEnhancing}
-                      className={`mt-2 text-white text-[13px] font-medium px-4 py-2 rounded-lg transition-all cursor-pointer shadow-sm shrink-0 whitespace-nowrap flex items-center gap-1.5 ${isEnhancing
-                        ? "bg-indigo-300 cursor-not-allowed"
-                        : "bg-[#4F46E5] hover:bg-[#4338CA]"
-                        }`}
-                    >
-                      {isEnhancing ? (
-                        <>
-                          <svg
-                            className="animate-spin w-3.5 h-3.5 text-white"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                          >
-                            <circle
-                              className="opacity-25"
-                              cx="12"
-                              cy="12"
-                              r="10"
+                    {isAlreadyApplied ? (
+                      <div className={`mt-2 px-3 py-1.5 rounded-lg border text-[12.5px] font-semibold shrink-0 whitespace-nowrap flex items-center gap-2 shadow-2xs ${modalBadgeBg}`}>
+                        <span className={`w-2 h-2 rounded-full ${modalDotColor}`} />
+                        <span>{modalStatusLabel}</span>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleEnhanceResume}
+                        disabled={isEnhancing}
+                        className={`mt-2 text-white text-[13px] font-medium px-4 py-2 rounded-lg transition-all cursor-pointer shadow-sm shrink-0 whitespace-nowrap flex items-center gap-1.5 ${isEnhancing
+                          ? "bg-indigo-300 cursor-not-allowed"
+                          : "bg-[#4F46E5] hover:bg-[#4338CA]"
+                          }`}
+                      >
+                        {isEnhancing ? (
+                          <>
+                            <svg
+                              className="animate-spin w-3.5 h-3.5 text-white"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                            >
+                              <circle
+                                className="opacity-25"
+                                cx="12"
+                                cy="12"
+                                r="10"
+                                stroke="currentColor"
+                                strokeWidth="4"
+                              />
+                              <path
+                                className="opacity-75"
+                                fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                              />
+                            </svg>
+                            <span>Enhancing...</span>
+                          </>
+                        ) : enhancedResultsMap[selectedJobId] ? (
+                          <>
+                            <svg
+                              className="w-3.5 h-3.5"
+                              viewBox="0 0 24 24"
+                              fill="none"
                               stroke="currentColor"
-                              strokeWidth="4"
-                            />
-                            <path
-                              className="opacity-75"
-                              fill="currentColor"
-                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                            />
-                          </svg>
-                          <span>Enhancing...</span>
-                        </>
-                      ) : enhancedResultsMap[selectedJobId] ? (
-                        <>
-                          <svg
-                            className="w-3.5 h-3.5"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2.5"
-                          >
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
-                          <span>Resume Enhanced</span>
-                        </>
-                      ) : (
-                        "Enhance Resume"
-                      )}
-                    </button>
+                              strokeWidth="2.5"
+                            >
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                            <span>Resume Enhanced</span>
+                          </>
+                        ) : (
+                          "Enhance Resume"
+                        )}
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -2119,8 +2979,12 @@ const Dashboard = () => {
                             ? activeAtsScore >= 80
                               ? "Strong match based on your profile, skills, experience and preferences."
                               : activeAtsScore >= 60
-                                ? "Moderate match. Enhancing your resume can bridge key skill and keyword gaps."
-                                : "Lower match. Review identified gaps below or click Enhance Resume."
+                                ? isAlreadyApplied
+                                  ? "Moderate match based on your resume and role requirements."
+                                  : "Moderate match. Enhancing your resume can bridge key skill and keyword gaps."
+                                : isAlreadyApplied
+                                  ? "Lower match based on your resume and role requirements."
+                                  : "Lower match. Review identified gaps below or click Enhance Resume."
                             : "ATS score unavailable for this job."}
                         </p>
                       </div>
@@ -2346,13 +3210,141 @@ const Dashboard = () => {
 
                 {/* Drawer Footer */}
                 <div className="p-5 border-t border-slate-100 bg-white shrink-0 flex items-center gap-3">
-                  <button
-                    type="button"
-                    className="w-full h-[42px] rounded-[10px] bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-[13px] font-medium flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.99] transition-all cursor-pointer"
-                  >
-                    <span>Apply now</span>
-                    <span>→</span>
-                  </button>
+                  {isAlreadyApplied ? (
+                    modalNormStatus === "NEEDS_ACTION" ? (
+                      <div className="flex items-center gap-2.5 w-full">
+                        <button
+                          type="button"
+                          onClick={(e) => handleViewResume(modalAppTarget, e)}
+                          className="flex-1 h-[42px] rounded-[10px] border border-slate-200 bg-white hover:bg-slate-50 text-[13px] font-semibold text-slate-700 transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-[0.99]"
+                          title="View Resume"
+                        >
+                          <DocumentIcon color="#475569" />
+                          <span>View Resume</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={Boolean(isModalActionLoading)}
+                          onClick={(e) => handleApproveApplication(modalAppTarget, e)}
+                          className={`flex-1 h-[42px] rounded-[10px] text-[13px] font-semibold text-white transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-[0.99] ${
+                            isModalApproving
+                              ? "bg-emerald-400 cursor-not-allowed"
+                              : "bg-emerald-600 hover:bg-emerald-700"
+                          }`}
+                          title="Approve Application"
+                        >
+                          {isModalApproving ? (
+                            <>
+                              <svg className="w-3.5 h-3.5 animate-spin text-white" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                              </svg>
+                              <span>Approving...</span>
+                            </>
+                          ) : (
+                            <span>Approve Application</span>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={Boolean(isModalActionLoading)}
+                          onClick={(e) => handleSkipApplication(modalAppTarget, e)}
+                          className={`h-[42px] px-3.5 rounded-[10px] border border-slate-200 bg-white hover:bg-slate-50 text-[13px] font-medium text-slate-600 transition-all flex items-center justify-center cursor-pointer shadow-xs active:scale-[0.99] ${
+                            isModalSkipping ? "opacity-50 cursor-not-allowed" : ""
+                          }`}
+                          title="Skip Application"
+                        >
+                          {isModalSkipping ? "Skipping..." : "Skip"}
+                        </button>
+                      </div>
+                    ) : modalNormStatus === "FAILED" || modalNormStatus === "ERROR" ? (
+                      <div className="flex items-center justify-between gap-3 w-full">
+                        <div className="flex items-center gap-2 text-[13px] font-semibold text-red-600">
+                          <span className="w-2.5 h-2.5 rounded-full bg-red-500 shrink-0" />
+                          <span>Application Failed</span>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={Boolean(isModalActionLoading)}
+                          onClick={(e) => handleRetryApplication(modalAppTarget, e)}
+                          className={`h-[42px] px-5 rounded-[10px] text-[13px] font-semibold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.99] ${
+                            isModalRetrying
+                              ? "bg-indigo-50 border border-indigo-200 text-indigo-400 cursor-not-allowed"
+                              : "bg-[#4F46E5] hover:bg-[#4338CA] text-white"
+                          }`}
+                          title="Retry Application"
+                        >
+                          {isModalRetrying ? (
+                            <>
+                              <svg className="w-3.5 h-3.5 animate-spin text-white" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                              </svg>
+                              <span>Retrying...</span>
+                            </>
+                          ) : (
+                            <span>Retry Application</span>
+                          )}
+                        </button>
+                      </div>
+                    ) : modalNormStatus === "SKIPPED" ? (
+                      <div className="flex items-center justify-between gap-3 w-full">
+                        <div className="flex items-center gap-2 text-[13px] font-medium text-slate-500">
+                          <span className="w-2.5 h-2.5 rounded-full bg-slate-400 shrink-0" />
+                          <span>Application Skipped</span>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={Boolean(isModalActionLoading)}
+                          onClick={(e) => handleRetryApplication(modalAppTarget, e)}
+                          className={`h-[42px] px-5 rounded-[10px] text-[13px] font-semibold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.99] ${
+                            isModalRetrying
+                              ? "bg-indigo-50 border border-indigo-200 text-indigo-400 cursor-not-allowed"
+                              : "bg-[#4F46E5] hover:bg-[#4338CA] text-white"
+                          }`}
+                          title="Retry Skipped Application"
+                        >
+                          {isModalRetrying ? (
+                            <>
+                              <svg className="w-3.5 h-3.5 animate-spin text-white" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                              </svg>
+                              <span>Retrying...</span>
+                            </>
+                          ) : (
+                            <span>Retry Application</span>
+                          )}
+                        </button>
+                      </div>
+                    ) : modalNormStatus === "IN_PROGRESS" || modalNormStatus === "QUEUED" || modalNormStatus === "PREPARING" ? (
+                      <div className="w-full h-[42px] rounded-[10px] bg-blue-50 border border-blue-200 text-blue-700 text-[13px] font-semibold flex items-center justify-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
+                        <span>Application {modalStatusLabel}</span>
+                      </div>
+                    ) : (
+                      <div className="w-full h-[42px] rounded-[10px] bg-emerald-50 border border-emerald-200 text-emerald-700 text-[13px] font-semibold flex items-center justify-center gap-2">
+                        <svg className="w-4 h-4 text-emerald-600 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                        <span>Application Submitted</span>
+                      </div>
+                    )
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const url = selectedJobModal.applyUrl || selectedJobModal.jobUrl || selectedJobModal.url;
+                        if (url) {
+                          window.open(url, "_blank", "noopener,noreferrer");
+                        }
+                      }}
+                      className="w-full h-[42px] rounded-[10px] bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-[13px] font-medium flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.99] transition-all cursor-pointer"
+                    >
+                      <span>Apply now</span>
+                      <span>→</span>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -2583,6 +3575,55 @@ const Dashboard = () => {
             </div>
           </div>
         )}
+
+      {/* Floating Feedback Toast Notification */}
+      {toast.show && (
+        <div className="fixed bottom-6 right-6 z-50 animate-in fade-in slide-in-from-bottom-4 duration-200">
+          <div
+            className={`flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg border text-sm font-medium ${
+              toast.type === "error"
+                ? "bg-rose-50 border-rose-200 text-rose-800"
+                : toast.type === "warning"
+                ? "bg-amber-50 border-amber-200 text-amber-800"
+                : "bg-emerald-50 border-emerald-200 text-emerald-800"
+            }`}
+          >
+            <div
+              className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
+                toast.type === "error"
+                  ? "bg-rose-100 text-rose-600"
+                  : toast.type === "warning"
+                  ? "bg-amber-100 text-amber-600"
+                  : "bg-emerald-100 text-emerald-600"
+              }`}
+            >
+              {toast.type === "error" ? (
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              ) : toast.type === "warning" ? (
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              ) : (
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              )}
+            </div>
+            <p className="text-[13px] font-semibold tracking-wide">{toast.message}</p>
+            <button
+              type="button"
+              onClick={() => setToast((prev) => ({ ...prev, show: false }))}
+              className="ml-2 text-slate-400 hover:text-slate-600 cursor-pointer transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

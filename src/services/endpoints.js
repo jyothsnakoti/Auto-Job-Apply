@@ -202,6 +202,14 @@ export const JOB_ENDPOINTS = {
 
 
 
+export const APPLICATION_ENDPOINTS = {
+  LIST: `${API_BASE_URL}/api/applications`,
+  APPLY: `${API_BASE_URL}/api/applications`,
+  RETRY: (id) => `${API_BASE_URL}/api/applications/${id}/retry`,
+  APPROVE: (id) => `${API_BASE_URL}/api/applications/${id}/approve`,
+  SKIP: (id) => `${API_BASE_URL}/api/applications/${id}/skip`,
+};
+
 export const ENDPOINTS = {
   BASE_URL: API_BASE_URL,
 
@@ -219,7 +227,8 @@ export const ENDPOINTS = {
   DASHBOARD: DASHBOARD_ENDPOINTS,
   JOBS: JOB_ENDPOINTS,
   JOB: JOB_ENDPOINTS,
-  DASHBOARD: DASHBOARD_ENDPOINTS,
+  APPLICATION: APPLICATION_ENDPOINTS,
+  APPLICATIONS: APPLICATION_ENDPOINTS,
 };
 
 export default ENDPOINTS;
