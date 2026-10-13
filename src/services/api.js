@@ -50,8 +50,6 @@ export {
   getStoredApplicationsData,
   setStoredApplicationsData,
   getApplicationStatusCategory,
-} from './applicationService';
-export {
   applyToJobs,
   applyToJobsInBatches,
   extractNumericJobId,
@@ -60,11 +58,20 @@ export {
   markJobsAsApplied,
   isJobAlreadyApplied,
   getApplicationStatuses,
+  isJobSubmitted,
+  isApplicationSubmittedStatus,
+  isApplicationActiveStatus,
+  isApplicationRetryableStatus,
+  clearApplicationStatusCache,
   isApplyNowHiddenForJob,
   extractJobIdFromApplicationRecord,
   getMatchingApplicationForJob,
   normalizeApplicationStatus,
   isApplicationStatusActiveOrCompleted,
+  extractApplicationId,
+  retryApplication,
+  approveApplication,
+  skipApplication,
 } from './applicationService';
 
 export { apiClient as api, apiClient, axiosInstance };

@@ -205,6 +205,10 @@ export const JOB_ENDPOINTS = {
 export const APPLICATION_ENDPOINTS = {
   GET: `${API_BASE_URL}/api/applications`,
   LIST: `${API_BASE_URL}/api/applications`,
+  APPLY: `${API_BASE_URL}/api/applications`,
+  RETRY: (id) => `${API_BASE_URL}/api/applications/${id}/retry`,
+  APPROVE: (id) => `${API_BASE_URL}/api/applications/${id}/approve`,
+  SKIP: (id) => `${API_BASE_URL}/api/applications/${id}/skip`,
 };
 
 export const ENDPOINTS = {

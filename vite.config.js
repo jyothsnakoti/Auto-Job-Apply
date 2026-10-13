@@ -1,17 +1,20 @@
+
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
-// https://vite.dev/config/
 export default defineConfig({
   plugins: [
-    tailwindcss(),
     react(),
+    tailwindcss(),
   ],
 
   server: {
     host: '0.0.0.0',
     port: 5173,
+
+    // Allow external hosts such as ngrok
+    allowedHosts: true,
 
     hmr: {
       host: '192.168.165.188',
