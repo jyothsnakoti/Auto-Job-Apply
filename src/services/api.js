@@ -14,6 +14,7 @@ export * from './enhanceResumeService';
 export * from './enhancedResumeDownloadService';
 export * from './enhancedAtsService';
 export * from './jobService';
+export * from '../utils/jobHelpers';
 export * from './dashboardService';
 export * from './applicationService';
 export {

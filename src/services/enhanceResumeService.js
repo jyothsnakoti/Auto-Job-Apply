@@ -245,11 +245,27 @@ export const getEnhancedResume = async (jobOrPayload) => {
     postData?.bridgeableGaps ||
     [];
 
+  const originalScore =
+    getData?.originalScore ??
+    getData?.original_score ??
+    postData?.originalScore ??
+    postData?.original_score ??
+    null;
+
+  const enhancedScore =
+    getData?.enhancedScore ??
+    getData?.enhanced_score ??
+    postData?.enhancedScore ??
+    postData?.enhanced_score ??
+    null;
+
   const normalizedResult = {
     ...(typeof postData === 'object' ? postData : {}),
     ...(typeof getData === 'object' ? getData : {}),
     status: getData?.status || postData?.status || 'OK',
     jobId,
+    originalScore,
+    enhancedScore,
     enhancedResume: enhancedResumeText,
     EnhResume: enhancedResumeText,
     enhResume: enhancedResumeText,

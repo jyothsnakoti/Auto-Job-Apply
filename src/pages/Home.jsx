@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import image2044 from '../assets/home/ChatGPT Image Sep 25, 2026, 03_44_44 PM.png';
@@ -22,6 +23,10 @@ import prepareIcon from '../assets/home/iconmind_pre-order-outline-thin.svg';
 import applyIcon from '../assets/home/iconoir_submit-document.svg';
 
 const Home = () => {
+    const navigate = useNavigate(); 
+    const navigateToSignup = () => {
+    navigate('/register');
+};
     const [windowWidth, setWindowWidth] = useState(
         typeof window !== 'undefined' ? window.innerWidth : 1440
     );
@@ -1880,7 +1885,8 @@ const Home = () => {
                     <button
                         type="button"
                         style={styles.ctaButton}
-                        onMouseEnter={() => setIsCtaHovered(true)}
+onClick={navigateToSignup}
+onMouseEnter={() => setIsCtaHovered(true)}
                         onMouseLeave={() => setIsCtaHovered(false)}
                     >
                         <span>Start Applying Smarter</span>
@@ -2134,7 +2140,8 @@ const Home = () => {
                         <button
                             type="button"
                             style={styles.matchingCtaButton}
-                            onMouseEnter={() => setIsMatchingCtaHovered(true)}
+onClick={navigateToSignup}
+onMouseEnter={() => setIsMatchingCtaHovered(true)}
                             onMouseLeave={() => setIsMatchingCtaHovered(false)}
                         >
                             <span>See Matching in Action</span>
@@ -2194,7 +2201,8 @@ const Home = () => {
                         <button
                             type="button"
                             style={styles.resumeCtaButton}
-                            onMouseEnter={() => setIsResumeCtaHovered(true)}
+onClick={navigateToSignup}
+onMouseEnter={() => setIsResumeCtaHovered(true)}
                             onMouseLeave={() => setIsResumeCtaHovered(false)}
                         >
                             <span>Explore Resume Intelligence</span>
@@ -2368,7 +2376,8 @@ const Home = () => {
                         <button
                             type="button"
                             style={styles.automationCtaButton}
-                            onMouseEnter={() => setIsAutomationCtaHovered(true)}
+onClick={navigateToSignup}
+onMouseEnter={() => setIsAutomationCtaHovered(true)}
                             onMouseLeave={() => setIsAutomationCtaHovered(false)}
                         >
                             <span>See It in Action</span>
@@ -2434,7 +2443,8 @@ const Home = () => {
                             <button
                                 type="button"
                                 style={styles.basicCtaButton}
-                                onMouseEnter={() => setIsBasicCtaHovered(true)}
+onClick={navigateToSignup}
+onMouseEnter={() => setIsBasicCtaHovered(true)}
                                 onMouseLeave={() => setIsBasicCtaHovered(false)}
                             >
                                 <span>Get Started</span>
@@ -2485,7 +2495,8 @@ const Home = () => {
                             <button
                                 type="button"
                                 style={styles.proCtaButton}
-                                onMouseEnter={() => setIsProCtaHovered(true)}
+onClick={navigateToSignup}
+onMouseEnter={() => setIsProCtaHovered(true)}
                                 onMouseLeave={() => setIsProCtaHovered(false)}
                             >
                                 <span>Get Started</span>

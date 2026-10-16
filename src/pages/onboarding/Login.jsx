@@ -259,7 +259,7 @@ const Login = () => {
               </>
             ) : (
               <>
-                <span>Sign in to AutoApply</span>
+                <span>Sign in </span>
                 <ArrowRight
                   size={18}
                   className="transition-transform duration-200 group-hover:translate-x-1"

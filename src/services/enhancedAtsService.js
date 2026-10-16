@@ -33,8 +33,8 @@ export const getScoreForEnhancedResume = async (payload) => {
   console.log('[enhancedAtsService] Calling Get_Score_for_EnhancedResume API:', {
     endpoint: GET_SCORE_FOR_ENHANCED_RESUME_URL,
     payload: {
-      JDid,
-      ResumeID,
+      JDid: String(JDid).trim(),
+      ResumeID: String(ResumeID).trim(),
       EnhResumeTextLength: EnhResumeText.length,
     },
   });
@@ -42,9 +42,9 @@ export const getScoreForEnhancedResume = async (payload) => {
   const response = await apiClient.post(
     GET_SCORE_FOR_ENHANCED_RESUME_URL,
     {
-      JDid,
-      ResumeID,
-      EnhResumeText,
+      JDid: String(JDid).trim(),
+      ResumeID: String(ResumeID).trim(),
+      EnhResumeText: String(EnhResumeText),
     },
     {
       headers: {
@@ -55,6 +55,41 @@ export const getScoreForEnhancedResume = async (payload) => {
   );
 
   console.log('[enhancedAtsService] Response:', response.data);
+
+  if (!response?.data || typeof response.data !== 'object') {
+    throw new Error('Invalid response received from ATS calculation service.');
+  }
+
+  // Detect explicit API error responses (HTTP 200 with error payload)
+  if (response.data.status === 'error' || response.data.error) {
+    const errorMsg =
+      response.data.detail ||
+      response.data.message ||
+      response.data.error ||
+      'Failed to calculate enhanced ATS score.';
+    const err = new Error(errorMsg);
+    err.status = 400;
+    err.data = response.data;
+    throw err;
+  }
+
+  // Validate numeric score exists and is within valid range (0-100)
+  const rawScore =
+    response.data.EnhATS ??
+    response.data.score_data?.overall_score ??
+    response.data.overall_score ??
+    response.data.score ??
+    response.data.atsScore;
+
+  if (rawScore === undefined || rawScore === null || isNaN(Number(rawScore))) {
+    throw new Error('ATS calculation response did not return a valid numeric score.');
+  }
+
+  const numericScore = Number(rawScore);
+  if (numericScore < 0 || numericScore > 100) {
+    throw new Error(`Returned ATS score (${numericScore}) is outside the valid 0-100 range.`);
+  }
+
   return response.data;
 };
 
