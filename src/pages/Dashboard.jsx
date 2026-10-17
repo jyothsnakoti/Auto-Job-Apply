@@ -580,9 +580,6 @@ const Dashboard = () => {
   const [userName, setUserName] = useState("");
   const [selectedAppTab, setSelectedAppTab] = useState("All");
   const [selectedResumeId, setSelectedResumeId] = useState(null);
-const [resumeDashboardData, setResumeDashboardData] = useState(null);
-const [isLoadingResumeApplications, setIsLoadingResumeApplications] =
-  useState(false);
   const [selectedJobModal, setSelectedJobModal] = useState(null);
   const [isLoadingJobDetails, setIsLoadingJobDetails] = useState(false);
   const [isJobSaved, setIsJobSaved] = useState(false);
@@ -690,7 +687,7 @@ const [isLoadingResumeApplications, setIsLoadingResumeApplications] =
   // Dynamic User Applications State (Loaded via GET /api/applications?tab=...&page=...&size=...)
   const [applications, setApplications] = useState([]);
   const [appPage, setAppPage] = useState(0);
-  const [appPageSize] = useState(10);
+  const [appPageSize] = useState(5);
   const [appTotalPages, setAppTotalPages] = useState(1);
   const [appTotalItems, setAppTotalItems] = useState(0);
   const [appTabCounts, setAppTabCounts] = useState(() => {
@@ -758,111 +755,155 @@ const [isLoadingResumeApplications, setIsLoadingResumeApplications] =
     }
   }, [toast.show]);
 
-  // Fetch applications from GET /api/applications?tab={tab}&page={page}&size={size}
- const fetchApplicationsData = useCallback(
-  async (tabName = selectedAppTab, pageNum = appPage, isPolling = false) => {
-    if (!isPolling) {
-      setIsLoadingApplications(true);
-      setApplicationsError(null);
-    }
-
-    const reqSeq = ++appReqSeqRef.current;
-
-    try {
-      // Use the same dashboard endpoint for All and a specific resume.
-      const data = await getDashboardData(selectedResumeId);
-
-      if (reqSeq !== appReqSeqRef.current) return;
-
-      const allApplications = Array.isArray(data?.recentApplications)
-        ? data.recentApplications
-        : [];
-
-      const rawCounts = data?.applicationCounts || {};
-
-      // Match the status names used by the existing application tabs.
-      const normalizeStatus = (status) => {
-        const value = String(status || "")
-          .toUpperCase()
-          .replace(/[\s-]+/g, "_");
-
-        if (value === "IN_PROGRESS" || value === "QUEUED") {
-          return "IN_PROGRESS";
-        }
-
-        if (value === "NEEDS_ACTION") return "NEEDS_ACTION";
-        if (value === "SUBMITTED") return "SUBMITTED";
-        if (value === "FAILED") return "FAILED";
-        if (value === "SKIPPED") return "SKIPPED";
-
-        return value;
-      };
-
-      const tabStatusMap = {
-        All: "all",
-        Submitted: "SUBMITTED",
-        "In Progress": "IN_PROGRESS",
-        "Needs Action": "NEEDS_ACTION",
-        Failed: "FAILED",
-        Skipped: "SKIPPED",
-      };
-
-      const selectedStatus = tabStatusMap[tabName] || "all";
-
-      const filteredApplications =
-        selectedStatus === "all"
-          ? allApplications
-          : allApplications.filter(
-              (application) =>
-                normalizeStatus(application.status || application.tab) ===
-                selectedStatus
-            );
-
-      // Keep the existing table pagination.
-      const startIndex = pageNum * appPageSize;
-      const paginatedApplications = filteredApplications.slice(
-        startIndex,
-        startIndex + appPageSize
-      );
-
-      setApplications(paginatedApplications);
-
-      setAppTabCounts({
-        all: Number(rawCounts.all ?? allApplications.length),
-        submitted: Number(rawCounts.submitted ?? 0),
-        inProgress: Number(
-          rawCounts.inProgress ?? rawCounts.in_progress ?? 0
-        ),
-        needsAction: Number(
-          rawCounts.needsAction ?? rawCounts.needs_action ?? 0
-        ),
-        failed: Number(rawCounts.failed ?? 0),
-        skipped: Number(rawCounts.skipped ?? 0),
-      });
-
-      setAppTotalItems(filteredApplications.length);
-      setAppTotalPages(
-        Math.max(1, Math.ceil(filteredApplications.length / appPageSize))
-      );
-      setAppPage(pageNum);
-    } catch (error) {
-      if (reqSeq !== appReqSeqRef.current) return;
-
-      console.error("[Dashboard] Dashboard applications request failed:", error);
-
+  // Fetch applications from GET /api/applications?tab={tab}&page={page}&size={size} (All resumes)
+  // or GET /api/dashboard?resumeId={selectedResumeId} (Specific resume)
+  const fetchApplicationsData = useCallback(
+    async (tabName = selectedAppTab, pageNum = appPage, isPolling = false) => {
       if (!isPolling) {
-        setApplicationsError(
-          error?.message || "Failed to load applications."
-        );
+        setIsLoadingApplications(true);
+        setApplicationsError(null);
       }
-    } finally {
-      if (reqSeq === appReqSeqRef.current && !isPolling) {
-        setIsLoadingApplications(false);
+
+      const reqSeq = ++appReqSeqRef.current;
+
+      try {
+        if (!selectedResumeId) {
+          // --- MODE 1: All Resumes selected ---
+          // Use GET /api/applications?tab={tab}&page={page}&size={size}
+          const effectiveTab = TAB_PARAM_MAP[tabName] || "all";
+          const result = await getApplications({
+            tab: effectiveTab,
+            page: pageNum,
+            size: appPageSize,
+          });
+
+          if (reqSeq !== appReqSeqRef.current) return;
+
+          if (result) {
+            setApplications(Array.isArray(result.items) ? result.items : []);
+
+            if (result.counts) {
+              setAppTabCounts({
+                all: Number(result.counts.all ?? 0),
+                submitted: Number(result.counts.submitted ?? 0),
+                inProgress: Number(result.counts.inProgress ?? result.counts.in_progress ?? 0),
+                needsAction: Number(result.counts.needsAction ?? result.counts.needs_action ?? 0),
+                failed: Number(result.counts.failed ?? 0),
+                skipped: Number(result.counts.skipped ?? 0),
+              });
+            }
+
+            if (result.pagination) {
+              const pageIndex = typeof result.pagination.page === "number" ? result.pagination.page : pageNum;
+              const totalItems = typeof result.pagination.totalItems === "number" ? result.pagination.totalItems : (result.items?.length || 0);
+              const totalPages = typeof result.pagination.totalPages === "number" ? result.pagination.totalPages : Math.max(1, Math.ceil(totalItems / appPageSize));
+
+              setAppPage(pageIndex);
+              setAppTotalPages(totalPages);
+              setAppTotalItems(totalItems);
+            }
+          }
+        } else {
+          // --- MODE 2: Specific Resume selected ---
+          // Use GET /api/dashboard?resumeId={selectedResumeId}
+          const data = await getDashboardData(selectedResumeId);
+
+          if (reqSeq !== appReqSeqRef.current) return;
+
+          const rawCounts = data?.applicationCounts || {};
+          setAppTabCounts({
+            all: Number(rawCounts.all ?? 0),
+            submitted: Number(rawCounts.submitted ?? 0),
+            inProgress: Number(rawCounts.inProgress ?? rawCounts.in_progress ?? 0),
+            needsAction: Number(rawCounts.needsAction ?? rawCounts.needs_action ?? 0),
+            failed: Number(rawCounts.failed ?? 0),
+            skipped: Number(rawCounts.skipped ?? 0),
+          });
+
+          const allApplications = Array.isArray(data?.recentApplications)
+            ? data.recentApplications
+            : Array.isArray(data?.applications)
+            ? data.applications
+            : [];
+
+          // Match the status names used by the existing application tabs
+          const normalizeStatus = (status) => {
+            const value = String(status || "")
+              .toUpperCase()
+              .replace(/[\s-]+/g, "_");
+
+            if (value === "IN_PROGRESS" || value === "QUEUED" || value === "PREPARING") {
+              return "IN_PROGRESS";
+            }
+            if (value === "NEEDS_ACTION") return "NEEDS_ACTION";
+            if (value === "SUBMITTED" || value === "COMPLETED" || value === "SUCCESS" || value === "APPLIED") return "SUBMITTED";
+            if (value === "FAILED" || value === "ERROR") return "FAILED";
+            if (value === "SKIPPED") return "SKIPPED";
+
+            return value;
+          };
+
+          const tabStatusMap = {
+            All: "all",
+            Submitted: "SUBMITTED",
+            "In Progress": "IN_PROGRESS",
+            "Needs Action": "NEEDS_ACTION",
+            Failed: "FAILED",
+            Skipped: "SKIPPED",
+          };
+
+          const selectedStatus = tabStatusMap[tabName] || "all";
+          const filteredApplications =
+            selectedStatus === "all"
+              ? allApplications
+              : allApplications.filter(
+                  (application) =>
+                    normalizeStatus(application.status || application.tab || application.state) ===
+                    selectedStatus
+                );
+
+          const tabCountKeyMap = {
+            All: "all",
+            Submitted: "submitted",
+            "In Progress": "inProgress",
+            "Needs Action": "needsAction",
+            Failed: "failed",
+            Skipped: "skipped",
+          };
+          const countKey = tabCountKeyMap[tabName] || "all";
+          const expectedCount = typeof rawCounts[countKey] === "number" ? rawCounts[countKey] : filteredApplications.length;
+          const totalItems = Math.max(filteredApplications.length, expectedCount);
+          const totalPages = Math.max(1, Math.ceil(totalItems / appPageSize));
+          const safePage = Math.min(pageNum, Math.max(0, totalPages - 1));
+          const startIndex = safePage * appPageSize;
+          const paginatedApplications = filteredApplications.slice(
+            startIndex,
+            startIndex + appPageSize
+          );
+
+          setApplications(paginatedApplications);
+          setAppTotalItems(totalItems);
+          setAppTotalPages(totalPages);
+          setAppPage(safePage);
+        }
+      } catch (error) {
+        if (reqSeq !== appReqSeqRef.current) return;
+
+        console.error("[Dashboard] Applications fetch failed:", error);
+
+        if (!isPolling) {
+          setApplicationsError(
+            error?.message || "Failed to load applications."
+          );
+        }
+      } finally {
+        if (reqSeq === appReqSeqRef.current && !isPolling) {
+          setIsLoadingApplications(false);
+        }
       }
-    }
-  },
-  [selectedAppTab, appPage, appPageSize, selectedResumeId]
-);
+    },
+    [selectedAppTab, appPage, appPageSize, selectedResumeId]
+  );
 
   // Fetch applications on tab or page change
   useEffect(() => {
@@ -1394,50 +1435,7 @@ useEffect(() => {
     };
   }, []);
 
-  
-  // Fetch dashboard data whenever a resume is selected
-  useEffect(() => {
-    // Skip the initial All Resumes selection because
-    // the existing dashboard effect already loads it.
-    if (selectedResumeId === null) {
-      return;
-    }
 
-    let cancelled = false;
-
-    const loadResumeDashboard = async () => {
-      setIsLoadingResumeApplications(true);
-
-      try {
-        const data = await getDashboardData(selectedResumeId);
-
-        if (cancelled) return;
-
-        setResumeDashboardData(data);
-
-        console.log("[Dashboard] Selected resume ID:", selectedResumeId);
-        console.log("[Dashboard] Resume dashboard response:", data);
-      } catch (error) {
-        if (!cancelled) {
-          setResumeDashboardData(null);
-          console.error(
-            "[Dashboard] Resume dashboard request failed:",
-            error
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoadingResumeApplications(false);
-        }
-      }
-    };
-
-    loadResumeDashboard();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedResumeId]);
 
 
   // 2. Fetch Dynamic Billing Status from API

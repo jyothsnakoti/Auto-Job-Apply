@@ -145,6 +145,7 @@ export const PROFILE_ENDPOINTS = {
   UPDATE_WORK_PREFERENCES: `${API_BASE_URL}/api/profile/work-preferences`,
 };
 
+
 /* =========================================================
    RESUME API BASE URL
    ========================================================= */
@@ -221,8 +222,7 @@ export const ENDPOINTS = {
   ONBOARDING: ONBOARDING_ENDPOINTS,
 
   PROFILE: PROFILE_ENDPOINTS,
-
-  RESUME: RESUME_ENDPOINTS,
+RESUME: RESUME_ENDPOINTS,
   ENHANCE_RESUME: ENHANCE_RESUME_ENDPOINTS,
   MORE_JOBS: MORE_JOBS_ENDPOINTS,
   DASHBOARD: DASHBOARD_ENDPOINTS,
@@ -231,6 +231,7 @@ export const ENDPOINTS = {
   JOBS: JOB_ENDPOINTS,
   JOB: JOB_ENDPOINTS,
 };
+
 
 export default ENDPOINTS;
 
