@@ -18,10 +18,7 @@ const isStaticLogo = (logoUrl) => {
   );
 };
 import {
-  getStoredJobMatches,
   getJobs,
-  getMoreJobsForResume,
-  getStoredResumeId,
   getBillingStatus,
   getResumes,
   applyToJobs,
@@ -36,6 +33,16 @@ import {
   normalizeApplicationStatus,
   isApplicationActiveStatus,
 } from "../services/api";
+import {
+  transformMatchToJob,
+  buildJobQueryParams,
+  resolveSelectedResumeId,
+  findTargetResume,
+  getStoredSelectedResumeId,
+  getStoredSelectedResumeData,
+  saveResumeSelection,
+  cleanHtmlText,
+} from "../utils/jobHelpers";
 
 const dateOptions = [
   "Last 6 hours",
@@ -129,6 +136,22 @@ const AutoApply = () => {
   const [selectedJobModal, setSelectedJobModal] = useState(null);
   const [isJobSaved, setIsJobSaved] = useState(false);
 
+  // Filter States
+  const [selectedDate, setSelectedDate] = useState("All time");
+  const [selectedLocations, setSelectedLocations] = useState([]);
+  const [locationSearch, setLocationSearch] = useState("");
+  const [selectedWorkplace, setSelectedWorkplace] = useState([]);
+  const [selectedCompanies, setSelectedCompanies] = useState([]);
+  const [companySearch, setCompanySearch] = useState("");
+  const [selectedDegrees, setSelectedDegrees] = useState([]);
+  const [selectedExperience, setSelectedExperience] = useState("");
+  const [selectedRoles, setSelectedRoles] = useState([]);
+  const [selectedJobTypes, setSelectedJobTypes] = useState([]);
+  const [sponsorsVisa, setSponsorsVisa] = useState(false);
+  const [selectedEmploymentTypes, setSelectedEmploymentTypes] = useState([]);
+
+  const dropdownRef = useRef(null);
+
   // Floating Toast Notification State
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
 
@@ -145,27 +168,38 @@ const AutoApply = () => {
     setToast({ show: true, message, type });
   };
 
-  // Helper to resolve primary/selected numeric resume ID
+  // Helper to resolve selected numeric resume ID (matching BrowseJobs logic)
   const resolveNumericResumeId = async () => {
-    let numericResumeId = null;
-    try {
-      const resumes = await getResumes();
-      if (Array.isArray(resumes) && resumes.length > 0) {
-        const primary = resumes.find((r) => r.isPrimary) || resumes[0];
-        numericResumeId = extractNumericResumeId(primary);
-      }
-    } catch {
-      // ignore
+    let targetResume = selectedResumeRef.current;
+    let numericResumeId = extractNumericResumeId(targetResume);
+
+    if (!numericResumeId && userResumes.length > 0) {
+      targetResume = findTargetResume(userResumes, activeResumeIdRef.current);
+      numericResumeId = extractNumericResumeId(targetResume);
     }
 
     if (!numericResumeId) {
-      const storedId =
-        (typeof getStoredResumeId === "function" && getStoredResumeId()) ||
-        localStorage.getItem("selected_resume_id") ||
-        localStorage.getItem("resume_id") ||
-        localStorage.getItem("resumeId");
+      try {
+        const fetched = await getResumes();
+        if (Array.isArray(fetched) && fetched.length > 0) {
+          setUserResumes(fetched);
+          targetResume = findTargetResume(fetched, activeResumeIdRef.current);
+          numericResumeId = extractNumericResumeId(targetResume);
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    if (!numericResumeId && activeResumeIdRef.current) {
+      numericResumeId = extractNumericResumeId(activeResumeIdRef.current);
+    }
+
+    if (!numericResumeId) {
+      const storedId = getStoredSelectedResumeId();
       if (storedId) numericResumeId = extractNumericResumeId(storedId);
     }
+
     return numericResumeId;
   };
 
@@ -443,10 +477,20 @@ const AutoApply = () => {
     }
   };
 
-  // Jobs state & Selected Jobs for Auto Apply
+  // Resume & Jobs State (exact parity with BrowseJobs)
   const [jobs, setJobs] = useState([]);
   const [isLoadingJobs, setIsLoadingJobs] = useState(true);
   const [selectedJobIds, setSelectedJobIds] = useState([]);
+  const [userResumes, setUserResumes] = useState([]);
+  const [selectedResume, setSelectedResume] = useState(() => getStoredSelectedResumeData());
+  const [activeResumeId, setActiveResumeId] = useState(() => getStoredSelectedResumeId());
+
+  const selectedResumeRef = useRef(selectedResume);
+  selectedResumeRef.current = selectedResume;
+  const activeResumeIdRef = useRef(activeResumeId);
+  activeResumeIdRef.current = activeResumeId;
+  const hasLoadedRef = useRef(false);
+
   const [billingInfo, setBillingInfo] = useState(() => {
     try {
       const stored =
@@ -458,110 +502,191 @@ const AutoApply = () => {
     }
   });
 
-  // Load jobs dynamically
+  // Fetch user resumes and resolve the selected resume ID matching BrowseJobs logic
+  const fetchUserResumes = useCallback(async () => {
+    try {
+      const data = await getResumes();
+      let list = [];
+      if (Array.isArray(data)) {
+        list = data;
+      } else if (data && Array.isArray(data.resumes)) {
+        list = data.resumes;
+      } else if (data && Array.isArray(data.data)) {
+        list = data.data;
+      } else if (data && (data.id !== undefined || data.fileName || data.name)) {
+        list = [data];
+      }
+
+      setUserResumes(list);
+
+      const targetResume = findTargetResume(list);
+      let targetResumeId = null;
+
+      if (targetResume) {
+        setSelectedResume(targetResume);
+        selectedResumeRef.current = targetResume;
+        targetResumeId =
+          targetResume.id ??
+          targetResume.resumeId ??
+          targetResume._id ??
+          targetResume.fileId ??
+          targetResume.uuid ??
+          targetResume.resume_id;
+      }
+
+      if (!targetResumeId) {
+        targetResumeId = await resolveSelectedResumeId({
+          selectedResume: targetResume,
+          activeResumeId: activeResumeIdRef.current,
+        });
+      }
+
+      if (targetResumeId !== undefined && targetResumeId !== null) {
+        const strId = String(targetResumeId);
+        setActiveResumeId(strId);
+        activeResumeIdRef.current = strId;
+        saveResumeSelection(targetResume, strId);
+      }
+
+      return targetResumeId;
+    } catch (err) {
+      console.warn("[AutoApply] Error fetching user resumes:", err);
+      const fallbackId = await resolveSelectedResumeId({
+        selectedResume: selectedResumeRef.current,
+        activeResumeId: activeResumeIdRef.current,
+      });
+      return fallbackId;
+    }
+  }, []);
+
+  // Fetch jobs using the exact same request parameters, filtering, sorting, and mapping as BrowseJobs
+  const loadJobsData = useCallback(
+    async ({
+      resumeId = null,
+      search = searchQuery,
+      locations = selectedLocations,
+      roles = selectedRoles,
+      workplaces = selectedWorkplace,
+      jobTypes = selectedJobTypes,
+      companies = selectedCompanies,
+      date = selectedDate,
+    } = {}) => {
+      try {
+        setIsLoadingJobs(true);
+
+        let targetResumeId = resumeId;
+        if (!targetResumeId) {
+          targetResumeId = await resolveSelectedResumeId({
+            selectedResume: selectedResumeRef.current,
+            activeResumeId: activeResumeIdRef.current,
+          });
+        }
+
+        const params = buildJobQueryParams({
+          resumeId: targetResumeId,
+          searchQuery: search,
+          selectedLocations: locations,
+          selectedRoles: roles,
+          selectedWorkplace: workplaces,
+          selectedJobTypes: jobTypes,
+          selectedCompanies: companies,
+          selectedDate: date,
+          sortOption: "best_match",
+          page: 0,
+          pageSize: 20,
+        });
+
+        console.log("[AutoApply] Fetching jobs via GET /api/jobs with params:", params);
+        const res = await getJobs(params);
+        const items = res?.items || [];
+        const transformed = items.map((m, idx) => transformMatchToJob(m, idx)).filter(Boolean);
+
+        // Update jobs state with fresh transformed matches (no stale fallback cache)
+        setJobs(transformed);
+        setSelectedJobIds([]);
+      } catch (err) {
+        console.warn("[AutoApply] Error fetching jobs from GET /api/jobs:", err);
+        // Do not use old cached jobs as a fallback when the API returns no results or errors
+        setJobs([]);
+        setSelectedJobIds([]);
+      } finally {
+        setIsLoadingJobs(false);
+      }
+    },
+    [
+      searchQuery,
+      selectedLocations,
+      selectedRoles,
+      selectedWorkplace,
+      selectedJobTypes,
+      selectedCompanies,
+      selectedDate,
+    ]
+  );
+
+  // Initial load: resolve resume then load jobs
   useEffect(() => {
     let isMounted = true;
 
-    const loadJobsData = async () => {
-      try {
-        setIsLoadingJobs(true);
-        const storedMatches = getStoredJobMatches();
-        let loadedMatches = [];
-
-        if (Array.isArray(storedMatches) && storedMatches.length > 0) {
-          loadedMatches = storedMatches;
-        }
-
-        if (loadedMatches.length > 0) {
-          const formatted = loadedMatches.map((m, idx) => {
-            const rawScore = typeof m.overall_score === 'number' ? m.overall_score : m.score;
-            const matchPercent = rawScore ? Math.min(100, Math.max(1, Math.round(Number(rawScore)))) : 85;
-            const jobId = m.job_id || m.JDid || m.id || `job-${idx + 1}`;
-            let logo = m.logo || m.companyLogo || m.logo_url || null;
-            if (isStaticLogo(logo)) {
-              logo = null;
-            }
-            if (!logo && (m.companyDomain || m.company_domain)) {
-              logo = `https://logo.clearbit.com/${m.companyDomain || m.company_domain}`;
-            }
-            return {
-              id: jobId,
-              jobId: m.jobId || m.job_id || m.JDid || m.jd_id || m.id || jobId,
-              rawMatch: m,
-              numericId: extractNumericJobId(m),
-              title: m.title || m.preview || m.job_title || "Software Engineer",
-              company: m.company || m.company_name || "Hiring Organization",
-              location: m.location || m.city || "Remote",
-              type: m.type || m.employment_type || "Full-time",
-              workMode: m.workMode || m.work_mode || "Remote",
-              posted: m.posted || "Recent match",
-              matchPercent,
-              logo,
-              description: m.description || m.preview || "Job description available.",
-              responsibilities: m.responsibilities || [],
-              requiredSkills: m.requiredSkills || m.skills || [],
-              preferredSkills: m.preferredSkills || [],
-              experience: m.experience || "2 – 5 years",
-            };
-          });
-          if (isMounted) {
-            setJobs(formatted);
-            setSelectedJobIds([]);
-          }
-        } else {
-          // Fetch from GET /api/jobs if user has jobs
-          const res = await getJobs({ size: 20 }).catch(() => null);
-          if (res && Array.isArray(res.items) && res.items.length > 0) {
-            const formatted = res.items.map((m, idx) => {
-              const rawScore = typeof m.overall_score === 'number' ? m.overall_score : m.matchScore;
-              const matchPercent = rawScore ? Math.min(100, Math.max(1, Math.round(Number(rawScore)))) : 85;
-              const jobId = m.jobId || m.job_id || m.id || `job-${idx + 1}`;
-              let logo = m.logo || m.companyLogo || m.logo_url || null;
-              if (isStaticLogo(logo)) {
-                logo = null;
-              }
-              if (!logo && (m.companyDomain || m.company_domain)) {
-                logo = `https://logo.clearbit.com/${m.companyDomain || m.company_domain}`;
-              }
-              return {
-                id: jobId,
-                jobId: m.jobId || m.job_id || m.JDid || m.jd_id || m.id || jobId,
-                rawMatch: m,
-                numericId: extractNumericJobId(m),
-                title: m.title || m.jobTitle || "Software Engineer",
-                company: m.companyName || m.company || "Hiring Organization",
-                location: m.location || "Remote",
-                type: m.employmentType || m.type || "Full-time",
-                workMode: m.workplace || m.workMode || "Remote",
-                posted: m.postedAt || "Recent match",
-                matchPercent,
-                logo,
-                description: m.description || "Job description available.",
-                responsibilities: m.responsibilities || [],
-                requiredSkills: m.requiredSkills || [],
-                preferredSkills: m.preferredSkills || [],
-                experience: m.experience || "2 – 5 years",
-              };
-            });
-            if (isMounted) {
-              setJobs(formatted);
-              setSelectedJobIds([]);
-            }
-          }
-        }
-      } catch (err) {
-        console.warn("[AutoApply] Error loading jobs:", err);
-      } finally {
-        if (isMounted) setIsLoadingJobs(false);
+    const init = async () => {
+      setIsLoadingJobs(true);
+      const resId = await fetchUserResumes();
+      if (isMounted) {
+        await loadJobsData({ resumeId: resId });
+        hasLoadedRef.current = true;
       }
     };
 
-    loadJobsData();
+    init();
 
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [fetchUserResumes, loadJobsData]);
+
+  // Re-fetch jobs whenever search query or filters change
+  useEffect(() => {
+    if (!hasLoadedRef.current) return;
+    loadJobsData();
+  }, [
+    searchQuery,
+    selectedLocations,
+    selectedCompanies,
+    selectedRoles,
+    selectedWorkplace,
+    selectedJobTypes,
+    selectedDate,
+    loadJobsData,
+  ]);
+
+  // Refresh jobs when the selected resume changes in BrowseJobs or elsewhere
+  useEffect(() => {
+    const handleResumeChange = async (e) => {
+      const newResumeId = e?.detail?.resumeId || getStoredSelectedResumeId();
+      if (newResumeId && String(newResumeId) !== String(activeResumeIdRef.current)) {
+        console.log(`[AutoApply] Selected resume changed from ${activeResumeIdRef.current} to ${newResumeId}. Refreshing jobs...`);
+        const resId = await fetchUserResumes();
+        await loadJobsData({ resumeId: resId || newResumeId });
+      }
+    };
+
+    const handleJobMatchesUpdated = async () => {
+      const resId = await fetchUserResumes();
+      await loadJobsData({ resumeId: resId });
+    };
+
+    window.addEventListener("resumeSelectionUpdated", handleResumeChange);
+    window.addEventListener("selectedResumeChanged", handleResumeChange);
+    window.addEventListener("jobMatchesUpdated", handleJobMatchesUpdated);
+    window.addEventListener("storage", handleResumeChange);
+
+    return () => {
+      window.removeEventListener("resumeSelectionUpdated", handleResumeChange);
+      window.removeEventListener("selectedResumeChanged", handleResumeChange);
+      window.removeEventListener("jobMatchesUpdated", handleJobMatchesUpdated);
+      window.removeEventListener("storage", handleResumeChange);
+    };
+  }, [fetchUserResumes, loadJobsData]);
 
   // Fetch Dynamic Billing Status (GET /api/billing/status)
   useEffect(() => {
@@ -608,27 +733,7 @@ const AutoApply = () => {
     };
   }, []);
 
-  // Settings State
-  const [resumeVersion, setResumeVersion] = useState("Use job-specific tailored resume (Recommended)");
-  const [coverLetter, setCoverLetter] = useState("Auto-generate using job details");
-  const [appQuestions, setAppQuestions] = useState("Auto-answer using profile");
-  const [appPace, setAppPace] = useState("Apply sequentially (Recommended)");
 
-  // Filter States
-  const [selectedDate, setSelectedDate] = useState("All time");
-  const [selectedLocations, setSelectedLocations] = useState([]);
-  const [locationSearch, setLocationSearch] = useState("");
-  const [selectedWorkplace, setSelectedWorkplace] = useState([]);
-  const [selectedCompanies, setSelectedCompanies] = useState([]);
-  const [companySearch, setCompanySearch] = useState("");
-  const [selectedDegrees, setSelectedDegrees] = useState([]);
-  const [selectedExperience, setSelectedExperience] = useState("");
-  const [selectedRoles, setSelectedRoles] = useState([]);
-  const [selectedJobTypes, setSelectedJobTypes] = useState([]);
-  const [sponsorsVisa, setSponsorsVisa] = useState(false);
-  const [selectedEmploymentTypes, setSelectedEmploymentTypes] = useState([]);
-
-  const dropdownRef = useRef(null);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -666,6 +771,7 @@ const AutoApply = () => {
     setSelectedJobTypes([]);
     setSponsorsVisa(false);
     setSelectedEmploymentTypes([]);
+    setActiveDropdown(null);
   };
 
   const toggleDropdown = (name) => {
@@ -836,6 +942,11 @@ const AutoApply = () => {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      loadJobsData();
+                    }
+                  }}
                   placeholder="Search by title or keyword..."
                   className="w-full bg-transparent border-none text-[13.5px] text-[#0F172A] placeholder:text-[#94A3B8] outline-none"
                 />
@@ -852,6 +963,7 @@ const AutoApply = () => {
 
               <button
                 type="button"
+                onClick={() => loadJobsData()}
                 className="h-[40px] px-5 text-[13.5px] font-semibold text-[#1E293B] bg-[#F1F5F9] hover:bg-[#E2E8F0] rounded-[10px] active:scale-[0.99] transition-all cursor-pointer whitespace-nowrap"
               >
                 Apply
@@ -1298,23 +1410,35 @@ const AutoApply = () => {
             {/* Left Column (8 cols): Select Jobs to Auto Apply Card */}
             <div className="lg:col-span-8 bg-white rounded-[20px] border border-[#E2E8F0] p-6 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col gap-4">
 
-              {/* Card Header */}
-              <div className="flex flex-col gap-0.5">
-                <h2 className="text-[17px] font-bold text-[#0F172A] tracking-tight">
-                  Select Jobs to Bulk Auto Apply
-                </h2>
-                <p className="text-[13px] text-[#64748B]">
-                  Choose from your matched jobs or use filters to find more opportunities.
-                </p>
+              {/* Card Header with Select top 5 moved above */}
+              <div className="flex items-start justify-between flex-wrap gap-3">
+                <div className="flex flex-col gap-0.5">
+                  <h2 className="text-[17px] font-bold text-[#0F172A] tracking-tight">
+                    Select Jobs to Bulk Auto Apply
+                  </h2>
+                  <p className="text-[13px] text-[#64748B]">
+                    Choose from your matched jobs or use filters to find more opportunities.
+                  </p>
+                </div>
+
+                {selectableJobs.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleToggleSelectAll}
+                    className="text-[12.5px] sm:text-[13px] font-semibold text-[#2563EB] hover:text-[#1D4ED8] hover:underline cursor-pointer transition-colors shrink-0 pt-0.5"
+                  >
+                    {selectedJobIds.length > 0 ? "Unselect all" : `Select top ${Math.min(5, selectableJobs.length)}`}
+                  </button>
+                )}
               </div>
 
-              {/* Status Header: Select All / Unselect All */}
+              {/* Status Header: Select All on left, ATS heading above ATS donut scores */}
               <div className="flex items-center justify-between pt-1 flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={handleToggleSelectAll}
                   disabled={selectableJobs.length === 0}
-                  className="flex items-center gap-2 text-[13px] font-medium text-[#475569] hover:text-[#0F172A] cursor-pointer group select-none transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                  className="flex items-center gap-2 text-[13px] font-bold text-[#0F172A] cursor-pointer group select-none transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <div
                     className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 transition-all ${isAllSelected
@@ -1335,18 +1459,15 @@ const AutoApply = () => {
                       </svg>
                     )}
                   </div>
-                  <span>{selectedJobIds.length} of {Math.min(5, selectableJobs.length)} jobs selected (max 5)</span>
+                  <span className="font-bold text-[#0F172A]">{selectedJobIds.length} of {Math.min(5, selectableJobs.length)} jobs selected (max 5)</span>
                 </button>
 
-                {selectableJobs.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleToggleSelectAll}
-                    className="text-[12.5px] font-semibold text-[#2563EB] hover:text-[#1D4ED8] hover:underline cursor-pointer transition-colors"
-                  >
-                    {selectedJobIds.length > 0 ? "Unselect all" : `Select top ${Math.min(5, selectableJobs.length)}`}
-                  </button>
-                )}
+                {/* Column Heading for ATS Donut Score */}
+                <div className="w-[44px] text-center shrink-0">
+                  <span className="text-[12px] font-bold text-[#0F172A] uppercase tracking-wider">
+                    ATS
+                  </span>
+                </div>
               </div>
 
               {/* Job List Container */}
@@ -1504,14 +1625,14 @@ const AutoApply = () => {
                           </div>
                         </div>
 
-                        {/* Right: ATS Match Donut + Bookmark + Posted Date */}
-                        <div className="flex items-center gap-4 shrink-0">
+                        {/* Right: ATS Match Donut */}
+                        <div className="flex items-center shrink-0">
                           {/* Circular Donut Match Score */}
-                          <div className="relative w-[38px] h-[38px] shrink-0 flex items-center justify-center">
+                          <div className="relative w-[44px] h-[44px] shrink-0 flex items-center justify-center">
                             <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
                               <path
                                 className="text-slate-100"
-                                strokeWidth="3.2"
+                                strokeWidth="2.6"
                                 stroke="currentColor"
                                 fill="none"
                                 d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
@@ -1519,33 +1640,23 @@ const AutoApply = () => {
                               <path
                                 className={job.matchPercent >= 90 ? "text-[#0D9488]" : "text-[#D97706]"}
                                 strokeDasharray={`${job.matchPercent || 85}, 100`}
-                                strokeWidth="3.2"
+                                strokeWidth="2.6"
                                 strokeLinecap="round"
                                 stroke="currentColor"
                                 fill="none"
                                 d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                               />
                             </svg>
-                            <span className="absolute text-[10.5px] font-bold text-[#0F172A]">
-                              {job.matchPercent}%
+                            <span className="absolute text-[9.5px] font-bold text-[#0F172A] tracking-tight leading-none select-none">
+                              {typeof job.matchPercent === "number" && !isNaN(job.matchPercent)
+                                ? Number.isInteger(job.matchPercent)
+                                  ? `${job.matchPercent}%`
+                                  : `${job.matchPercent.toFixed(1)}%`
+                                : job.matchPercent
+                                ? `${job.matchPercent}%`
+                                : "--"}
                             </span>
                           </div>
-
-                          {/* Bookmark Icon */}
-                          <button
-                            type="button"
-                            onClick={(e) => e.stopPropagation()}
-                            className="text-slate-400 hover:text-slate-600 transition-colors p-1 rounded-md"
-                          >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-                            </svg>
-                          </button>
-
-                          {/* Posted Date */}
-                          <span className="text-[12px] text-[#94A3B8] w-[95px] text-right hidden sm:inline-block">
-                            {job.posted}
-                          </span>
                         </div>
                       </div>
                     );
@@ -1594,194 +1705,70 @@ const AutoApply = () => {
                 </div>
               </div>
 
-              {/* 2. Auto Apply Settings Card */}
-              <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-6 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col gap-5">
-
-                {/* Header with Gear Icon */}
-                <div className="flex items-start gap-3">
-                  <div className="w-7 h-7 rounded-[8px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 mt-0.5 text-slate-600">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                      <circle cx="12" cy="12" r="3" />
-                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                    </svg>
-                  </div>
-
-                  <div className="flex flex-col">
-                    <h3 className="text-[14.5px] font-bold text-[#0F172A]">
-                      Bulk Auto Apply Settings
-                    </h3>
-                    <p className="text-[12px] text-[#64748B] mt-0.5">
-                      Configure how applications will be processed.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Settings Fields */}
-                <div className="flex flex-col gap-4">
-
-                  {/* Setting 1: Resume Version */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[12.5px] font-semibold text-[#0F172A]">
-                      Resume Version
-                    </label>
-                    <div className="relative">
-                      <select
-                        value={resumeVersion}
-                        onChange={(e) => setResumeVersion(e.target.value)}
-                        className="w-full h-[38px] px-3 pr-8 rounded-[10px] border border-[#E2E8F0] bg-white text-[12.5px] text-[#334155] outline-none focus:border-slate-400 appearance-none cursor-pointer"
-                      >
-                        <option>Use job-specific tailored resume (Recommended)</option>
-                        <option>Use master default resume</option>
-                        <option>Always ask before tailoring</option>
-                      </select>
-                      <svg className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-3 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                        <path d="m6 9 6 6 6-6" />
-                      </svg>
-                    </div>
-                    <span className="text-[11.5px] text-[#94A3B8]">
-                      A tailored resume will be generated for each job.
-                    </span>
-                  </div>
-
-                  {/* Setting 2: Cover Letter */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[12.5px] font-semibold text-[#0F172A]">
-                      Cover Letter
-                    </label>
-                    <div className="relative">
-                      <select
-                        value={coverLetter}
-                        onChange={(e) => setCoverLetter(e.target.value)}
-                        className="w-full h-[38px] px-3 pr-8 rounded-[10px] border border-[#E2E8F0] bg-white text-[12.5px] text-[#334155] outline-none focus:border-slate-400 appearance-none cursor-pointer"
-                      >
-                        <option>Auto-generate using job details</option>
-                        <option>Use standard default template</option>
-                        <option>Do not attach cover letter</option>
-                      </select>
-                      <svg className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-3 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                        <path d="m6 9 6 6 6-6" />
-                      </svg>
-                    </div>
-                    <span className="text-[11.5px] text-[#94A3B8]">
-                      A personalized cover letter will be created for each application.
-                    </span>
-                  </div>
-
-                  {/* Setting 3: Application Questions */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[12.5px] font-semibold text-[#0F172A]">
-                      Application Questions
-                    </label>
-                    <div className="relative">
-                      <select
-                        value={appQuestions}
-                        onChange={(e) => setAppQuestions(e.target.value)}
-                        className="w-full h-[38px] px-3 pr-8 rounded-[10px] border border-[#E2E8F0] bg-white text-[12.5px] text-[#334155] outline-none focus:border-slate-400 appearance-none cursor-pointer"
-                      >
-                        <option>Auto-answer using profile</option>
-                        <option>Flag unknown questions for review</option>
-                        <option>Manual confirmation for all questions</option>
-                      </select>
-                      <svg className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-3 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                        <path d="m6 9 6 6 6-6" />
-                      </svg>
-                    </div>
-                    <span className="text-[11.5px] text-[#94A3B8]">
-                      We'll use your profile information to answer application questions.
-                    </span>
-                  </div>
-
-                  {/* Setting 4: Application Pace */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[12.5px] font-semibold text-[#0F172A]">
-                      Application Pace
-                    </label>
-                    <div className="relative">
-                      <select
-                        value={appPace}
-                        onChange={(e) => setAppPace(e.target.value)}
-                        className="w-full h-[38px] px-3 pr-8 rounded-[10px] border border-[#E2E8F0] bg-white text-[12.5px] text-[#334155] outline-none focus:border-slate-400 appearance-none cursor-pointer"
-                      >
-                        <option>Apply sequentially (Recommended)</option>
-                        <option>Apply with randomized human delay</option>
-                        <option>Fast parallel submission</option>
-                      </select>
-                      <svg className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-3 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                        <path d="m6 9 6 6 6-6" />
-                      </svg>
-                    </div>
-                    <span className="text-[11.5px] text-[#94A3B8]">
-                      More stable and reduces detection risk.
-                    </span>
-                  </div>
-                </div>
-
-                {/* Start Auto Apply Action Button */}
-                <div className="flex flex-col gap-2 pt-2">
-                  {bulkApplyStatus && (
-                    <div
-                      className={`p-3 rounded-xl border text-[12.5px] font-medium flex items-center justify-between gap-2 ${
-                        bulkApplyStatus.type === "success"
-                          ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                          : bulkApplyStatus.type === "warning" || bulkApplyStatus.type === "skipped"
-                          ? "bg-amber-50 border-amber-200 text-amber-800"
-                          : "bg-rose-50 border-rose-200 text-rose-800"
-                      }`}
-                    >
-                      <span>{bulkApplyStatus.message}</span>
-                      <button
-                        type="button"
-                        onClick={() => setBulkApplyStatus(null)}
-                        className="text-xs font-bold text-slate-400 hover:text-slate-600 shrink-0 cursor-pointer"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={handleStartBulkAutoApply}
-                    disabled={selectedJobIds.length === 0 || isBulkApplying || isLoadingStatus}
-                    className="h-[46px] w-full rounded-[12px] bg-[#2563EB] hover:bg-[#1D4ED8] disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-[14px] font-medium flex items-center justify-center gap-2 shadow-xs active:scale-[0.99] transition-all cursor-pointer"
+              {/* 2. Bulk Auto Apply Action Card */}
+              <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-6 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col gap-2.5">
+                {bulkApplyStatus && (
+                  <div
+                    className={`p-3 rounded-xl border text-[12.5px] font-medium flex items-center justify-between gap-2 ${
+                      bulkApplyStatus.type === "success"
+                        ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                        : bulkApplyStatus.type === "warning" || bulkApplyStatus.type === "skipped"
+                        ? "bg-amber-50 border-amber-200 text-amber-800"
+                        : "bg-rose-50 border-rose-200 text-rose-800"
+                    }`}
                   >
-                    {isLoadingStatus ? (
-                      <>
-                        <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                        </svg>
-                        <span>Checking application statuses...</span>
-                      </>
-                    ) : isBulkApplying ? (
-                      <>
-                        <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                        </svg>
-                        <span>Applying to {selectedJobIds.length} {selectedJobIds.length === 1 ? "Job" : "Jobs"}...</span>
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
-                          <path d="M8 5v14l11-7z" />
-                        </svg>
-                        <span>
-                          Start Auto Bulk Apply ({selectedJobIds.length} {selectedJobIds.length === 1 ? "Job" : "Jobs"})
-                        </span>
-                      </>
-                    )}
-                  </button>
+                    <span>{bulkApplyStatus.message}</span>
+                    <button
+                      type="button"
+                      onClick={() => setBulkApplyStatus(null)}
+                      className="text-xs font-bold text-slate-400 hover:text-slate-600 shrink-0 cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
 
-                  <span className="text-[11.5px] text-[#94A3B8] text-center">
-                    {selectedJobIds.length === 0
-                      ? "Select up to 5 jobs to start bulk auto apply."
-                      : `This will use ${selectedJobIds.length.toString().padStart(2, "0")} application${
-                          selectedJobIds.length === 1 ? "" : "s"
-                        } from your quota.`}
-                  </span>
-                </div>
+                <button
+                  type="button"
+                  onClick={handleStartBulkAutoApply}
+                  disabled={selectedJobIds.length === 0 || isBulkApplying || isLoadingStatus}
+                  className="h-[46px] w-full rounded-[12px] bg-[#2563EB] hover:bg-[#1D4ED8] disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-[14px] font-medium flex items-center justify-center gap-2 shadow-xs active:scale-[0.99] transition-all cursor-pointer"
+                >
+                  {isLoadingStatus ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                      </svg>
+                      <span>Checking application statuses...</span>
+                    </>
+                  ) : isBulkApplying ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                      </svg>
+                      <span>Applying to {selectedJobIds.length} {selectedJobIds.length === 1 ? "Job" : "Jobs"}...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                      <span>
+                        Start Auto Bulk Apply ({selectedJobIds.length} {selectedJobIds.length === 1 ? "Job" : "Jobs"})
+                      </span>
+                    </>
+                  )}
+                </button>
 
+                <span className="text-[11.5px] text-[#94A3B8] text-center">
+                  {selectedJobIds.length === 0
+                    ? "Select up to 5 jobs to start bulk auto apply."
+                    : `This will use ${selectedJobIds.length.toString().padStart(2, "0")} application${
+                        selectedJobIds.length === 1 ? "" : "s"
+                      } from your quota.`}
+                </span>
               </div>
             </div>
 

@@ -24,7 +24,7 @@ const ApplicationSettings = () => {
     const [resumeTailoring, setResumeTailoring] = useState('job-specific'); // 'original' | 'job-specific'
     const [autoApproveEdits, setAutoApproveEdits] = useState(true); // true | false
     const [automationMode, setAutomationMode] = useState('automatic'); // 'automatic' | 'review-before-submit'
-    const [coverLetterMode, setCoverLetterMode] = useState('auto-generate'); // 'auto-generate' | 'none'
+     // 'auto-generate' | 'none'
     const [questionMode, setQuestionMode] = useState('saved-answers'); // 'saved-answers' | 'ask-when-needed'
 
     const [isHoveredContinue, setIsHoveredContinue] = useState(false);
@@ -49,9 +49,7 @@ const ApplicationSettings = () => {
         } else if (savedState.reviewBeforeSubmit !== undefined) {
             setAutomationMode(savedState.reviewBeforeSubmit ? 'review-before-submit' : 'automatic');
         }
-        if (savedState.coverLetterMode) {
-            setCoverLetterMode(savedState.coverLetterMode);
-        }
+        
         if (savedState.questionMode) {
             setQuestionMode(savedState.questionMode);
         }
@@ -84,7 +82,7 @@ const ApplicationSettings = () => {
             autoApproveEdits: autoApproveEdits !== null ? autoApproveEdits : true,
             reviewBeforeSubmit: automationMode === 'review-before-submit',
             automationMode: automationMode || 'automatic',
-            coverLetterMode: coverLetterMode || 'auto-generate',
+            
             questionMode: questionMode || 'saved-answers',
         });
 
@@ -791,76 +789,7 @@ const ApplicationSettings = () => {
                                 </div>
                             </div>
 
-                            {/* SECTION 3: COVER LETTER */}
-                            <div>
-                                <label style={styles.sectionLabel}>COVER LETTER</label>
-                                <div style={styles.optionsContainer}>
-                                    <div
-                                        style={styles.radioCard(coverLetterMode === 'auto-generate')}
-                                        onClick={() => setCoverLetterMode('auto-generate')}
-                                    >
-                                        <div style={styles.radioCircle(coverLetterMode === 'auto-generate')}>
-                                            {coverLetterMode === 'auto-generate' && <div style={styles.radioDot} />}
-                                        </div>
-                                        <div style={styles.optionContent}>
-                                            <p style={styles.optionTitle}>Auto-generate cover letters</p>
-                                            <p style={styles.optionSubtitle}>
-                                                Create a tailored cover letter for each job using your profile and the
-                                                job description.
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    <div
-                                        style={styles.radioCard(coverLetterMode === 'none')}
-                                        onClick={() => setCoverLetterMode('none')}
-                                    >
-                                        <div style={styles.radioCircle(coverLetterMode === 'none')}>
-                                            {coverLetterMode === 'none' && <div style={styles.radioDot} />}
-                                        </div>
-                                        <div style={styles.optionContent}>
-                                            <p style={styles.optionTitle}>Don't include cover letters</p>
-                                            <p style={styles.optionSubtitle}>Only submit your resume.</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* SECTION 4: APPLICATION QUESTIONS */}
-                            <div>
-                                <label style={styles.sectionLabel}>APPLICATION QUESTIONS</label>
-                                <div style={styles.optionsContainer}>
-                                    <div
-                                        style={styles.radioCard(questionMode === 'saved-answers')}
-                                        onClick={() => setQuestionMode('saved-answers')}
-                                    >
-                                        <div style={styles.radioCircle(questionMode === 'saved-answers')}>
-                                            {questionMode === 'saved-answers' && <div style={styles.radioDot} />}
-                                        </div>
-                                        <div style={styles.optionContent}>
-                                            <p style={styles.optionTitle}>Use saved answers</p>
-                                            <p style={styles.optionSubtitle}>
-                                                Use your verified profile answers for supported questions.
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    <div
-                                        style={styles.radioCard(questionMode === 'ask-when-needed')}
-                                        onClick={() => setQuestionMode('ask-when-needed')}
-                                    >
-                                        <div style={styles.radioCircle(questionMode === 'ask-when-needed')}>
-                                            {questionMode === 'ask-when-needed' && <div style={styles.radioDot} />}
-                                        </div>
-                                        <div style={styles.optionContent}>
-                                            <p style={styles.optionTitle}>Ask me when needed</p>
-                                            <p style={styles.optionSubtitle}>
-                                                Pause when a question needs information that is not already saved.
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                           
 
                             {/* CONTINUE BUTTON */}
                             <button

@@ -3,12 +3,13 @@ import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
 import EnhancedResumeViewer from "../components/EnhancedResumeViewer";
+import ResumeApplicationDetails from "../components/ResumeApplicationDetails";
+import NeedsActionModal from "../components/NeedsActionModal";
 import {
   getStoredUser,
   getOnboardingProfile,
   getOnboardingState,
   getEnhancedResume,
-  getScoreForEnhancedResume,
   getCandidateId,
   getStoredResumeId,
   getJobId,
@@ -44,6 +45,18 @@ import amazonLogo from "../assets/amazon.svg";
 import mapIcon from "../assets/map.svg";
 import shopifyLogo from "../assets/shopify.svg";
 import tickIcon from "../assets/tick.svg";
+
+// Helper to identify static / placeholder dummy logos that should never be rendered
+const isStaticLogo = (logoUrl) => {
+  if (!logoUrl || typeof logoUrl !== "string") return true;
+  return (
+    logoUrl.includes("ai.svg") ||
+    logoUrl.includes("amazon") ||
+    logoUrl.includes("google.svg") ||
+    logoUrl.includes("microsoft.svg") ||
+    logoUrl.includes("shopify.svg")
+  );
+};
 
 // Verified tick icon
 const VerifiedTick = () => (
@@ -302,9 +315,13 @@ const transformMatchToJob = (match, index = 0) => {
               : null;
 
   const matchPercent =
-    rawScore !== null && !isNaN(rawScore)
-      ? Math.min(100, Math.max(1, Math.round(Number(rawScore))))
-      : null;
+  rawScore !== null &&
+  rawScore !== undefined &&
+  Number.isFinite(Number(rawScore)) &&
+  Number(rawScore) >= 0 &&
+  Number(rawScore) <= 100
+    ? Number(rawScore)
+    : null;
 
   let logo = match.logo || match.companyLogo || match.logo_url || null;
   if (isStaticLogo(logo)) {
@@ -485,7 +502,7 @@ const getMatchPercent = (job) => {
 const getMatchLabel = (job) => {
   const percent = getMatchPercent(job);
   if (percent > 0) {
-    return `${Number.isInteger(percent) ? percent : Math.round(percent)}% match`;
+    return `${percent}% match`;
   }
   return job?.match || "ATS Match";
 };
@@ -563,6 +580,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [userName, setUserName] = useState("");
   const [selectedAppTab, setSelectedAppTab] = useState("All");
+  const [selectedResumeId, setSelectedResumeId] = useState(null);
   const [selectedJobModal, setSelectedJobModal] = useState(null);
   const [isLoadingJobDetails, setIsLoadingJobDetails] = useState(false);
   const [isJobSaved, setIsJobSaved] = useState(false);
@@ -670,7 +688,7 @@ const Dashboard = () => {
   // Dynamic User Applications State (Loaded via GET /api/applications?tab=...&page=...&size=...)
   const [applications, setApplications] = useState([]);
   const [appPage, setAppPage] = useState(0);
-  const [appPageSize] = useState(10);
+  const [appPageSize] = useState(5);
   const [appTotalPages, setAppTotalPages] = useState(1);
   const [appTotalItems, setAppTotalItems] = useState(0);
   const [appTabCounts, setAppTabCounts] = useState(() => {
@@ -701,8 +719,6 @@ const Dashboard = () => {
   const [enhancedResultsMap, setEnhancedResultsMap] = useState({});
   const [showEnhancedModal, setShowEnhancedModal] = useState(false);
   const [copiedResume, setCopiedResume] = useState(false);
-  const [isUpdatingAts, setIsUpdatingAts] = useState(false);
-  const [updatedAtsScores, setUpdatedAtsScores] = useState({});
 
   // Dynamic ATS Resume Matches Status from GET /api/resumes/matches/status
   const [matchStatus, setMatchStatus] = useState({
@@ -725,6 +741,13 @@ const Dashboard = () => {
   });
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(!dashboardMetrics);
 
+  const [needsActionApp, setNeedsActionApp] = useState(null);
+
+  const handleOpenNeedsActionModal = useCallback((app, e) => {
+    if (e) e.stopPropagation();
+    setNeedsActionApp(app);
+  }, []);
+
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
 
   const showToast = useCallback((message, type = "success") => {
@@ -740,10 +763,10 @@ const Dashboard = () => {
     }
   }, [toast.show]);
 
-  // Fetch applications from GET /api/applications?tab={tab}&page={page}&size={size}
+  // Fetch applications from GET /api/applications?tab={tab}&page={page}&size={size} (All resumes)
+  // or GET /api/dashboard?resumeId={selectedResumeId} (Specific resume)
   const fetchApplicationsData = useCallback(
     async (tabName = selectedAppTab, pageNum = appPage, isPolling = false) => {
-      const tabParam = TAB_PARAM_MAP[tabName] || "all";
       if (!isPolling) {
         setIsLoadingApplications(true);
         setApplicationsError(null);
@@ -752,31 +775,134 @@ const Dashboard = () => {
       const reqSeq = ++appReqSeqRef.current;
 
       try {
-        const result = await getApplications({
-          tab: tabParam,
-          page: pageNum,
-          size: appPageSize,
-        });
+        if (!selectedResumeId) {
+          // --- MODE 1: All Resumes selected ---
+          // Use GET /api/applications?tab={tab}&page={page}&size={size}
+          const effectiveTab = TAB_PARAM_MAP[tabName] || "all";
+          const result = await getApplications({
+            tab: effectiveTab,
+            page: pageNum,
+            size: appPageSize,
+          });
 
-        // Prevent race conditions and stale responses
-        if (reqSeq !== appReqSeqRef.current) return;
+          if (reqSeq !== appReqSeqRef.current) return;
 
-        if (result) {
-          setApplications(Array.isArray(result.items) ? result.items : []);
-          if (result.counts) {
-            setAppTabCounts(result.counts);
+          if (result) {
+            setApplications(Array.isArray(result.items) ? result.items : []);
+
+            if (result.counts) {
+              setAppTabCounts({
+                all: Number(result.counts.all ?? 0),
+                submitted: Number(result.counts.submitted ?? 0),
+                inProgress: Number(result.counts.inProgress ?? result.counts.in_progress ?? 0),
+                needsAction: Number(result.counts.needsAction ?? result.counts.needs_action ?? 0),
+                failed: Number(result.counts.failed ?? 0),
+                skipped: Number(result.counts.skipped ?? 0),
+              });
+            }
+
+            if (result.pagination) {
+              const pageIndex = typeof result.pagination.page === "number" ? result.pagination.page : pageNum;
+              const totalItems = typeof result.pagination.totalItems === "number" ? result.pagination.totalItems : (result.items?.length || 0);
+              const totalPages = typeof result.pagination.totalPages === "number" ? result.pagination.totalPages : Math.max(1, Math.ceil(totalItems / appPageSize));
+
+              setAppPage(pageIndex);
+              setAppTotalPages(totalPages);
+              setAppTotalItems(totalItems);
+            }
           }
-          if (result.pagination) {
-            setAppPage(result.pagination.page ?? pageNum);
-            setAppTotalPages(result.pagination.totalPages ?? 1);
-            setAppTotalItems(result.pagination.totalItems ?? (result.items || []).length);
-          }
+        } else {
+          // --- MODE 2: Specific Resume selected ---
+          // Use GET /api/dashboard?resumeId={selectedResumeId}
+          const data = await getDashboardData(selectedResumeId);
+
+          if (reqSeq !== appReqSeqRef.current) return;
+
+          const rawCounts = data?.applicationCounts || {};
+          setAppTabCounts({
+            all: Number(rawCounts.all ?? 0),
+            submitted: Number(rawCounts.submitted ?? 0),
+            inProgress: Number(rawCounts.inProgress ?? rawCounts.in_progress ?? 0),
+            needsAction: Number(rawCounts.needsAction ?? rawCounts.needs_action ?? 0),
+            failed: Number(rawCounts.failed ?? 0),
+            skipped: Number(rawCounts.skipped ?? 0),
+          });
+
+          const allApplications = Array.isArray(data?.recentApplications)
+            ? data.recentApplications
+            : Array.isArray(data?.applications)
+            ? data.applications
+            : [];
+
+          // Match the status names used by the existing application tabs
+          const normalizeStatus = (status) => {
+            const value = String(status || "")
+              .toUpperCase()
+              .replace(/[\s-]+/g, "_");
+
+            if (value === "IN_PROGRESS" || value === "QUEUED" || value === "PREPARING") {
+              return "IN_PROGRESS";
+            }
+            if (value === "NEEDS_ACTION") return "NEEDS_ACTION";
+            if (value === "SUBMITTED" || value === "COMPLETED" || value === "SUCCESS" || value === "APPLIED") return "SUBMITTED";
+            if (value === "FAILED" || value === "ERROR") return "FAILED";
+            if (value === "SKIPPED") return "SKIPPED";
+
+            return value;
+          };
+
+          const tabStatusMap = {
+            All: "all",
+            Submitted: "SUBMITTED",
+            "In Progress": "IN_PROGRESS",
+            "Needs Action": "NEEDS_ACTION",
+            Failed: "FAILED",
+            Skipped: "SKIPPED",
+          };
+
+          const selectedStatus = tabStatusMap[tabName] || "all";
+          const filteredApplications =
+            selectedStatus === "all"
+              ? allApplications
+              : allApplications.filter(
+                  (application) =>
+                    normalizeStatus(application.status || application.tab || application.state) ===
+                    selectedStatus
+                );
+
+          const tabCountKeyMap = {
+            All: "all",
+            Submitted: "submitted",
+            "In Progress": "inProgress",
+            "Needs Action": "needsAction",
+            Failed: "failed",
+            Skipped: "skipped",
+          };
+          const countKey = tabCountKeyMap[tabName] || "all";
+          const expectedCount = typeof rawCounts[countKey] === "number" ? rawCounts[countKey] : filteredApplications.length;
+          const totalItems = Math.max(filteredApplications.length, expectedCount);
+          const totalPages = Math.max(1, Math.ceil(totalItems / appPageSize));
+          const safePage = Math.min(pageNum, Math.max(0, totalPages - 1));
+          const startIndex = safePage * appPageSize;
+          const paginatedApplications = filteredApplications.slice(
+            startIndex,
+            startIndex + appPageSize
+          );
+
+          setApplications(paginatedApplications);
+          setAppTotalItems(totalItems);
+          setAppTotalPages(totalPages);
+          setAppPage(safePage);
         }
-      } catch (err) {
+      } catch (error) {
         if (reqSeq !== appReqSeqRef.current) return;
-        console.error("[Dashboard] Error fetching applications:", err);
+
+        console.error("[Dashboard] Applications fetch failed:", error);
+
         if (!isPolling) {
-          setApplicationsError(err?.message || "Failed to load applications.");
+          setApplicationsError(
+            error?.message || "Failed to load applications."
+          );
         }
       } finally {
         if (reqSeq === appReqSeqRef.current && !isPolling) {
@@ -784,24 +910,30 @@ const Dashboard = () => {
         }
       }
     },
-    [selectedAppTab, appPage, appPageSize]
+    [selectedAppTab, appPage, appPageSize, selectedResumeId]
   );
 
   // Fetch applications on tab or page change
   useEffect(() => {
-    fetchApplicationsData(selectedAppTab, appPage, false);
-  }, [selectedAppTab, appPage, fetchApplicationsData]);
+  fetchApplicationsData(selectedAppTab, appPage, false);
+}, [selectedAppTab, appPage, selectedResumeId, fetchApplicationsData]);
 
   // While "In Progress" is open, refresh every 5-10s using polling
-  useEffect(() => {
-    if (selectedAppTab !== "In Progress") return;
+  // Poll applications while "In Progress" is selected
+useEffect(() => {
+  if (selectedAppTab !== "In Progress") return;
 
-    const intervalId = setInterval(() => {
-      fetchApplicationsData("In Progress", appPage, true);
-    }, 6000);
+  const intervalId = setInterval(() => {
+    fetchApplicationsData("In Progress", appPage, true);
+  }, 6000);
 
-    return () => clearInterval(intervalId);
-  }, [selectedAppTab, appPage, fetchApplicationsData]);
+  return () => clearInterval(intervalId);
+}, [
+  selectedAppTab,
+  appPage,
+  selectedResumeId,
+  fetchApplicationsData,
+]);
 
   // Reload jobs and dashboard data when matching finishes or actions occur
   const reloadJobsAndDashboard = useCallback(async () => {
@@ -1311,6 +1443,9 @@ const Dashboard = () => {
     };
   }, []);
 
+
+
+
   // 2. Fetch Dynamic Billing Status from API
   useEffect(() => {
     let isMounted = true;
@@ -1479,6 +1614,11 @@ const Dashboard = () => {
     ];
   }, [dashboardMetrics, billingInfo]);
 
+  // Dedicated Applications Remaining Card (from API-driven stats)
+  const applicationsRemainingCard = useMemo(() => {
+    return statsCards.find((card) => card.id === "applications-remaining") || statsCards[3];
+  }, [statsCards]);
+
   // Dynamic Application Tabs with Counts (From GET /api/applications counts)
   const applicationTabs = useMemo(() => {
     return [
@@ -1565,63 +1705,7 @@ const Dashboard = () => {
     URL.revokeObjectURL(url);
   };
 
-  const handleGetUpdatedAts = async () => {
-    if (!selectedJobModal || isUpdatingAts) return;
-    const jobId = getJobId(selectedJobModal);
-    const resumeId = getStoredResumeId();
-    const enhResult = enhancedResultsMap[jobId];
-    const enhResumeText =
-      enhResult?.EnhResume ||
-      enhResult?.enhResume ||
-      enhResult?.enhanced_resume ||
-      enhResult?.enhancedResume ||
-      "";
 
-    if (!jobId || !resumeId || !enhResumeText) {
-      setEnhanceError(
-        "Missing job details, resume ID, or enhanced resume text to calculate updated ATS score."
-      );
-      return;
-    }
-
-    try {
-      setIsUpdatingAts(true);
-      setEnhanceError(null);
-
-      const payload = {
-        JDid: jobId,
-        ResumeID: resumeId,
-        EnhResumeText: enhResumeText,
-      };
-
-      const response = await getScoreForEnhancedResume(payload);
-      const rawScore =
-        response?.EnhATS ??
-        response?.score_data?.overall_score ??
-        response?.score;
-      if (rawScore !== undefined && rawScore !== null && !isNaN(Number(rawScore))) {
-        const parsedScore = Math.min(
-          100,
-          Math.max(1, Math.round(Number(rawScore)))
-        );
-        setUpdatedAtsScores((prev) => ({
-          ...prev,
-          [jobId]: parsedScore,
-        }));
-      }
-    } catch (err) {
-      console.error("[Dashboard] Error calculating updated ATS score:", err);
-      const errMsg =
-        err?.response?.data?.message ||
-        err?.response?.data?.detail ||
-        err?.response?.data?.error ||
-        err?.message ||
-        "Unable to fetch updated ATS score. Please try again.";
-      setEnhanceError(errMsg);
-    } finally {
-      setIsUpdatingAts(false);
-    }
-  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#F8FAFC]">
@@ -1636,18 +1720,90 @@ const Dashboard = () => {
         {/* Dashboard Main Content */}
         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-7 flex flex-col gap-6 w-full bg-[#F8FAFC]">
 
-          {/* Welcome Header & Match Status Indicator */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="flex flex-col gap-1">
-              <h1 className="text-[20px] md:text-[22px] font-bold text-black tracking-tight">
-                Welcome back, {userName || "User"}!
-              </h1>
-              <p className="text-[13px] text-[#64748B]">
-                Your job search is running. We're finding, matching and applying to the best opportunities for you.
-              </p>
-            </div>
+         
+{/* 1. Welcome Message + Applied by Resume + Applications Remaining */}
+<div className="grid w-full grid-cols-1 items-stretch gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(250px,0.9fr)_minmax(280px,1fr)]">
 
-          </div>
+  {/* Welcome Message */}
+  <div className="flex min-w-0 flex-col justify-center gap-1">
+    <h1 className="text-[20px] font-bold tracking-tight text-black md:text-[22px]">
+      Welcome back, {userName || "User"}!
+    </h1>
+
+    <p className="text-[13px] text-[#64748B] md:text-[14px]">
+      Your job search is running. We're finding, matching and applying to the best opportunities for you.
+    </p>
+  </div>
+
+  {/* Applied by Resume Card */}
+  <div className="flex min-w-0 items-stretch">
+    <ResumeApplicationDetails
+  resumeApplications={dashboardMetrics?.resumeApplications ?? []}
+  onResumeChange={(resumeId) => {
+    setSelectedResumeId(resumeId);
+    setAppPage(0);
+  }}
+/>
+  </div>
+
+  {/* Applications Remaining Card */}
+ 
+{/* Applications Remaining Card */}
+{applicationsRemainingCard && (
+  <div className="flex min-w-0 flex-col gap-4 rounded-[20px] border border-[#E2E8F0] bg-white p-4 shadow-sm transition-all duration-200 hover:shadow-md sm:p-5">
+
+    {/* Card Title */}
+    <div className="flex min-w-0 flex-wrap items-center gap-1">
+      <span
+        className="text-sm font-regular text-[#0F172A] sm:text-base"
+        title={
+          applicationsRemainingCard.fullTitle ||
+          applicationsRemainingCard.title
+        }
+      >
+        {applicationsRemainingCard.title}
+      </span>
+
+      {applicationsRemainingCard.planName && (
+        <span className="text-sm font-bold text-[#0F172A] sm:text-base">
+          ({applicationsRemainingCard.planName})
+        </span>
+      )}
+    </div>
+
+    {/* Icon and Count Below Title */}
+    <div className="mt-4 flex items-center gap-3">
+      <div
+        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full"
+        style={{
+          backgroundColor: applicationsRemainingCard.iconBg,
+        }}
+      >
+        <img
+          src={applicationsRemainingCard.icon}
+          alt={
+            applicationsRemainingCard.fullTitle ||
+            applicationsRemainingCard.title
+          }
+          className="h-5 w-5 object-contain"
+        />
+      </div>
+
+      <div className="flex min-w-0 flex-col">
+        <span className="text-2xl font-bold leading-tight tracking-tight text-[#0F172A]">
+          {applicationsRemainingCard.value}
+        </span>
+
+        <span className="text-sm text-[#64748B] mt-2">
+          {applicationsRemainingCard.supportingText}
+        </span>
+      </div>
+    </div>
+  </div>
+)}
+
+</div>
+
 
           {/* Conditional Match Status Banner: No Primary Resume */}
           {matchStatus.hasPrimaryResume === false && (
@@ -1718,48 +1874,7 @@ const Dashboard = () => {
             </div>
           )}
 
-          {/* 1. Dashboard Statistics Cards (Dynamic From API) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4.5 w-full">
-            {statsCards.map((card) => (
-              <div
-                key={card.id}
-                className="p-5 rounded-[20px] bg-white border border-[#E2E8F0] shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex items-center gap-4 transition-all duration-200 hover:shadow-md"
-              >
-                {/* Icon Box */}
-                <div
-                  className="w-[48px] h-[48px] rounded-[14px] flex items-center justify-center shrink-0"
-                  style={{ backgroundColor: card.iconBg }}
-                >
-                  <img
-                    src={card.icon}
-                    alt={card.fullTitle || card.title}
-                    className="w-[24px] h-[24px] object-contain"
-                  />
-                </div>
-
-                {/* Text Content */}
-                <div className="flex flex-col min-w-0 flex-1">
-                  <span
-                    className="text-[13px] font-medium text-[#64748B] leading-snug line-clamp-2"
-                    title={card.fullTitle || card.title}
-                  >
-                    {card.title}
-                    {card.planName && (
-                      <span className="font-bold text-[#0F172A] ml-1">
-                        ({card.planName})
-                      </span>
-                    )}
-                  </span>
-                  <span className="text-[26px] font-bold text-[#0F172A] tracking-tight leading-tight my-0.5">
-                    {card.value}
-                  </span>
-                  <span className="text-[12px] text-[#94A3B8] truncate">
-                    {card.supportingText}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
+          
 
           {/* 3. Recent Applications Section (Dynamic From GET /api/dashboard recentApplications) */}
           <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-6 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col gap-5 w-full mt-2">
@@ -1881,22 +1996,23 @@ const Dashboard = () => {
                         <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
                           Company
                         </th>
-                        <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                        <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider relative left-4">
+                          
                           Job Title
                         </th>
                         <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
                           ATS Match
                         </th>
-                        <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                       <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider relative left-7">
                           Resume
                         </th>
-                        <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                        <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider relative left-7">
                           Status
                         </th>
-                        <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                        <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider relative left-8">
                           Posted
                         </th>
-                        <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider text-right pr-2">
+                        <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider text-center">
                           Actions
                         </th>
                       </tr>
@@ -2085,16 +2201,6 @@ const Dashboard = () => {
                           statusLabel: statusLabel,
                         };
 
-                        const backendMessage =
-                          app.message ||
-                          app.backendMessage ||
-                          app.actionMessage ||
-                          app.errorMessage ||
-                          app.statusMessage ||
-                          app.notes ||
-                          app.reason ||
-                          "";
-
                         const isAppActionLoading = applicationId ? actionLoadingIds[applicationId] : null;
                         const isRetrying = isAppActionLoading === "retry";
                         const isApproving = isAppActionLoading === "approve";
@@ -2157,14 +2263,6 @@ const Dashboard = () => {
                                   )}
                                 </div>
                               )}
-                              {normStatus === "NEEDS_ACTION" && backendMessage && (
-                                <div className="mt-1 flex items-center gap-1.5 text-[11.5px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/80 w-fit max-w-full">
-                                  <svg className="w-3.5 h-3.5 shrink-0 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                  </svg>
-                                  <span className="truncate">{backendMessage}</span>
-                                </div>
-                              )}
                             </td>
 
                             {/* ATS Match */}
@@ -2203,13 +2301,34 @@ const Dashboard = () => {
                             </td>
 
                             {/* Status */}
-                            <td className="py-4 px-3">
-                              <div className="flex items-center gap-2">
-                                <span className={`w-2 h-2 rounded-full ${dotColor}`} />
-                                <span className={`text-[13px] font-medium ${textColor}`}>
-                                  {statusLabel}
-                                </span>
-                              </div>
+                            <td
+                              className="py-4 px-3"
+                              onClick={(e) => {
+                                if (normStatus === "NEEDS_ACTION") {
+                                  handleOpenNeedsActionModal(app, e);
+                                }
+                              }}
+                            >
+                              {normStatus === "NEEDS_ACTION" ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleOpenNeedsActionModal(app, e)}
+                                  className="group flex items-center gap-2 text-left cursor-pointer hover:opacity-85 transition-all"
+                                  title="Click to complete required questions"
+                                >
+                                  <span className={`w-2 h-2 rounded-full ${dotColor} group-hover:scale-110 transition-transform`} />
+                                  <span className={`text-[13px] font-medium ${textColor} underline decoration-dotted underline-offset-4 decoration-amber-400/80 group-hover:decoration-solid`}>
+                                    {statusLabel}
+                                  </span>
+                                </button>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <span className={`w-2 h-2 rounded-full ${dotColor}`} />
+                                  <span className={`text-[13px] font-medium ${textColor}`}>
+                                    {statusLabel}
+                                  </span>
+                                </div>
+                              )}
                             </td>
 
                             {/* Posted Date */}
@@ -2218,20 +2337,9 @@ const Dashboard = () => {
                             </td>
 
                             {/* Actions */}
-                            <td className="py-4 pl-3 text-right pr-2">
+                            <td className="py-4 px-3 text-center">
                               {normStatus === "NEEDS_ACTION" ? (
-                                <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-                                  {/* View Resume */}
-                                  <button
-                                    type="button"
-                                    onClick={(e) => handleViewResume(app, e)}
-                                    className="h-[30px] px-2.5 rounded-[8px] border border-slate-200 bg-white text-[12px] font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all inline-flex items-center gap-1 cursor-pointer active:scale-95"
-                                    title="View Resume"
-                                  >
-                                    <DocumentIcon color="#475569" />
-                                    <span>Resume</span>
-                                  </button>
-
+                                <div className="flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                                   {/* Approve */}
                                   <button
                                     type="button"
@@ -2271,7 +2379,7 @@ const Dashboard = () => {
                                   </button>
                                 </div>
                               ) : normStatus === "FAILED" || normStatus === "ERROR" ? (
-                                <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                                   {/* Retry */}
                                   <button
                                     type="button"
@@ -2311,7 +2419,7 @@ const Dashboard = () => {
                                   </button>
                                 </div>
                               ) : normStatus === "SKIPPED" ? (
-                                <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                                   {/* Retry for Skipped Application */}
                                   <button
                                     type="button"
@@ -2338,7 +2446,7 @@ const Dashboard = () => {
                                   </button>
                                 </div>
                               ) : normStatus === "QUEUED" ? (
-                                <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                                   {/* Skip */}
                                   <button
                                     type="button"
@@ -2353,7 +2461,9 @@ const Dashboard = () => {
                                   </button>
                                 </div>
                               ) : (
-                                <span className="text-[13px] text-slate-300 font-normal pr-2">—</span>
+                                <div className="flex items-center justify-center">
+                                  <span className="text-[13px] text-slate-300 font-normal leading-none">—</span>
+                                </div>
                               )}
                             </td>
                           </tr>
@@ -2422,8 +2532,14 @@ const Dashboard = () => {
           jobs.find((j) => getJobId(j) === selectedJobId)?.rawMatch ||
           null;
 
+        const enhResult = selectedJobId ? enhancedResultsMap[selectedJobId] : null;
+        const hasEnhanced = !!enhResult;
+
+        // Old / Original ATS score (from enhance endpoint or initial job match)
         const rawInitialScore =
-          typeof currentMatch?.overall_score === "number"
+          enhResult?.originalScore ??
+          enhResult?.original_score ??
+          (typeof currentMatch?.overall_score === "number"
             ? currentMatch.overall_score
             : typeof currentMatch?.score_data?.overall_score === "number"
               ? currentMatch.score_data.overall_score
@@ -2435,29 +2551,49 @@ const Dashboard = () => {
                     ? selectedJobModal.rawScore
                     : typeof selectedJobModal.matchPercent === "number"
                       ? selectedJobModal.matchPercent
-                      : null;
+                      : null);
 
-        const activeAtsScore =
-          selectedJobId && updatedAtsScores[selectedJobId] !== undefined
-            ? updatedAtsScores[selectedJobId]
-            : rawInitialScore !== null && !isNaN(rawInitialScore)
-              ? Math.min(100, Math.max(1, Math.round(Number(rawInitialScore))))
-              : null;
+        const oldAtsScore =
+          rawInitialScore !== null && rawInitialScore !== undefined && !isNaN(Number(rawInitialScore))
+            ? Number(rawInitialScore)
+            : null;
 
-        const scoreData =
-          currentMatch?.score_data || selectedJobModal.scoreData || null;
-        const missingKeywords = Array.isArray(scoreData?.missing_keywords)
-          ? scoreData.missing_keywords.filter(Boolean)
+        // New / Enhanced ATS score (from enhance endpoint)
+        const rawEnhancedScore =
+          enhResult?.enhancedScore ??
+          enhResult?.enhanced_score ??
+          null;
+
+        const newAtsScore =
+          rawEnhancedScore !== null && rawEnhancedScore !== undefined && !isNaN(Number(rawEnhancedScore))
+            ? Number(rawEnhancedScore)
+            : null;
+
+        const activeAtsScore = (hasEnhanced && newAtsScore !== null) ? newAtsScore : oldAtsScore;
+
+        const activeScoreData =
+          enhResult?.score_data ||
+          currentMatch?.score_data ||
+          selectedJobModal.scoreData ||
+          null;
+
+        const matchCategory =
+          activeAtsScore !== null
+            ? (activeAtsScore >= 80 ? "Strong match" : activeAtsScore >= 60 ? "Moderate match" : "Lower match")
+            : null;
+
+        const missingKeywords = Array.isArray(activeScoreData?.missing_keywords)
+          ? activeScoreData.missing_keywords.filter(Boolean)
           : [];
         const missingRequiredSkills = Array.isArray(
-          scoreData?.missing_required_skills
+          activeScoreData?.missing_required_skills
         )
-          ? scoreData.missing_required_skills.filter(Boolean)
+          ? activeScoreData.missing_required_skills.filter(Boolean)
           : [];
         const missingPreferredSkills = Array.isArray(
-          scoreData?.missing_preferred_skills
+          activeScoreData?.missing_preferred_skills
         )
-          ? scoreData.missing_preferred_skills.filter(Boolean)
+          ? activeScoreData.missing_preferred_skills.filter(Boolean)
           : [];
 
         // Check if this job modal corresponds to an already applied application
@@ -2961,101 +3097,77 @@ const Dashboard = () => {
 
 
                   {/* ATS Match Box */}
-                  <div className="rounded-[16px] border border-slate-200/80 bg-[#F8FAFC]/70 p-4.5 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-4 min-w-0">
-                      <div className="relative w-[68px] h-[68px] shrink-0 flex items-center justify-center">
-                        <svg
-                          className="w-full h-full -rotate-90"
-                          viewBox="0 0 36 36"
-                        >
-                          <path
-                            className="text-slate-200"
-                            strokeWidth="3.2"
-                            stroke="currentColor"
-                            fill="none"
-                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                          />
-                          {activeAtsScore !== null && (
-                            <path
-                              className="text-[#4F46E5]"
-                              strokeDasharray={`${activeAtsScore}, 100`}
-                              strokeWidth="3.2"
-                              strokeLinecap="round"
-                              stroke="currentColor"
-                              fill="none"
-                              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                            />
-                          )}
-                        </svg>
-                        <div className="absolute inset-0 flex flex-col items-center justify-center">
-                          <span className="text-[14px] font-bold text-[#0F172A] leading-none">
-                            {activeAtsScore !== null
-                              ? `${activeAtsScore}%`
-                              : "N/A"}
-                          </span>
-                          <span className="text-[9px] text-[#64748B] font-medium leading-none mt-0.5">
-                            Match
+                  {(() => {
+                    const isEnhanced = hasEnhanced && newAtsScore !== null;
+                    const activeScore = isEnhanced ? newAtsScore : oldAtsScore;
+
+                    return (
+                      <div className="rounded-[18px] border border-slate-200/90 bg-white p-4.5 sm:p-5 shadow-xs">
+                        {/* Header Row: Title */}
+                        <div className="flex items-center justify-between mb-3.5">
+                          <h3 className="text-[15px] font-bold text-[#0F172A] tracking-tight">
+                            ATS Match
+                          </h3>
+                        </div>
+
+                        {/* Body: Single Centered Ring */}
+                        <div className="flex flex-col items-center justify-center text-center py-1">
+                          <div className="relative w-[76px] h-[76px] flex items-center justify-center">
+                            <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                              <path
+                                className="text-slate-100"
+                                strokeWidth="3.2"
+                                stroke="currentColor"
+                                fill="none"
+                                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                              />
+                              <path
+                                className={isEnhanced ? "text-[#4F46E5]" : "text-slate-400"}
+                                strokeDasharray={`${Number(activeScore) || 0}, 100`}
+                                strokeWidth="3.2"
+                                strokeLinecap="round"
+                                stroke="currentColor"
+                                fill="none"
+                                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                              />
+                            </svg>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center">
+                              <span className="text-[16px] font-bold text-[#0F172A] leading-none">
+                                {activeScore !== null ? `${activeScore}%` : "N/A"}
+                              </span>
+                              <span className="text-[9px] text-[#64748B] font-medium leading-none mt-0.5">
+                                Match
+                              </span>
+                            </div>
+                          </div>
+                          <span
+                            className={`mt-2.5 text-[11px] font-semibold px-2.5 py-0.5 rounded-full inline-block ${
+                              isEnhanced
+                                ? "bg-[#EEF2FF] text-[#4F46E5] border border-[#C7D2FE]"
+                                : "bg-slate-100 text-slate-600 border border-slate-200"
+                            }`}
+                          >
+                            {isEnhanced ? "Enhanced ATS" : "Original ATS"}
                           </span>
                         </div>
-                      </div>
 
-                      <div className="flex flex-col">
-                        <h3 className="text-[14.5px] font-bold text-[#0F172A]">
-                          ATS Match
-                        </h3>
-                        <p className="text-[12px] text-[#64748B] mt-0.5 leading-snug">
-                          {activeAtsScore !== null
-                            ? activeAtsScore >= 80
+                        {/* Footer Description */}
+                        <p className="text-[11.5px] text-[#64748B] mt-3 leading-relaxed text-center">
+                          {activeScore !== null
+                            ? Number(activeScore) >= 80
                               ? "Strong match based on your profile, skills, experience and preferences."
-                              : activeAtsScore >= 60
-                                ? isAlreadyApplied
-                                  ? "Moderate match based on your resume and role requirements."
-                                  : "Moderate match. Enhancing your resume can bridge key skill and keyword gaps."
-                                : isAlreadyApplied
-                                  ? "Lower match based on your resume and role requirements."
-                                  : "Lower match. Review identified gaps below or click Enhance Resume."
+                              : Number(activeScore) >= 60
+                                ? isEnhanced
+                                  ? "Moderate match based on your enhanced resume and role requirements."
+                                  : "Moderate match based on your profile, skills, experience and preferences."
+                                : isEnhanced
+                                  ? "Lower match based on your enhanced resume. Review remaining gaps below."
+                                  : "Lower match based on your profile, skills, experience and preferences."
                             : "ATS score unavailable for this job."}
                         </p>
                       </div>
-                    </div>
-
-                    {/* Get Updated ATS Button */}
-                    {enhancedResultsMap[selectedJobId] && (
-                      <button
-                        type="button"
-                        onClick={handleGetUpdatedAts}
-                        disabled={isUpdatingAts}
-                        className="px-4 py-2.5 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-[13px] font-semibold rounded-xl shadow-xs shrink-0 whitespace-nowrap transition-all active:scale-[0.98] cursor-pointer flex items-center gap-1.5"
-                      >
-                        {isUpdatingAts ? (
-                          <>
-                            <svg
-                              className="animate-spin w-3.5 h-3.5 text-white"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                            >
-                              <circle
-                                className="opacity-25"
-                                cx="12"
-                                cy="12"
-                                r="10"
-                                stroke="currentColor"
-                                strokeWidth="4"
-                              />
-                              <path
-                                className="opacity-75"
-                                fill="currentColor"
-                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                              />
-                            </svg>
-                            <span>Updating...</span>
-                          </>
-                        ) : (
-                          "Get Updated ATS"
-                        )}
-                      </button>
-                    )}
-                  </div>
+                    );
+                  })()}
 
                   {/* ATS Identified Gaps */}
                   {(missingRequiredSkills.length > 0 ||
@@ -3604,6 +3716,21 @@ const Dashboard = () => {
             </div>
           </div>
         )}
+
+      {/* Needs Action Questions Modal */}
+      {needsActionApp && (
+        <NeedsActionModal
+          application={needsActionApp}
+          onShowToast={showToast}
+          onClose={() => setNeedsActionApp(null)}
+          onSuccess={(result) => {
+            setNeedsActionApp(null);
+            showToast(result?.message || "Answers saved. The agent will retry automatically.", "success");
+            fetchApplicationsData(selectedAppTab, appPage, false);
+            window.dispatchEvent(new CustomEvent("applicationsUpdated"));
+          }}
+        />
+      )}
 
       {/* Floating Feedback Toast Notification */}
       {toast.show && (

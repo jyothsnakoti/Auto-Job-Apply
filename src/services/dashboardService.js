@@ -58,50 +58,48 @@ export const setStoredDashboardData = (data) => {
  *   topMatches: Array<Object>
  * }>}
  */
-export const getDashboardData = async () => {
+
+export const getDashboardData = async (resumeId = null) => {
   const url = DASHBOARD_ENDPOINTS?.GET || `${API_BASE_URL}/api/dashboard`;
 
+  // Add resumeId only when a specific resume is selected.
+  const config =
+    resumeId !== null && resumeId !== undefined
+      ? { params: { resumeId } }
+      : {};
+
   try {
-    console.log('[dashboardService] Fetching dashboard data from:', url);
-    const response = await apiClient.get(url);
+    console.log("[dashboardService] Fetching dashboard data:", {
+      url,
+      resumeId,
+    });
 
-    if (response && response.data) {
-      const data = response.data;
+    const response = await apiClient.get(url, config);
+    const data = response?.data;
+
+    if (!data) {
+      throw new Error("No data received from dashboard API");
+    }
+
+    // Cache only the All Resumes response.
+    // Do not overwrite global dashboard data with filtered data.
+    if (resumeId === null || resumeId === undefined) {
       setStoredDashboardData(data);
-      return data;
     }
 
-    throw new Error('No data received from dashboard API');
+    console.log("[dashboardService] Dashboard response:", data);
+
+    return data;
   } catch (error) {
-    console.warn('[dashboardService] apiClient.get failed, trying fallback fetchWithAuth:', error?.message);
-
-    try {
-      const res = await fetchWithAuth(url, {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json',
-        },
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setStoredDashboardData(data);
-        return data;
-      }
-    } catch (fallbackError) {
-      console.error('[dashboardService] Fallback fetch also failed:', fallbackError?.message);
-    }
-
-    // Return cached data if available on network error
-    const cached = getStoredDashboardData();
-    if (cached) {
-      console.info('[dashboardService] Returning cached dashboard data');
-      return cached;
-    }
+    console.error(
+      "[dashboardService] Dashboard API failed:",
+      error?.response?.data || error?.message
+    );
 
     throw error;
   }
 };
+
 
 export default {
   getDashboardData,

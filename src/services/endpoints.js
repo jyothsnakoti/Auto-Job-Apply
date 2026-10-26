@@ -145,6 +145,7 @@ export const PROFILE_ENDPOINTS = {
   UPDATE_WORK_PREFERENCES: `${API_BASE_URL}/api/profile/work-preferences`,
 };
 
+
 /* =========================================================
    RESUME API BASE URL
    ========================================================= */
@@ -209,6 +210,8 @@ export const APPLICATION_ENDPOINTS = {
   RETRY: (id) => `${API_BASE_URL}/api/applications/${id}/retry`,
   APPROVE: (id) => `${API_BASE_URL}/api/applications/${id}/approve`,
   SKIP: (id) => `${API_BASE_URL}/api/applications/${id}/skip`,
+  NEEDS_ACTION: `${API_BASE_URL}/api/applications?tab=needs_action`,
+  SUBMIT_NEEDS_ACTION_ANSWERS: (id) => `${API_BASE_URL}/api/applications/${id}/needs-action/answers`,
 };
 
 export const ENDPOINTS = {
@@ -221,8 +224,7 @@ export const ENDPOINTS = {
   ONBOARDING: ONBOARDING_ENDPOINTS,
 
   PROFILE: PROFILE_ENDPOINTS,
-
-  RESUME: RESUME_ENDPOINTS,
+RESUME: RESUME_ENDPOINTS,
   ENHANCE_RESUME: ENHANCE_RESUME_ENDPOINTS,
   MORE_JOBS: MORE_JOBS_ENDPOINTS,
   DASHBOARD: DASHBOARD_ENDPOINTS,
@@ -231,6 +233,7 @@ export const ENDPOINTS = {
   JOBS: JOB_ENDPOINTS,
   JOB: JOB_ENDPOINTS,
 };
+
 
 export default ENDPOINTS;
 

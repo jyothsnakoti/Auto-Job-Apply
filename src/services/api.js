@@ -14,9 +14,10 @@ export * from './enhanceResumeService';
 export * from './enhancedResumeDownloadService';
 export * from './enhancedAtsService';
 export * from './jobService';
+export * from '../utils/jobHelpers';
 export * from './dashboardService';
 export * from './applicationService';
-export * from './applicationService';
+export * from './applicationNeedsActionService';
 export {
   getStoredAuthToken,
   getStoredRefreshToken,
@@ -93,6 +94,7 @@ export { default as moreJobsService } from './moreJobsService';
 export { default as jobService } from './jobService';
 export { default as dashboardService } from './dashboardService';
 export { default as applicationService } from './applicationService';
+export { default as applicationNeedsActionService } from './applicationNeedsActionService';
 export { default as endpoints, ENDPOINTS, AUTH_ENDPOINTS, BILLING_ENDPOINTS, ONBOARDING_ENDPOINTS, PROFILE_ENDPOINTS, RESUME_ENDPOINTS, ENHANCE_RESUME_ENDPOINTS, MORE_JOBS_ENDPOINTS, JOB_ENDPOINTS, DASHBOARD_ENDPOINTS, APPLICATION_ENDPOINTS, API_BASE_URL, RESUME_API_BASE_URL } from './endpoints';
 
 export default apiClient;
