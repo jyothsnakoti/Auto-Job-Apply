@@ -159,7 +159,7 @@ export const getJobById = async (jobId) => {
   }
 
   const endpoint = JOB_ENDPOINTS?.GET_BY_ID?.(cleanId) || `${JOBS_API_URL}/${encodeURIComponent(cleanId)}`;
-  console.log(`[jobService] Calling GET /api/jobs/${cleanId} (Target: http://192.168.1.8:8081/api/jobs/${cleanId})`);
+  console.log(`[jobService] Calling GET /api/jobs/${cleanId} (Target: http://192.168.1.21:8081/api/jobs/${cleanId})`);
 
   try {
     const response = await apiClient.get(endpoint);

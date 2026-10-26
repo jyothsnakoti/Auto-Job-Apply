@@ -4,6 +4,7 @@ import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
 import EnhancedResumeViewer from "../components/EnhancedResumeViewer";
 import ResumeApplicationDetails from "../components/ResumeApplicationDetails";
+import NeedsActionModal from "../components/NeedsActionModal";
 import {
   getStoredUser,
   getOnboardingProfile,
@@ -739,6 +740,13 @@ const Dashboard = () => {
     return getStoredDashboardData() || null;
   });
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(!dashboardMetrics);
+
+  const [needsActionApp, setNeedsActionApp] = useState(null);
+
+  const handleOpenNeedsActionModal = useCallback((app, e) => {
+    if (e) e.stopPropagation();
+    setNeedsActionApp(app);
+  }, []);
 
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
 
@@ -1988,22 +1996,23 @@ useEffect(() => {
                         <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
                           Company
                         </th>
-                        <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                        <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider relative left-4">
+                          
                           Job Title
                         </th>
                         <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
                           ATS Match
                         </th>
-                        <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                       <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider relative left-7">
                           Resume
                         </th>
-                        <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                        <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider relative left-7">
                           Status
                         </th>
-                        <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                        <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider relative left-8">
                           Posted
                         </th>
-                        <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider text-right pr-2">
+                        <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider text-center">
                           Actions
                         </th>
                       </tr>
@@ -2192,16 +2201,6 @@ useEffect(() => {
                           statusLabel: statusLabel,
                         };
 
-                        const backendMessage =
-                          app.message ||
-                          app.backendMessage ||
-                          app.actionMessage ||
-                          app.errorMessage ||
-                          app.statusMessage ||
-                          app.notes ||
-                          app.reason ||
-                          "";
-
                         const isAppActionLoading = applicationId ? actionLoadingIds[applicationId] : null;
                         const isRetrying = isAppActionLoading === "retry";
                         const isApproving = isAppActionLoading === "approve";
@@ -2264,14 +2263,6 @@ useEffect(() => {
                                   )}
                                 </div>
                               )}
-                              {normStatus === "NEEDS_ACTION" && backendMessage && (
-                                <div className="mt-1 flex items-center gap-1.5 text-[11.5px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/80 w-fit max-w-full">
-                                  <svg className="w-3.5 h-3.5 shrink-0 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                  </svg>
-                                  <span className="truncate">{backendMessage}</span>
-                                </div>
-                              )}
                             </td>
 
                             {/* ATS Match */}
@@ -2310,13 +2301,34 @@ useEffect(() => {
                             </td>
 
                             {/* Status */}
-                            <td className="py-4 px-3">
-                              <div className="flex items-center gap-2">
-                                <span className={`w-2 h-2 rounded-full ${dotColor}`} />
-                                <span className={`text-[13px] font-medium ${textColor}`}>
-                                  {statusLabel}
-                                </span>
-                              </div>
+                            <td
+                              className="py-4 px-3"
+                              onClick={(e) => {
+                                if (normStatus === "NEEDS_ACTION") {
+                                  handleOpenNeedsActionModal(app, e);
+                                }
+                              }}
+                            >
+                              {normStatus === "NEEDS_ACTION" ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleOpenNeedsActionModal(app, e)}
+                                  className="group flex items-center gap-2 text-left cursor-pointer hover:opacity-85 transition-all"
+                                  title="Click to complete required questions"
+                                >
+                                  <span className={`w-2 h-2 rounded-full ${dotColor} group-hover:scale-110 transition-transform`} />
+                                  <span className={`text-[13px] font-medium ${textColor} underline decoration-dotted underline-offset-4 decoration-amber-400/80 group-hover:decoration-solid`}>
+                                    {statusLabel}
+                                  </span>
+                                </button>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <span className={`w-2 h-2 rounded-full ${dotColor}`} />
+                                  <span className={`text-[13px] font-medium ${textColor}`}>
+                                    {statusLabel}
+                                  </span>
+                                </div>
+                              )}
                             </td>
 
                             {/* Posted Date */}
@@ -2325,20 +2337,9 @@ useEffect(() => {
                             </td>
 
                             {/* Actions */}
-                            <td className="py-4 pl-3 text-right pr-2">
+                            <td className="py-4 px-3 text-center">
                               {normStatus === "NEEDS_ACTION" ? (
-                                <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-                                  {/* View Resume */}
-                                  <button
-                                    type="button"
-                                    onClick={(e) => handleViewResume(app, e)}
-                                    className="h-[30px] px-2.5 rounded-[8px] border border-slate-200 bg-white text-[12px] font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all inline-flex items-center gap-1 cursor-pointer active:scale-95"
-                                    title="View Resume"
-                                  >
-                                    <DocumentIcon color="#475569" />
-                                    <span>Resume</span>
-                                  </button>
-
+                                <div className="flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                                   {/* Approve */}
                                   <button
                                     type="button"
@@ -2378,7 +2379,7 @@ useEffect(() => {
                                   </button>
                                 </div>
                               ) : normStatus === "FAILED" || normStatus === "ERROR" ? (
-                                <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                                   {/* Retry */}
                                   <button
                                     type="button"
@@ -2418,7 +2419,7 @@ useEffect(() => {
                                   </button>
                                 </div>
                               ) : normStatus === "SKIPPED" ? (
-                                <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                                   {/* Retry for Skipped Application */}
                                   <button
                                     type="button"
@@ -2445,7 +2446,7 @@ useEffect(() => {
                                   </button>
                                 </div>
                               ) : normStatus === "QUEUED" ? (
-                                <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                                   {/* Skip */}
                                   <button
                                     type="button"
@@ -2460,7 +2461,9 @@ useEffect(() => {
                                   </button>
                                 </div>
                               ) : (
-                                <span className="text-[13px] text-slate-300 font-normal pr-2">—</span>
+                                <div className="flex items-center justify-center">
+                                  <span className="text-[13px] text-slate-300 font-normal leading-none">—</span>
+                                </div>
                               )}
                             </td>
                           </tr>
@@ -3713,6 +3716,21 @@ useEffect(() => {
             </div>
           </div>
         )}
+
+      {/* Needs Action Questions Modal */}
+      {needsActionApp && (
+        <NeedsActionModal
+          application={needsActionApp}
+          onShowToast={showToast}
+          onClose={() => setNeedsActionApp(null)}
+          onSuccess={(result) => {
+            setNeedsActionApp(null);
+            showToast(result?.message || "Answers saved. The agent will retry automatically.", "success");
+            fetchApplicationsData(selectedAppTab, appPage, false);
+            window.dispatchEvent(new CustomEvent("applicationsUpdated"));
+          }}
+        />
+      )}
 
       {/* Floating Feedback Toast Notification */}
       {toast.show && (

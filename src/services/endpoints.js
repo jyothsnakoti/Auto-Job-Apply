@@ -210,6 +210,8 @@ export const APPLICATION_ENDPOINTS = {
   RETRY: (id) => `${API_BASE_URL}/api/applications/${id}/retry`,
   APPROVE: (id) => `${API_BASE_URL}/api/applications/${id}/approve`,
   SKIP: (id) => `${API_BASE_URL}/api/applications/${id}/skip`,
+  NEEDS_ACTION: `${API_BASE_URL}/api/applications?tab=needs_action`,
+  SUBMIT_NEEDS_ACTION_ANSWERS: (id) => `${API_BASE_URL}/api/applications/${id}/needs-action/answers`,
 };
 
 export const ENDPOINTS = {
