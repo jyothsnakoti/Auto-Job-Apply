@@ -913,7 +913,7 @@ const AutoApply = () => {
           {/* Page Heading */}
           <div className="flex flex-col gap-1">
             <h1 className="text-[20px] md:text-[22px] font-bold text-black tracking-tight">
-              Bulk Auto Apply
+             Full Time Bulk Apply
             </h1>
             <p className="text-[13px] text-[#64748B]">
               Select job matches and let us handle the rest. We'll tailor your resume, complete applications and submit them automatically.

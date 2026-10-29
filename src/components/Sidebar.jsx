@@ -13,6 +13,15 @@ import autoApplyActiveIcon from "../assets/apply1.png";
 import profileActiveIcon from "../assets/profile1.png";
 import subscriptionActiveIcon from "../assets/Subscription1.svg";
 import settingsActiveIcon from "../assets/settings1.png";
+import FullTime1 from "../assets/FullTime1.svg";
+import FullTime2 from "../assets/FullTime2.svg";
+import C2C from "../assets/C2C.svg";
+import C2C1 from "../assets/C2C1.svg";
+import fulltimeone from "../assets/fulltimeone.svg";
+import fulltimetwo from "../assets/fulltimetwo.svg";
+import fulltimethree from "../assets/fulltimethree.svg";
+import fulltimefour from "../assets/fulltimefour.svg";
+import fulltimefive from "../assets/fulltimefive.svg";
 
 const navigationItems = [
   {
@@ -22,17 +31,37 @@ const navigationItems = [
     activeIcon: dashboardActiveIcon,
   },
   {
-    name: "Browse & Apply",
+    name: "Full Time Apply One At A Time",
     path: "/browse-jobs",
-    icon: browseJobsIcon,
-    activeIcon: browseJobsActiveIcon,
+    icon: FullTime1,
+    activeIcon: fulltimeone,
   },
-  {
-    name: "Bulk Auto Apply",
+   {
+    name: "Full Time Bulk Apply ",
     path: "/auto-apply",
     icon: autoApplyIcon,
-    activeIcon: autoApplyActiveIcon,
+    activeIcon: fulltimetwo,
   },
+  {
+    name: "Full Time Auto Select Auto Apply",
+    path: "/full-time-auto-apply",
+    icon: FullTime2,
+    activeIcon: fulltimethree,
+  },
+ 
+  {
+    name: "C2C One At A Time",
+    path: "/c2c-jobs",
+    icon: C2C,
+    activeIcon: fulltimefour,
+  },
+  {
+    name: "C2C Auto Select Auto Apply",
+    path: "/c2c-auto-apply",
+    icon: C2C1,
+    activeIcon: fulltimefive,
+  },
+  
   {
     name: "Profile",
     path: "/profile",
@@ -108,7 +137,7 @@ const Sidebar = () => {
 
       {/* Sidebar Aside */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 h-screen w-[270px] sm:w-[280px] lg:w-[264px] shrink-0 flex flex-col border-r border-slate-100 bg-white px-5 sm:px-6 py-5 overflow-y-auto transform transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 lg:z-30 ${
+        className={`fixed inset-y-0 left-0 z-50 h-screen w-[320px] min-w-[320px] shrink-0 flex flex-col border-r border-slate-100 bg-white px-5 sm:px-6 py-5 overflow-y-auto transform transition-transform duration-450 ease-in-out lg:static lg:translate-x-0 lg:z-30 ${
           isMobileOpen
             ? "translate-x-0 shadow-2xl"
             : "-translate-x-full lg:translate-x-0 shadow-none"
@@ -147,10 +176,11 @@ const Sidebar = () => {
             <NavLink
               key={item.name}
               to={item.path}
+              end={item.path === "/"}
               onClick={() => setIsMobileOpen(false)}
               className={({ isActive }) =>
                 [
-                  "flex h-[40px] items-center gap-[13px] rounded-[8px] px-[10px]",
+                  "flex min-h-[40px] w-full items-center gap-[13px] whitespace-nowrap rounded-[8px] px-[10px]",
                   "text-[15px] font-normal",
                   "transition-all duration-150",
 
@@ -162,13 +192,17 @@ const Sidebar = () => {
             >
               {({ isActive }) => (
                 <>
-                  <img
-                    src={isActive ? item.activeIcon : item.icon}
-                    alt=""
-                    className="h-[20px] w-[20px] shrink-0 object-contain"
-                  />
+                 <img
+  src={isActive ? item.activeIcon : item.icon}
+  alt=""
+  className={`shrink-0 object-contain ${
+    item.name === "Bulk Full Time Apply"
+      ? "h-[17px] w-[17px]" 
+      : "h-[20px] w-[20px]"
+  }`}
+/>
 
-                  <span>{item.name}</span>
+                  <span className="whitespace-nowrap">{item.name}</span>
                 </>
               )}
             </NavLink>

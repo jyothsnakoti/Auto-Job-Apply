@@ -1360,8 +1360,9 @@ const BrowseJobs = () => {
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 w-full">
             {/* Page Heading */}
             <div className="flex flex-col gap-1 min-w-0">
+              
               <h1 className="text-[20px] md:text-[22px] font-bold text-black tracking-tight">
-                Browse & Apply
+               Full Time Apply One At A Time
               </h1>
               <p className="text-[13px] text-[#64748B]">
                 Discover and browse all job opportunities matched to your resume from our live matching engine.
@@ -2088,29 +2089,7 @@ const BrowseJobs = () => {
                 </div>
 
                 {/* Auto Apply All Button */}
-                <button
-                  type="button"
-                  onClick={handleAutoApplyAll}
-                  disabled={isAutoApplyingAll}
-                  className="h-[36px] px-6 rounded-[10px] bg-gradient-to-r from-[#4F46E5] via-[#6366F1] to-[#7C3AED] hover:from-[#4338CA] hover:via-[#4F46E5] hover:to-[#6D28D9] disabled:opacity-60 text-white text-[14.5px] font-semibold flex items-center gap-2 shadow-[0_4px_14px_rgba(79,70,229,0.35)] hover:shadow-[0_6px_20px_rgba(124,58,237,0.45)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 cursor-pointer disabled:cursor-not-allowed whitespace-nowrap"
-                >
-                  {isAutoApplyingAll ? (
-                    <>
-                      <svg className="animate-spin w-4 h-4 text-white" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                      </svg>
-                      <span>Applying in batches...</span>
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-3.5 h-3.5 text-amber-300 fill-current drop-shadow-[0_0_6px_rgba(252,211,77,0.6)]" viewBox="0 0 24 24">
-                        <path d="M13 2L3 14h8l-1 8 11-12h-8l1-8z" />
-                      </svg>
-                      <span>Auto Apply All</span>
-                    </>
-                  )}
-                </button>
+                
               </div>
             </div>
           </div>

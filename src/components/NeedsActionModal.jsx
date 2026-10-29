@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback, useId } from 'react';
+import { useState, useEffect, useCallback, useId } from 'react';
 import {
   fetchNeedsActionQuestions,
   parseNeedsActionQuestions,
   submitNeedsActionAnswers,
+  extractErrorMessage,
 } from '../services/applicationNeedsActionService';
 import { extractApplicationId } from '../services/applicationService';
 
@@ -110,7 +111,7 @@ export default function NeedsActionModal({ application, onClose, onSuccess, onSh
       console.error('[NeedsActionModal] Error fetching questions:', err);
       // If we already had questions from the row data, don't completely lock out the user
       if (!questions || questions.length === 0) {
-        setFetchError(err.message || 'Failed to load questions. Please check your connection.');
+        setFetchError(extractErrorMessage(err, 'Failed to load questions. Please check your connection.'));
       }
     } finally {
       setIsLoadingQuestions(false);
@@ -242,8 +243,8 @@ export default function NeedsActionModal({ application, onClose, onSuccess, onSh
       }
     } catch (err) {
       console.error('[NeedsActionModal] Submission failed:', err);
-      // Keep modal open, preserve answers, and display error message
-      setSubmitError(err.message || 'Failed to submit answers. Please try again.');
+      // Keep modal open, preserve answers, and display backend error message
+      setSubmitError(extractErrorMessage(err, 'Failed to submit answers. Please try again.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -257,7 +258,7 @@ export default function NeedsActionModal({ application, onClose, onSuccess, onSh
   };
 
   // Render dynamic question input field
-  const renderQuestionField = (q, index) => {
+  const renderQuestionField = (q) => {
     const questionKey = q.key;
     const inputId = `${formId}-${questionKey}`;
     const fieldError = validationErrors[questionKey];
@@ -567,11 +568,14 @@ export default function NeedsActionModal({ application, onClose, onSuccess, onSh
         <div className="p-4 px-6 border-t border-slate-100 bg-slate-50/60 flex flex-col gap-3 shrink-0">
           {/* Submit Error Alert */}
           {submitError && (
-            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[12.5px] flex items-center gap-2">
-              <svg className="w-4 h-4 shrink-0 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div
+              role="alert"
+              className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[12.5px] flex items-start gap-2.5 transition-all"
+            >
+              <svg className="w-4 h-4 shrink-0 text-rose-500 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <span className="font-medium">{submitError}</span>
+              <span className="font-medium flex-1 min-w-0 break-words leading-relaxed">{submitError}</span>
             </div>
           )}
 

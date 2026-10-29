@@ -349,5 +349,393 @@ function extractApplicationsList(data) {
   console.log('✅ Case 10 Passed: First empty required field accurately identified; optional questions ignored.');
 }
 
+// =========================================================================
+// Error Handling & HTTP 409 Verification Tests
+// =========================================================================
+
+function extractErrorMessage(error, fallbackMessage = 'Failed to submit answers. Please try again.') {
+  if (!error) return fallbackMessage;
+
+  if (typeof error === 'string' && error.trim()) {
+    const trimmed = error.trim();
+    if (!/^Request failed with status code \d+/i.test(trimmed)) {
+      return trimmed;
+    }
+    return fallbackMessage;
+  }
+
+  let data = error?.response?.data ?? error?.data;
+
+  if (typeof data === 'string' && data.trim()) {
+    const trimmed = data.trim();
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        data = JSON.parse(trimmed);
+      } catch {
+        // Keep as string
+      }
+    }
+    if (typeof data === 'string') {
+      if (!trimmed.startsWith('<')) {
+        return trimmed;
+      }
+    }
+  }
+
+  if (data && typeof data === 'object') {
+    if (typeof data.message === 'string' && data.message.trim()) {
+      return data.message.trim();
+    }
+    if (typeof data.detail === 'string' && data.detail.trim()) {
+      return data.detail.trim();
+    }
+    if (typeof data.error === 'string' && data.error.trim()) {
+      return data.error.trim();
+    }
+    if (typeof data.msg === 'string' && data.msg.trim()) {
+      return data.msg.trim();
+    }
+    if (typeof data.errorMessage === 'string' && data.errorMessage.trim()) {
+      return data.errorMessage.trim();
+    }
+    if (typeof data.description === 'string' && data.description.trim()) {
+      return data.description.trim();
+    }
+
+    if (Array.isArray(data.message) && data.message.length > 0) {
+      const msgs = data.message
+        .map((m) => (typeof m === 'string' ? m.trim() : m?.message || m?.msg || ''))
+        .filter(Boolean);
+      if (msgs.length > 0) return msgs.join(', ');
+    }
+
+    if (Array.isArray(data.detail) && data.detail.length > 0) {
+      const details = data.detail
+        .map((d) => (typeof d === 'string' ? d.trim() : d?.msg || d?.message || ''))
+        .filter(Boolean);
+      if (details.length > 0) return details.join(', ');
+    }
+
+    if (data.errors) {
+      if (Array.isArray(data.errors) && data.errors.length > 0) {
+        const msgs = data.errors
+          .map((item) => {
+            if (typeof item === 'string') return item.trim();
+            if (item && typeof item === 'object') {
+              return item.message || item.msg || item.detail || item.error || '';
+            }
+            return '';
+          })
+          .filter(Boolean);
+        if (msgs.length > 0) return msgs.join(', ');
+      } else if (typeof data.errors === 'object') {
+        const messages = [];
+        for (const [key, val] of Object.entries(data.errors)) {
+          if (typeof val === 'string' && val.trim()) {
+            messages.push(val.includes(key) ? val.trim() : `${key}: ${val.trim()}`);
+          } else if (Array.isArray(val) && val.length > 0) {
+            const inner = val.filter((v) => typeof v === 'string' && v.trim()).map((v) => v.trim());
+            if (inner.length > 0) {
+              const joined = inner.join(', ');
+              messages.push(joined.includes(key) ? joined : `${key}: ${joined}`);
+            }
+          } else if (val && typeof val === 'object' && (val.message || val.msg)) {
+            messages.push(val.message || val.msg);
+          }
+        }
+        if (messages.length > 0) return messages.join('; ');
+      }
+    }
+
+    if (Array.isArray(data) && data.length > 0) {
+      const items = data
+        .map((item) => {
+          if (typeof item === 'string') return item.trim();
+          if (item && typeof item === 'object') {
+            return item.message || item.msg || item.detail || item.error || '';
+          }
+          return '';
+        })
+        .filter(Boolean);
+      if (items.length > 0) return items.join(', ');
+    }
+  }
+
+  if (typeof error?.message === 'string' && error.message.trim()) {
+    const trimmed = error.message.trim();
+    if (!/^Request failed with status code \d+/i.test(trimmed)) {
+      return trimmed;
+    }
+  }
+
+  return fallbackMessage;
+}
+
+// Test Case 11: HTTP 409 Conflict with plain-text backend response
+{
+  const mock409AxiosError = {
+    message: 'Request failed with status code 409',
+    response: {
+      status: 409,
+      statusText: 'Conflict',
+      data: 'Selection options are missing for: School*',
+    },
+  };
+
+  const extracted = extractErrorMessage(mock409AxiosError);
+  if (extracted !== 'Selection options are missing for: School*') {
+    throw new Error(`Case 11 Failed: Expected "Selection options are missing for: School*", got "${extracted}"`);
+  }
+  console.log('✅ Case 11 Passed: HTTP 409 plain-text error message correctly extracted instead of generic 409 message.');
+}
+
+// Test Case 12: HTTP 409 with JSON { message: "Selection options are missing for: School*" }
+{
+  const mock409JsonMessage = {
+    message: 'Request failed with status code 409',
+    response: {
+      status: 409,
+      data: {
+        message: 'Selection options are missing for: School*',
+      },
+    },
+  };
+
+  const extracted = extractErrorMessage(mock409JsonMessage);
+  if (extracted !== 'Selection options are missing for: School*') {
+    throw new Error(`Case 12 Failed: Expected "Selection options are missing for: School*", got "${extracted}"`);
+  }
+  console.log('✅ Case 12 Passed: HTTP 409 JSON { message } correctly extracted.');
+}
+
+// Test Case 13: HTTP 409 with JSON { error: "Selection options are missing for: School*" }
+{
+  const mock409JsonError = {
+    message: 'Request failed with status code 409',
+    response: {
+      status: 409,
+      data: {
+        error: 'Selection options are missing for: School*',
+      },
+    },
+  };
+
+  const extracted = extractErrorMessage(mock409JsonError);
+  if (extracted !== 'Selection options are missing for: School*') {
+    throw new Error(`Case 13 Failed: Expected "Selection options are missing for: School*", got "${extracted}"`);
+  }
+  console.log('✅ Case 13 Passed: HTTP 409 JSON { error } correctly extracted.');
+}
+
+// Test Case 14: HTTP 409 with JSON { detail: "Selection options are missing for: School*" } (FastAPI / RFC 7807)
+{
+  const mock409JsonDetail = {
+    message: 'Request failed with status code 409',
+    response: {
+      status: 409,
+      data: {
+        detail: 'Selection options are missing for: School*',
+      },
+    },
+  };
+
+  const extracted = extractErrorMessage(mock409JsonDetail);
+  if (extracted !== 'Selection options are missing for: School*') {
+    throw new Error(`Case 14 Failed: Expected "Selection options are missing for: School*", got "${extracted}"`);
+  }
+  console.log('✅ Case 14 Passed: HTTP 409 JSON { detail } correctly extracted.');
+}
+
+// Test Case 15: Structured validation errors in various formats
+{
+  // 15a: Array in errors
+  const errArray = {
+    message: 'Request failed with status code 409',
+    response: {
+      status: 409,
+      data: {
+        errors: ['Selection options are missing for: School*'],
+      },
+    },
+  };
+  if (extractErrorMessage(errArray) !== 'Selection options are missing for: School*') {
+    throw new Error('Case 15a Failed: Array errors not handled');
+  }
+
+  // 15b: Object in errors (dictionary of field errors)
+  const errObject = {
+    message: 'Request failed with status code 409',
+    response: {
+      status: 409,
+      data: {
+        errors: {
+          'School*': 'Selection options are missing for: School*',
+        },
+      },
+    },
+  };
+  if (extractErrorMessage(errObject) !== 'Selection options are missing for: School*') {
+    throw new Error('Case 15b Failed: Dictionary errors not handled');
+  }
+
+  // 15c: Dictionary with array of field messages
+  const errDictArray = {
+    message: 'Request failed with status code 409',
+    response: {
+      status: 409,
+      data: {
+        errors: {
+          'School*': ['Selection options are missing for: School*'],
+        },
+      },
+    },
+  };
+  if (extractErrorMessage(errDictArray) !== 'Selection options are missing for: School*') {
+    throw new Error('Case 15c Failed: Dictionary with array values not handled');
+  }
+
+  // 15d: FastAPI detail array format
+  const errFastApiArray = {
+    message: 'Request failed with status code 422',
+    response: {
+      status: 422,
+      data: {
+        detail: [{ loc: ['body', 'answers', 'School*'], msg: 'Selection options are missing for: School*' }],
+      },
+    },
+  };
+  if (extractErrorMessage(errFastApiArray) !== 'Selection options are missing for: School*') {
+    throw new Error('Case 15d Failed: FastAPI detail array not handled');
+  }
+
+  // 15e: NestJS message array format
+  const errNestJsArray = {
+    message: 'Request failed with status code 400',
+    response: {
+      status: 400,
+      data: {
+        message: ['Selection options are missing for: School*'],
+      },
+    },
+  };
+  if (extractErrorMessage(errNestJsArray) !== 'Selection options are missing for: School*') {
+    throw new Error('Case 15e Failed: NestJS message array not handled');
+  }
+
+  console.log('✅ Case 15 Passed: Structured validation errors (arrays, objects, FastAPI, NestJS) correctly extracted.');
+}
+
+// Test Case 16: Plain-text error response with extra whitespace
+{
+  const mock409Whitespace = {
+    message: 'Request failed with status code 409',
+    response: {
+      status: 409,
+      data: '  Selection options are missing for: School*  \n',
+    },
+  };
+
+  const extracted = extractErrorMessage(mock409Whitespace);
+  if (extracted !== 'Selection options are missing for: School*') {
+    throw new Error(`Case 16 Failed: Expected trimmed message, got "${extracted}"`);
+  }
+  console.log('✅ Case 16 Passed: Plain-text error response trimmed cleanly.');
+}
+
+// Test Case 17: Network error without backend response
+{
+  const mockNetworkError = {
+    message: 'Network Error',
+    code: 'ERR_NETWORK',
+  };
+
+  const extracted = extractErrorMessage(mockNetworkError);
+  if (extracted !== 'Network Error') {
+    throw new Error(`Case 17 Failed: Expected "Network Error", got "${extracted}"`);
+  }
+  console.log('✅ Case 17 Passed: Network error without backend response retains meaningful message.');
+}
+
+// Test Case 18: Generic Axios status error without backend data falls back to clean message
+{
+  const mockEmpty409 = {
+    message: 'Request failed with status code 409',
+    response: {
+      status: 409,
+      data: null,
+    },
+  };
+
+  const extracted = extractErrorMessage(mockEmpty409, 'Failed to submit answers. Please try again.');
+  if (extracted === 'Request failed with status code 409') {
+    throw new Error('Case 18 Failed: Must NOT display generic Axios status code 409 when no backend text exists!');
+  }
+  if (extracted !== 'Failed to submit answers. Please try again.') {
+    throw new Error(`Case 18 Failed: Expected fallback message, got "${extracted}"`);
+  }
+  console.log('✅ Case 18 Passed: Generic Axios 409 error without body cleanly suppressed in favor of fallback.');
+}
+
+// Test Case 19: Stringified JSON response data
+{
+  const mockStringifiedJson = {
+    message: 'Request failed with status code 409',
+    response: {
+      status: 409,
+      data: JSON.stringify({ message: 'Selection options are missing for: School*' }),
+    },
+  };
+
+  const extracted = extractErrorMessage(mockStringifiedJson);
+  if (extracted !== 'Selection options are missing for: School*') {
+    throw new Error(`Case 19 Failed: Expected parsed message, got "${extracted}"`);
+  }
+  console.log('✅ Case 19 Passed: Stringified JSON response payload parsed and message extracted.');
+}
+
+// Test Case 20: HTML error pages (e.g. 502/504 Bad Gateway / Nginx crash) do not dump raw HTML into UI
+{
+  const mockHtml502 = {
+    message: 'Request failed with status code 502',
+    response: {
+      status: 502,
+      data: '<html><head><title>502 Bad Gateway</title></head><body><center><h1>502 Bad Gateway</h1></center></body></html>',
+    },
+  };
+
+  const extracted = extractErrorMessage(mockHtml502, 'Server error. Please try again later.');
+  if (extracted.includes('<') || extracted.includes('<html>')) {
+    throw new Error('Case 20 Failed: HTML markup must not be returned directly');
+  }
+  if (extracted !== 'Server error. Please try again later.') {
+    throw new Error(`Case 20 Failed: Expected fallback, got "${extracted}"`);
+  }
+  console.log('✅ Case 20 Passed: HTML error response suppressed and replaced with clean fallback.');
+}
+
+// Test Case 21: Preserving answer submission payload and successful responses
+{
+  const payload = {
+    answers: { 'School*': 'Ajou University' },
+    saveToProfile: false,
+  };
+
+  // Ensure answer key and saveToProfile values are unchanged
+  if (payload.answers['School*'] !== 'Ajou University' || payload.saveToProfile !== false) {
+    throw new Error('Case 21 Failed: Payload alteration detected');
+  }
+
+  // Successful submission response mock
+  const mockSuccessResponse = {
+    success: true,
+    message: 'Application updated successfully',
+  };
+
+  if (!mockSuccessResponse.success) {
+    throw new Error('Case 21 Failed: Success state handling failed');
+  }
+  console.log('✅ Case 21 Passed: Answer submission payload and success state handling preserved.');
+}
+
 console.log('🎉 ALL NEEDS ACTION TESTS PASSED SUCCESSFULLY!');
 

@@ -27,6 +27,9 @@ import Profile from './pages/Profile';
 import Settings from './pages/Settings';
 import UpgradePlan from './pages/UpgradePlan';
 import Home from "./pages/Home";
+import FullTimeAutoApply from "./pages/FullTimeAutoApply";
+import C2CJobs from "./pages/C2CJobs";
+import C2CAutoApply from "./pages/C2CAutoApply";
 
 function App() {
   return (
@@ -44,7 +47,13 @@ function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/Dashboard" element={<Dashboard />} />
         <Route path="/browse-jobs" element={<BrowseJobs />} />
+        <Route path="/full-time-auto-apply" element={<FullTimeAutoApply />} />
+        <Route path="/fulltime-auto-apply" element={<FullTimeAutoApply />} />
         <Route path="/auto-apply" element={<AutoApply />} />
+        <Route path="/c2c-jobs" element={<C2CJobs />} />
+        <Route path="/c2c" element={<C2CJobs />} />
+        <Route path="/c2c-auto-apply" element={<C2CAutoApply />} />
+        <Route path="/c2c-apply" element={<C2CAutoApply />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/subscriptions" element={<UpgradePlan />} />
         <Route path="/subscription" element={<UpgradePlan />} />
