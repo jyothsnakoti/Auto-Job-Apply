@@ -273,6 +273,10 @@ const C2CJobs = () => {
   // Job Details Modal
   const [selectedJobModal, setSelectedJobModal] = useState(null);
 
+  // Enhanced Resume Modal
+const [showEnhancedResumeModal, setShowEnhancedResumeModal] = useState(false);
+const [emailNotConnected, setEmailNotConnected] = useState(false);
+
   // Application States
   const [appliedJobIds, setAppliedJobIds] = useState(() => {
     try {
@@ -1053,13 +1057,16 @@ const C2CJobs = () => {
                     <button
                       type="button"
                       disabled={Boolean(applyingJobIds[selectedJobModal.id || selectedJobModal.jobId])}
-                      onClick={(e) => handleApply(selectedJobModal, e)}
+                      onClick={() => {
+  setEmailNotConnected(false);
+  setShowEnhancedResumeModal(true);
+}}
                       className="px-5 py-2 rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-semibold transition-all shadow-xs hover:shadow cursor-pointer disabled:opacity-60 flex items-center gap-2"
                     >
                       {applyingJobIds[selectedJobModal.id || selectedJobModal.jobId] ? (
                         <>
                           <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                          <span>Applying...</span>
+                          <span>Applying...</span>  
                         </>
                       ) : (
                         <span>Enhance Resume</span>
@@ -1070,6 +1077,174 @@ const C2CJobs = () => {
               </div>
             </div>
           )}
+          
+{/* ================= Enhanced Resume Modal ================= */}
+{showEnhancedResumeModal && selectedJobModal && (
+  <div
+    className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+    onClick={() => setShowEnhancedResumeModal(false)}
+  >
+    <div
+      className="bg-white w-full max-w-3xl max-h-[90vh] rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* Header */}
+      <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-white">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+            <Sparkles className="w-5 h-5" />
+          </div>
+
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">
+              Enhanced Resume
+            </h2>
+            <p className="text-sm text-slate-500">
+              Resume preview tailored to the selected job
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowEnhancedResumeModal(false)}
+          className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+          aria-label="Close enhanced resume"
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* Resume Preview */}
+      <div className="p-6 sm:p-8 overflow-y-auto bg-slate-50">
+        <div className="bg-white border border-slate-200 rounded-xl p-6 sm:p-8 shadow-sm">
+          <div className="border-b border-slate-200 pb-5">
+            <h1 className="text-2xl font-bold text-slate-900">
+              Your Name
+            </h1>
+
+            <p className="text-sm text-slate-500 mt-1">
+              Software Developer
+            </p>
+
+            <p className="text-xs text-slate-400 mt-2">
+              Email • Phone • Location
+            </p>
+          </div>
+
+          <section className="mt-5">
+            <h3 className="text-sm font-bold text-indigo-700 uppercase tracking-wide">
+              Professional Summary
+            </h3>
+
+            <p className="text-sm text-slate-600 leading-6 mt-2">
+              Motivated software professional with skills relevant to{" "}
+              {selectedJobModal.title}. Focused on building maintainable
+              applications, solving technical problems, collaborating with
+              teams, and delivering quality software solutions.
+            </p>
+          </section>
+
+          <section className="mt-6">
+            <h3 className="text-sm font-bold text-indigo-700 uppercase tracking-wide">
+              Target Position
+            </h3>
+
+            <p className="text-sm text-slate-700 font-medium mt-2">
+              {selectedJobModal.title}
+            </p>
+
+            <p className="text-sm text-slate-500 mt-1">
+              {selectedJobModal.company}
+            </p>
+          </section>
+
+          <section className="mt-6">
+            <h3 className="text-sm font-bold text-indigo-700 uppercase tracking-wide">
+              Key Skills
+            </h3>
+
+            <div className="flex flex-wrap gap-2 mt-3">
+              {(selectedJobModal.requiredSkills || []).map(
+                (skill, index) => (
+                  <span
+                    key={index}
+                    className="px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100 text-xs font-medium"
+                  >
+                    {skill}
+                  </span>
+                )
+              )}
+            </div>
+          </section>
+
+          <section className="mt-6">
+            <h3 className="text-sm font-bold text-indigo-700 uppercase tracking-wide">
+              Relevant Responsibilities
+            </h3>
+
+            <ul className="list-disc pl-5 mt-3 space-y-2 text-sm text-slate-600">
+              {(selectedJobModal.responsibilities || []).map(
+                (item, index) => (
+                  <li key={index}>{item}</li>
+                )
+              )}
+            </ul>
+          </section>
+
+          <div className="mt-6 p-3 rounded-lg bg-amber-50 border border-amber-200">
+            <p className="text-xs text-amber-800">
+              Demo preview: replace the sample profile and content with
+              your actual enhanced resume from the Resume Enhancement API.
+            </p>
+          </div>
+        </div>
+
+        {/* Email Connection Error */}
+        {emailNotConnected && (
+          <div
+            role="alert"
+            className="mt-4 flex items-start gap-3 p-4 rounded-xl bg-rose-50 border border-rose-200"
+          >
+            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+
+            <div>
+              <p className="text-sm font-semibold text-rose-800">
+                Email Not Connected
+              </p>
+
+              <p className="text-sm text-rose-700 mt-1">
+                Please connect your email account before sending your
+                application.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="p-4 sm:px-6 border-t border-slate-100 bg-white flex items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={() => setShowEnhancedResumeModal(false)}
+          className="px-4 py-2.5 rounded-lg border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+        >
+          Close
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setEmailNotConnected(true)}
+          className="px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold flex items-center gap-2 transition-colors"
+        >
+          <ExternalLink className="w-4 h-4" />
+          Send Application
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
         </main>
       </div>
     </div>

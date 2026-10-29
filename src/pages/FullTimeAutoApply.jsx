@@ -97,12 +97,12 @@ const FullTimeAutoApply = () => {
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
 
   // Manual Settings Internal States (Matching Images 1, 2, 3)
-  const [perCompanyLimit, setPerCompanyLimit] = useState(false);
+  const [perCompanyLimit, setPerCompanyLimit] = useState(10);
   const [pauseInterviewing, setPauseInterviewing] = useState(true);
   const [selectedResumeProfile, setSelectedResumeProfile] = useState("Default (default)");
   const [standingInstructions, setStandingInstructions] = useState("");
   const [reviewBeforeSubmit, setReviewBeforeSubmit] = useState(false);
-  const [matchQuality, setMatchQuality] = useState("Excellent");
+  const [matchQuality, setMatchQuality] = useState(">80%");
   const [resumeOptimizationMode, setResumeOptimizationMode] = useState("Honest");
 
   // Shared daily cap used count
@@ -930,10 +930,7 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
                   <div>
                     <div className="flex items-center gap-2">
                       <h3 className="text-[17px] font-bold text-slate-900">Auto Apply</h3>
-                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border border-indigo-200 text-[#4F46E5] bg-indigo-50/70">
-                        <Lock className="w-2.5 h-2.5" />
-                        Power
-                      </span>
+                      
                     </div>
                     <p className="text-[13px] text-slate-500 mt-1 leading-relaxed">
                       Set it once. Tsenta applies to your best new matches at the times you choose, up to 4 times a day.
@@ -959,31 +956,41 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
               {/* SECTION 2: Enable auto-apply */}
              
 {/* SECTION 2: Enable auto-apply */}
-<div className="flex items-center justify-between gap-4 rounded-xl bg-[#EFEEFF] p-4">
-  <div>
-    <h4 className="text-[14px] font-bold text-black">
+
+{/* SECTION 2: Enable auto-apply */}
+
+{/* SECTION 2: Enable auto-apply */}
+<div className="relative flex items-center justify-between gap-4 rounded-xl border border-[#6A5CFF] border-l-4 bg-[#EFEEFF] p-3 sm:p-4">
+
+  <div className="min-w-0">
+    <h4 className="text-[14px] font-bold text-[#1A0EA5]">
       Enable auto-apply
     </h4>
-    <p className="text-[12.5px] text-black/85 mt-0.5">
-      Upgrade to Pro to turn this on. You can configure everything else below now.
+
+    <p className="mt-0.5 text-[12px] text-[#1A0EA5]">
+      Turn on auto-apply to apply automatically using your saved settings.
     </p>
   </div>
 
   <button
     type="button"
-    onClick={() => {
-      setToast({
-        show: true,
-        message: "Auto Apply requires the Pro subscription plan.",
-        type: "warning",
-      });
-    }}
-    className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-white/40 bg-white hover:bg-indigo-50 text-[12px] font-semibold text-[#4F46E5] shadow-2xs cursor-pointer"
+    role="switch"
+    aria-checked={isEnabled}
+    onClick={() => setIsEnabled((prev) => !prev)}
+    className={`relative h-6 w-11 shrink-0 rounded-full p-0.5 transition-colors duration-200 cursor-pointer ${
+      isEnabled ? "bg-[#6A5CFF]" : "bg-slate-300"
+    }`}
   >
-    <Lock className="w-3 h-3" />
-    <span>Requires Pro Plan</span>
+    <span
+      className={`block h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+        isEnabled ? "translate-x-5" : "translate-x-0"
+      }`}
+    />
   </button>
+
 </div>
+
+
 
 
               {/* SECTION 3: Daily application cap */}
@@ -1042,30 +1049,34 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
 
               <div className="h-px w-full bg-slate-100" />
 
-              {/* SECTION 5: Per-company limit */}
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <h4 className="text-[14px] font-bold text-slate-900">Per-company limit</h4>
-                  <p className="text-[12.5px] text-slate-500 mt-0.5">
-                    Stop applying to a company once it has this many of your applications from the last 30 days.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={perCompanyLimit}
-                  onClick={() => setPerCompanyLimit(!perCompanyLimit)}
-                  className={`w-11 h-6 rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
-                    perCompanyLimit ? "bg-[#4F46E5]" : "bg-slate-200"
-                  }`}
-                >
-                  <div
-                    className={`w-5 h-5 rounded-full bg-white shadow-sm transform transition-transform duration-200 ${
-                      perCompanyLimit ? "translate-x-5" : "translate-x-0"
-                    }`}
-                  />
-                </button>
-              </div>
+              
+{/* SECTION 5: Per-company limit */}
+<div className="flex items-center justify-between gap-4">
+  <div className="flex-1">
+    <h4 className="text-[14px] font-bold text-slate-900">
+      Per-company limit
+    </h4>
+    <p className="text-[12.5px] text-slate-500 mt-0.5">
+      Stop applying to a company once it has this many of your applications from the last 30 days.
+    </p>
+  </div>
+
+  <div className="shrink-0">
+  <input
+    type="number"
+    min={1}
+    max={30}
+    value={perCompanyLimit}
+    onChange={(e) =>
+      setPerCompanyLimit(
+        Math.max(1, Math.min(30, Number(e.target.value) || 1))
+      )
+    }
+    className="w-20 h-9 px-3 rounded-lg border border-[#E2E8F0] bg-white text-[14px] font-medium text-slate-800 shadow-sm outline-none transition-all focus:border-[#4F46E5] focus:ring-2 focus:ring-[#EEF2FF]"
+  />
+</div>
+</div>
+
 
               {/* SECTION 6: Pause companies you're interviewing with (Image 2 Blue, NOT green) */}
               <div className="flex items-center justify-between gap-4">
@@ -1098,109 +1109,47 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
               <div className="rounded-2xl border border-slate-200 bg-white p-5 flex flex-col gap-5 shadow-2xs">
                 {/* Resume Profile */}
                 <div className="flex flex-col gap-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                      Resume Profile
-                    </span>
-                    <span className="text-[12px] text-slate-500">122 matches this week</span>
-                  </div>
-                  <select
-                    value={selectedResumeProfile}
-                    onChange={(e) => setSelectedResumeProfile(e.target.value)}
-                    className="w-full text-[13.5px] font-medium text-slate-800 bg-transparent py-1 border-b border-slate-200 focus:outline-none focus:border-[#4F46E5] cursor-pointer"
-                  >
-                    <option value="Default (default)">Default (default)</option>
-                    <option value="Software Engineer Full Stack">Software Engineer Full Stack</option>
-                    <option value="Frontend Specialist">Frontend Specialist</option>
-                  </select>
-                  <div className="flex items-center justify-between text-[12.5px] text-slate-500 pt-1 cursor-pointer hover:text-slate-700">
-                    <span>
-                      <span className="font-semibold text-slate-700 uppercase tracking-wider text-[11px] mr-1">
-                        JOB FILTERS
-                      </span>
-                      none set, all auto-applicable jobs considered
-                    </span>
-                    <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-                  </div>
+                  
+                
+                  
                 </div>
 
-                <div className="h-px w-full bg-slate-100" />
-
-                {/* Standing Instructions */}
-                <div className="flex flex-col gap-1.5">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                    Standing Instructions
-                  </span>
-                  <p className="text-[12px] text-slate-500 leading-relaxed">
-                    Anything the filters above can't say, in your own words. Before each application we check the job against this and skip it if it doesn't fit. This can only rule jobs out, never add new ones. Leave it empty to skip the check entirely.
-                  </p>
-                  <textarea
-                    value={standingInstructions}
-                    onChange={(e) => setStandingInstructions(e.target.value)}
-                    rows={3}
-                    placeholder="e.g. Skip senior, staff, principal, lead, manager or director level roles."
-                    className="mt-1 w-full rounded-xl border border-slate-200 p-3 text-[13px] text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#4F46E5] focus:ring-1 focus:ring-indigo-100 resize-none"
-                  />
-                </div>
-
-                <div className="h-px w-full bg-slate-100" />
-
-                {/* Review Before Submit (Image 2 Blue toggle switch) */}
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                      Review Before Submit
-                    </span>
-                    <p className="text-[12px] text-slate-500 mt-1 leading-relaxed">
-                      Fill each application, then hold it for you to check and send. Nothing goes out until you do, so they'll pile up if you don't come back. Only works on job sites that support pausing. Everywhere else this lane submits as usual.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={reviewBeforeSubmit}
-                    onClick={() => setReviewBeforeSubmit(!reviewBeforeSubmit)}
-                    className={`w-11 h-6 rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
-                      reviewBeforeSubmit ? "bg-[#4F46E5]" : "bg-slate-200"
-                    }`}
-                  >
-                    <div
-                      className={`w-5 h-5 rounded-full bg-white shadow-sm transform transition-transform duration-200 ${
-                        reviewBeforeSubmit ? "translate-x-5" : "translate-x-0"
-                      }`}
-                    />
-                  </button>
-                </div>
-
-                <div className="h-px w-full bg-slate-100" />
+                
 
                 {/* Minimum Match Quality (Image 2 Blue active pill) */}
                 <div className="flex flex-col gap-2">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  <span className="text-[12px] font-bold text-slate-900 uppercase tracking-wider">
                     Minimum Match Quality
                   </span>
                   <p className="text-[12px] text-slate-500 leading-relaxed">
                     We only auto-apply to jobs that are at least this strong a match for this resume. A higher bar means fewer, sharper applications; a lower bar means more volume.
                   </p>
-                  <div className="flex flex-wrap items-center gap-2 pt-1">
-                    {["Excellent", "Strong", "Good", "Stretch"].map((qual) => {
-                      const isSel = matchQuality === qual;
-                      return (
-                        <button
-                          key={qual}
-                          type="button"
-                          onClick={() => setMatchQuality(qual)}
-                          className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer select-none ${
-                            isSel
-                              ? "bg-[#4F46E5] text-white shadow-xs hover:bg-[#4338CA]"
-                              : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
-                          }`}
-                        >
-                          {qual}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  
+
+
+<div className="flex flex-wrap items-center gap-2 pt-1">
+  {[">80%", ">70%", ">60%"].map((qual) => {
+    const isSel = matchQuality === qual;
+
+    return (
+      <button
+        key={qual}
+        type="button"
+        onClick={() => setMatchQuality(qual)}
+        className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all cursor-pointer ${
+          isSel
+            ? "bg-[#EEF2FF] border-[#C7D2FE] text-[#4F46E5]"
+            : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+        }`}
+      >
+        {qual}
+      </button>
+    );
+  })}
+</div>
+
+
+
                   <p className="text-[12px] text-slate-400 mt-0.5">
                     Only your very best matches. Fewest applications, highest quality. The preview updates as you change this.
                   </p>
@@ -1210,67 +1159,45 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
 
                 {/* SECTION 8: Optimization (Image 2 Blue active pill) */}
                 <div className="flex flex-col gap-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                      Optimization
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setResumeOptimizationMode("Honest");
-                        setToast({
-                          show: true,
-                          message: "Settings synced from apply settings.",
-                          type: "success",
-                        });
-                      }}
-                      className="text-[12px] text-[#4F46E5] hover:text-[#4338CA] transition-colors cursor-pointer font-medium"
-                    >
-                      Sync from apply settings
-                    </button>
-                  </div>
+                 
 
-                  {/* Resume optimization */}
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <h5 className="text-[13.5px] font-bold text-slate-900">Resume optimization</h5>
-                      <p className="text-[12px] text-slate-500 mt-0.5">
-                        Reorder and highlight relevant experience for each job.
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1 p-0.5 rounded-full border border-slate-200 bg-white shrink-0">
-                      {["Off", "Honest", "Aggressive"].map((mode) => {
-                        const isSel = resumeOptimizationMode === mode;
-                        return (
-                          <button
-                            key={mode}
-                            type="button"
-                            onClick={() => setResumeOptimizationMode(mode)}
-                            className={`px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer ${
-                              isSel
-                                ? "bg-[#4F46E5] text-white shadow-2xs hover:bg-[#4338CA]"
-                                : "text-slate-600 hover:text-slate-900"
-                            }`}
-                          >
-                            {mode}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+               
+{/* Resume optimization */}
+<div className="flex items-center justify-between gap-4">
+  <div>
+    <h5 className="text-[13.5px] font-bold text-slate-900">
+      Resume optimization
+    </h5>
+    <p className="text-[12px] text-slate-500 mt-0.5">
+      Reorder and highlight relevant experience for each job.
+    </p>
+  </div>
+
+  <div className="flex items-center gap-1 p-0.5 rounded-full border border-slate-200 bg-white shrink-0">
+    {["Off", "On"].map((mode) => {
+      const isSel = resumeOptimizationMode === mode;
+
+      return (
+        <button
+          key={mode}
+          type="button"
+          onClick={() => setResumeOptimizationMode(mode)}
+          className={`px-4 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+            isSel
+              ? "bg-[#4F46E5] text-white shadow-2xs hover:bg-[#4338CA]"
+              : "text-slate-600 hover:text-slate-900"
+          }`}
+        >
+          {mode}
+        </button>
+      );
+    })}
+  </div>
+</div>
+
 
                   {/* Cover letter */}
-                  <div className="flex items-center justify-between gap-4 pt-1">
-                    <div>
-                      <h5 className="text-[13.5px] font-bold text-slate-900">Cover letter</h5>
-                      <p className="text-[12px] text-slate-500 mt-0.5">
-                        Generated when a job asks for one, tailored from your profile and saved cover letter.
-                      </p>
-                    </div>
-                    <span className="text-[13px] font-medium text-slate-700 shrink-0">
-                      Automatic
-                    </span>
-                  </div>
+                  
                 </div>
               </div>
             </div>

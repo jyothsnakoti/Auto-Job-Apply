@@ -18,6 +18,7 @@ export * from '../utils/jobHelpers';
 export * from './dashboardService';
 export * from './applicationService';
 export * from './applicationNeedsActionService';
+export * from './phoneVerificationService';
 export {
   getStoredAuthToken,
   getStoredRefreshToken,
