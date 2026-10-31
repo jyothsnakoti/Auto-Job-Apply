@@ -26,6 +26,8 @@ import {
   getResumes,
   updatePersonalProfile,
 } from "../services/api";
+import PhoneOtpModal from "../components/PhoneOtpModal";
+import { sendPhoneOtpApi } from "../services/phoneVerificationService";
 
 // Google Gmail Icon Component Matching Image 2
 const GmailLogo = () => (
@@ -62,12 +64,35 @@ const C2CAutoApply = () => {
   // Contact States
   const [isGmailConnected, setIsGmailConnected] = useState(false);
   const [connectedGmail, setConnectedGmail] = useState("");
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [isPhoneModalOpen, setIsPhoneModalOpen] = useState(false);
-  const [phoneInput, setPhoneInput] = useState("");
-  const [phoneError, setPhoneError] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState(() => {
+    try {
+      const savedSettings = localStorage.getItem("c2c_auto_apply_settings");
+      if (savedSettings) {
+        const parsed = JSON.parse(savedSettings);
+        if (parsed.phoneNumber) return parsed.phoneNumber;
+      }
+    } catch (e) {}
+    return "9632587412";
+  });
+  const [isPhoneVerified, setIsPhoneVerified] = useState(() => {
+    try {
+      const savedSettings = localStorage.getItem("c2c_auto_apply_settings");
+      if (savedSettings) {
+        const parsed = JSON.parse(savedSettings);
+        if (parsed.isPhoneVerified !== undefined) return parsed.isPhoneVerified;
+      }
+    } catch (e) {}
+    return false;
+  });
+  const [isOtpModalOpen, setIsOtpModalOpen] = useState(false);
+const [isPhoneModalOpen, setIsPhoneModalOpen] = useState(false);
+const [phoneInput, setPhoneInput] = useState("");
+const [phoneError, setPhoneError] = useState("");
+
   const [isGmailModalOpen, setIsGmailModalOpen] = useState(false);
   const [gmailInput, setGmailInput] = useState("");
+const [isAutoApplyEnabled, setIsAutoApplyEnabled] = useState(false);
+
 
   // Resume Settings States
   const [resumesList, setResumesList] = useState([
@@ -129,6 +154,7 @@ const C2CAutoApply = () => {
         if (parsed.isGmailConnected !== undefined) setIsGmailConnected(parsed.isGmailConnected);
         if (parsed.connectedGmail) setConnectedGmail(parsed.connectedGmail);
         if (parsed.phoneNumber) setPhoneNumber(parsed.phoneNumber);
+        if (parsed.isPhoneVerified !== undefined) setIsPhoneVerified(parsed.isPhoneVerified);
         if (parsed.selectedResume) setSelectedResume(parsed.selectedResume);
         if (parsed.appsCount !== undefined) setAppsCount(parsed.appsCount);
         if (parsed.selectedTime) setSelectedTime(parsed.selectedTime);
@@ -196,6 +222,7 @@ const C2CAutoApply = () => {
       isGmailConnected: overrides.isGmailConnected !== undefined ? overrides.isGmailConnected : isGmailConnected,
       connectedGmail: overrides.connectedGmail !== undefined ? overrides.connectedGmail : connectedGmail,
       phoneNumber: overrides.phoneNumber !== undefined ? overrides.phoneNumber : phoneNumber,
+      isPhoneVerified: overrides.isPhoneVerified !== undefined ? overrides.isPhoneVerified : isPhoneVerified,
       selectedResume: overrides.selectedResume !== undefined ? overrides.selectedResume : selectedResume,
       appsCount: overrides.appsCount !== undefined ? overrides.appsCount : appsCount,
       selectedTime: overrides.selectedTime !== undefined ? overrides.selectedTime : selectedTime,
@@ -250,6 +277,39 @@ const C2CAutoApply = () => {
     setIsPhoneModalOpen(true);
   };
 
+  const handleOpenOtpModal = async () => {
+    if (!phoneNumber) {
+      handleOpenPhoneModal();
+      return;
+    }
+
+    try {
+      await sendPhoneOtpApi(phoneNumber);
+    } catch (err) {
+      console.warn("Could not send OTP:", err);
+    }
+
+    setIsOtpModalOpen(true);
+  };
+
+  const handleOtpVerifiedSuccess = (verifiedNumber) => {
+    setIsPhoneVerified(true);
+    setIsOtpModalOpen(false);
+    persistSettings({ isPhoneVerified: true });
+    setToast({
+      show: true,
+      message: "Phone number verified successfully!",
+      type: "success",
+    });
+  };
+
+  const handleChangePhoneNumberFromOtp = () => {
+    setIsOtpModalOpen(false);
+    setPhoneInput(phoneNumber || "");
+    setPhoneError("");
+    setIsPhoneModalOpen(true);
+  };
+
   const handleSavePhone = async () => {
     const cleaned = phoneInput.trim();
     if (!cleaned) {
@@ -268,9 +328,16 @@ const C2CAutoApply = () => {
       // Backend optional
     }
 
+    const numberChanged = cleaned !== phoneNumber;
     setPhoneNumber(cleaned);
+    if (numberChanged) {
+      setIsPhoneVerified(false);
+    }
     setIsPhoneModalOpen(false);
-    persistSettings({ phoneNumber: cleaned });
+    persistSettings({
+      phoneNumber: cleaned,
+      ...(numberChanged ? { isPhoneVerified: false } : {}),
+    });
     setToast({
       show: true,
       message: "Phone number updated successfully!",
@@ -365,24 +432,7 @@ const C2CAutoApply = () => {
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={handleSaveAll}
-              disabled={isSaving}
-              className="px-5 py-2.5 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] active:bg-[#3730A3] text-white text-xs sm:text-sm font-semibold transition-all shadow-xs hover:shadow flex items-center justify-center gap-2 cursor-pointer shrink-0 self-start sm:self-auto"
-            >
-              {isSaving ? (
-                <>
-                  <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                  <span>Saving...</span>
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4" />
-                  <span>Save Settings</span>
-                </>
-              )}
-            </button>
+         
           </div>
 
           {/* Toast Notification */}
@@ -404,6 +454,34 @@ const C2CAutoApply = () => {
               <span>{toast.message}</span>
             </div>
           )}
+          {/* SECTION 2: Enable auto-apply */}
+<div className="relative flex items-center justify-between gap-4 rounded-xl border border-[#6A5CFF] border-l-4 bg-[#EFEEFF] p-3 sm:p-4">
+  <div className="min-w-0">
+    <h4 className="text-[14px] font-bold text-[#1A0EA5]">
+      Enable auto-apply
+    </h4>
+
+    <p className="text-[12.5px] text-[#1A0EA5] mt-0.5">
+      Turn on automatic C2C job applications using your saved settings.
+    </p>
+  </div>
+
+  <button
+    type="button"
+    role="switch"
+    aria-checked={isAutoApplyEnabled}
+    onClick={() => setIsAutoApplyEnabled((prev) => !prev)}
+    className={`w-11 h-6 rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
+      isAutoApplyEnabled ? "bg-[#6A5CFF]" : "bg-slate-300"
+    }`}
+  >
+    <span
+      className={`block w-5 h-5 rounded-full bg-white shadow-sm transform transition-transform duration-200 ${
+        isAutoApplyEnabled ? "translate-x-5" : "translate-x-0"
+      }`}
+    />
+  </button>
+</div>
 
           {/* ================= SECTION A: Contact Settings Card ================= */}
           <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-5 sm:p-6 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col gap-4.5">
@@ -424,55 +502,7 @@ const C2CAutoApply = () => {
 
             {/* Contact Rows Container */}
             <div className="flex flex-col gap-3">
-              {/* Row 1: Gmail */}
-              <div className="rounded-xl border border-[#E2E8F0] bg-white p-3.5 sm:p-4 flex items-center justify-between hover:border-slate-300 transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-slate-50 border border-slate-200/80 flex items-center justify-center shrink-0">
-                    <GmailLogo />
-                  </div>
-                  <div>
-                    <h3 className="text-[13.5px] font-semibold text-slate-900 leading-tight">
-                      Gmail
-                    </h3>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <span
-                        className={`w-2 h-2 rounded-full shrink-0 ${
-                          isGmailConnected ? "bg-emerald-500" : "bg-rose-500"
-                        }`}
-                      />
-                      <span className="text-[12px] text-slate-500 font-medium">
-                        {isGmailConnected
-                          ? `Connected (${connectedGmail || "Active"})`
-                          : "Not connected"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {isGmailConnected ? (
-                  <div className="flex items-center gap-2">
-                    <span className="hidden sm:inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
-                      <Check className="w-3.5 h-3.5" />
-                      Active
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleDisconnectGmail}
-                      className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-[12.5px] font-semibold text-slate-600 hover:text-rose-600 transition-colors cursor-pointer"
-                    >
-                      Disconnect
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleOpenGmailModal}
-                    className="px-4 py-2 rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white text-[12.5px] font-semibold transition-all shadow-2xs hover:shadow cursor-pointer"
-                  >
-                    Connect Gmail
-                  </button>
-                )}
-              </div>
+              
 
               {/* Row 2: Phone Number */}
               <div className="rounded-xl border border-[#E2E8F0] bg-white p-3.5 sm:p-4 flex items-center justify-between hover:border-slate-300 transition-colors">
@@ -491,136 +521,58 @@ const C2CAutoApply = () => {
                         }`}
                       />
                       <span className="text-[12px] text-slate-500 font-medium">
-                        {phoneNumber ? phoneNumber : "Not added"}
+                        {phoneNumber ? (
+                          <>
+                            <span>{phoneNumber}</span>
+                            {isPhoneVerified && (
+                              <span className="ml-1 text-emerald-600 font-semibold">
+                                (Verified)
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          "Not added"
+                        )}
                       </span>
                     </div>
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleOpenPhoneModal}
-                  className="px-4 py-2 rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white text-[12.5px] font-semibold transition-all shadow-2xs hover:shadow cursor-pointer"
-                >
-                  {phoneNumber ? "Edit Phone Number" : "Add Phone Number"}
-                </button>
+                {isPhoneVerified ? (
+                  <div className="flex items-center gap-2">
+                    <span className="hidden sm:inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
+                      <Check className="w-3.5 h-3.5" />
+                      Verified
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleOpenPhoneModal}
+                      className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-[12.5px] font-semibold text-slate-600 hover:text-indigo-600 transition-colors cursor-pointer"
+                    >
+                      Change
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleOpenOtpModal}
+                    className="px-4 py-2 rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white text-[12.5px] font-semibold transition-all shadow-2xs hover:shadow cursor-pointer"
+                  >
+                    verify Phone Number
+                  </button>
+                )}
               </div>
             </div>
           </div>
           
-          {/* SECTION 2: Enable auto-apply */}
-          <div className="flex items-center justify-between gap-4 rounded-xl bg-[#EEF2FF] border border-[#E0E7FF] p-4">
-            <div>
-              <h4 className="text-[14px] font-bold text-slate-900">
-                Enable auto-apply
-              </h4>
-              <p className="text-[12.5px] text-slate-600 mt-0.5">
-                Upgrade to Pro to turn this on. You can configure everything else below now.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                setToast({
-                  show: true,
-                  message: "Auto Apply requires the Pro subscription plan.",
-                  type: "warning",
-                });
-              }}
-              className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#E0E7FF] bg-white hover:bg-indigo-50 text-[12px] font-semibold text-[#4F46E5] shadow-2xs cursor-pointer"
-            >
-              <Lock className="w-3 h-3" />
-              <span>Requires Pro Plan</span>
-            </button>
-          </div>
+        
 
 
-          {/* ================= SECTION B: Resume Settings Card ================= */}
-          <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-5 sm:p-6 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col gap-4">
-            {/* Card Header */}
-            <div className="flex items-start gap-3.5">
-              <div className="w-9 h-9 rounded-lg bg-[#EFF6FF] border border-[#DBEAFE] flex items-center justify-center text-[#4F46E5] shrink-0 mt-0.5">
-                <FileText className="w-4.5 h-4.5 text-[#4F46E5]" />
-              </div>
-              <div>
-                <h2 className="text-[16px] sm:text-[17px] font-bold text-slate-900 leading-snug">
-                  Resume Settings
-                </h2>
-                <p className="text-[12.5px] sm:text-[13px] text-slate-500 mt-0.5">
-                  Select which resume to use for C2C job applications.
-                </p>
-              </div>
-            </div>
 
-            {/* Select Resume Dropdown Container */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[12.5px] font-semibold text-slate-700">
-                Select Resume
-              </label>
 
-              <div ref={resumeDropdownRef} className="relative">
-                <button
-                  type="button"
-                  onClick={() => setIsResumeDropdownOpen(!isResumeDropdownOpen)}
-                  className="w-full h-[42px] px-3.5 rounded-xl border border-[#E2E8F0] bg-white flex items-center justify-between text-left text-[13px] font-medium text-slate-800 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#EEF2FF] focus:border-[#818CF8] transition-all cursor-pointer shadow-2xs"
-                >
-                  <span className="truncate pr-3">{selectedResume}</span>
-                  <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
-                </button>
 
-                {isResumeDropdownOpen && (
-                  <div className="absolute left-0 right-0 mt-1.5 bg-white rounded-xl border border-slate-200 shadow-xl py-1.5 z-30 animate-in fade-in zoom-in-95 duration-150 max-h-56 overflow-y-auto">
-                    {resumesList.map((res) => (
-                      <button
-                        key={res.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedResume(res.name);
-                          setIsResumeDropdownOpen(false);
-                          persistSettings({ selectedResume: res.name });
-                        }}
-                        className={`w-full text-left px-4 py-2.5 text-[13px] font-medium transition-colors cursor-pointer flex items-center justify-between ${
-                          selectedResume === res.name
-                            ? "bg-[#EEF2FF] text-[#4F46E5]"
-                            : "text-slate-700 hover:bg-slate-50"
-                        }`}
-                      >
-                        <span className="truncate">{res.name}</span>
-                        {selectedResume === res.name && (
-                          <Check className="w-4 h-4 text-[#4F46E5] shrink-0" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
 
-            {/* Tips Information Panel Matching Image 2 */}
-            <div className="rounded-xl bg-[#EEF2FF]/60 border border-[#C7D2FE]/60 p-3.5 sm:p-4 flex items-start gap-3">
-              <div className="w-5 h-5 rounded-full bg-[#4F46E5] text-white flex items-center justify-center shrink-0 mt-0.5 text-xs font-bold">
-                i
-              </div>
-              <div className="flex flex-col gap-1 text-[12.5px] text-slate-700 leading-relaxed">
-                <span className="font-bold text-slate-900">Tips</span>
-                <ul className="space-y-0.5 text-slate-600">
-                  <li className="flex items-center gap-1.5">
-                    <span className="w-1 h-1 rounded-full bg-slate-400" />
-                    <span>Use an updated resume with relevant C2C skills.</span>
-                  </li>
-                  <li className="flex items-center gap-1.5">
-                    <span className="w-1 h-1 rounded-full bg-slate-400" />
-                    <span>Make sure your resume is clear and well-formatted.</span>
-                  </li>
-                  <li className="flex items-center gap-1.5">
-                    <span className="w-1 h-1 rounded-full bg-slate-400" />
-                    <span>You can update your resume anytime from Profile.</span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
+          
 
           {/* ================= SECTION C: Schedule & Targeting Card ================= */}
           <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-5 sm:p-6 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col gap-5">
@@ -637,6 +589,25 @@ const C2CAutoApply = () => {
                   Set when and what type of C2C jobs to apply for.
                 </p>
               </div>
+                 <button
+              type="button"
+              onClick={handleSaveAll}
+              disabled={isSaving}
+              className="ml-auto px-5 py-2.5 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] active:bg-[#3730A3] text-white text-xs sm:text-sm font-semibold transition-all shadow-xs hover:shadow flex items-center justify-center gap-2 cursor-pointer shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
+  
+            >
+              {isSaving ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  <span>Save Settings</span>
+                </>
+              )}
+            </button>
             </div>
 
             {/* WHEN TO SEND Row Matching Image 2 */}
@@ -799,6 +770,7 @@ const C2CAutoApply = () => {
                 </div>
               </div>
             </div>
+            
           </div>
 
           {/* ================= Phone Number Modal ================= */}
@@ -931,6 +903,16 @@ const C2CAutoApply = () => {
               </div>
             </div>
           )}
+
+          {/* ================= Phone OTP Verification Modal ================= */}
+          <PhoneOtpModal
+            isOpen={isOtpModalOpen}
+            phoneNumber={phoneNumber}
+            onClose={() => setIsOtpModalOpen(false)}
+            onSuccess={handleOtpVerifiedSuccess}
+            onChangePhoneNumber={handleChangePhoneNumberFromOtp}
+            onShowToast={(msg, type) => setToast({ show: true, message: msg, type })}
+          />
         </main>
       </div>
     </div>
