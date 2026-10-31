@@ -337,7 +337,7 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
 
       if (lower.includes("fit me") || (lower.includes("what jobs") && lower.includes("fit"))) {
         responseText =
-          "Based on your profile and uploaded resume, your best matches are Full Stack Software Engineer, Frontend Developer, and React / Node.js roles. Tsenta currently identifies 24 active full-time positions matching your criteria with an 85%+ match score in your selected locations.";
+          "Based on your profile and uploaded resume, your best matches are Full Stack Software Engineer, Frontend Developer, and React / Node.js roles. ta currently identifies 24 active full-time positions matching your criteria with an 85%+ match score in your selected locations.";
       } else if (lower.includes("how does auto apply work") || (lower.includes("auto apply") && lower.includes("work"))) {
         responseText =
           "Auto Apply continuously monitors newly posted job openings that fit your resume criteria and lanes. Up to 4 times a day during your configured run hours, it automatically submits tailored applications drawing from your daily cap, prioritizing your strongest matches first.";
@@ -443,14 +443,14 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
   // Formatted run time array and string display: matches Image 2
   const runTimesList =
     selectedRunTimes.length === 4 &&
-    selectedRunTimes.includes("2 AM") &&
-    selectedRunTimes.includes("8 AM") &&
-    selectedRunTimes.includes("2 PM") &&
-    selectedRunTimes.includes("8 PM")
+      selectedRunTimes.includes("2 AM") &&
+      selectedRunTimes.includes("8 AM") &&
+      selectedRunTimes.includes("2 PM") &&
+      selectedRunTimes.includes("8 PM")
       ? ["2:30 AM", "8:30 AM", "2:30 PM", "8:30 PM"]
       : selectedRunTimes.length > 0
-      ? selectedRunTimes
-      : ["2:30 AM", "8:30 AM", "2:30 PM", "8:30 PM"];
+        ? selectedRunTimes
+        : ["2:30 AM", "8:30 AM", "2:30 PM", "8:30 PM"];
 
   const runTimesFormatted =
     runTimesList.length > 2
@@ -484,13 +484,12 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
           {/* Toast Notification */}
           {toast.show && (
             <div
-              className={`fixed top-5 right-5 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg border text-sm font-medium transition-all transform animate-in fade-in slide-in-from-top-2 duration-200 ${
-                toast.type === "success"
-                  ? "bg-white text-indigo-700 border-indigo-200 shadow-indigo-500/10"
-                  : toast.type === "warning"
+              className={`fixed top-5 right-5 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg border text-sm font-medium transition-all transform animate-in fade-in slide-in-from-top-2 duration-200 ${toast.type === "success"
+                ? "bg-white text-indigo-700 border-indigo-200 shadow-indigo-500/10"
+                : toast.type === "warning"
                   ? "bg-white text-amber-700 border-amber-200 shadow-amber-500/10"
                   : "bg-white text-rose-700 border-rose-200 shadow-rose-500/10"
-              }`}
+                }`}
             >
               {toast.type === "success" ? (
                 <CheckCircle2 className="w-5 h-5 text-[#4F46E5] shrink-0" />
@@ -511,12 +510,12 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
                 {/* Auto Apply Assistant Header (Image 2) */}
                 <div className="flex items-start gap-3.5 pb-4 border-b border-slate-100 mb-2">
                   <div className="w-10 h-10 rounded-xl bg-[#EEF2FF] border border-[#E0E7FF] flex items-center justify-center shrink-0 mt-0.5">
-  <img
-    src={fulltimeone}
-    alt="Auto Apply Assistant"
-    className="w-5 h-5 object-contain"
-  />
-</div>
+                    <img
+                      src={fulltimeone}
+                      alt="Auto Apply Assistant"
+                      className="w-5 h-5 object-contain"
+                    />
+                  </div>
                   <div className="flex flex-col">
                     <h2 className="text-[17px] font-bold text-slate-900 leading-snug">
                       Auto Apply Assistant
@@ -556,9 +555,8 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
                         return (
                           <div
                             key={idx}
-                            className={`flex flex-col gap-1.5 ${
-                              isUser ? "items-end" : "items-start"
-                            }`}
+                            className={`flex flex-col gap-1.5 ${isUser ? "items-end" : "items-start"
+                              }`}
                           >
                             {isUser ? (
                               <div className="bg-[#4F46E5] text-white rounded-2xl p-4 sm:p-5 text-[13.5px] leading-relaxed max-w-full shadow-xs">
@@ -699,11 +697,10 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
                   <button
                     type="submit"
                     disabled={!inputMessage.trim()}
-                    className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
-                      inputMessage.trim()
-                        ? "bg-[#EEF2FF] text-[#4F46E5] hover:bg-[#4F46E5] hover:text-white cursor-pointer"
-                        : "text-slate-300 cursor-not-allowed"
-                    }`}
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${inputMessage.trim()
+                      ? "bg-[#EEF2FF] text-[#4F46E5] hover:bg-[#4F46E5] hover:text-white cursor-pointer"
+                      : "text-slate-300 cursor-not-allowed"
+                      }`}
                     title="Send message"
                   >
                     <Send className="w-4 h-4" />
@@ -716,9 +713,9 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
             <div className="lg:col-span-5 flex flex-col gap-3">
               {/* Settings Header Row (Image 1 Header) */}
               <div className="flex items-center justify-between mb-0.5">
-                
 
-                
+
+
               </div>
 
               {/* Unified Settings Card Containing Image 2 Data in Image 1 Colors */}
@@ -907,7 +904,7 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
             {/* Modal Header */}
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
               <h2 className="text-[17px] font-bold text-slate-900">
-                 settings
+                settings
               </h2>
               <button
                 type="button"
@@ -936,7 +933,7 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
                       </span>
                     </div>
                     <p className="text-[13px] text-slate-500 mt-1 leading-relaxed">
-                      Set it once. Tsenta applies to your best new matches at the times you choose, up to 4 times a day.
+                      Set it once. Autoapply applies to your best new matches at the times you choose, up to 4 times a day.
                     </p>
                   </div>
                 </div>
@@ -957,33 +954,33 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
               <div className="h-px w-full bg-slate-100" />
 
               {/* SECTION 2: Enable auto-apply */}
-             
-{/* SECTION 2: Enable auto-apply */}
-<div className="flex items-center justify-between gap-4 rounded-xl bg-[#EFEEFF] p-4">
-  <div>
-    <h4 className="text-[14px] font-bold text-black">
-      Enable auto-apply
-    </h4>
-    <p className="text-[12.5px] text-black/85 mt-0.5">
-      Upgrade to Pro to turn this on. You can configure everything else below now.
-    </p>
-  </div>
 
-  <button
-    type="button"
-    onClick={() => {
-      setToast({
-        show: true,
-        message: "Auto Apply requires the Pro subscription plan.",
-        type: "warning",
-      });
-    }}
-    className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-white/40 bg-white hover:bg-indigo-50 text-[12px] font-semibold text-[#4F46E5] shadow-2xs cursor-pointer"
-  >
-    <Lock className="w-3 h-3" />
-    <span>Requires Pro Plan</span>
-  </button>
-</div>
+              {/* SECTION 2: Enable auto-apply */}
+              <div className="flex items-center justify-between gap-4 rounded-xl bg-[#EFEEFF] p-4">
+                <div>
+                  <h4 className="text-[14px] font-bold text-black">
+                    Enable auto-apply
+                  </h4>
+                  <p className="text-[12.5px] text-black/85 mt-0.5">
+                    Upgrade to Pro to turn this on. You can configure everything else below now.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setToast({
+                      show: true,
+                      message: "Auto Apply requires the Pro subscription plan.",
+                      type: "warning",
+                    });
+                  }}
+                  className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-white/40 bg-white hover:bg-indigo-50 text-[12px] font-semibold text-[#4F46E5] shadow-2xs cursor-pointer"
+                >
+                  <Lock className="w-3 h-3" />
+                  <span>Requires Pro Plan</span>
+                </button>
+              </div>
 
 
               {/* SECTION 3: Daily application cap */}
@@ -1020,11 +1017,10 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
                         key={slot}
                         type="button"
                         onClick={() => toggleRunTime(slot)}
-                        className={`py-2 px-1 rounded-full text-[11px] font-semibold transition-all cursor-pointer text-center select-none ${
-                          isSelected
-                            ? "bg-[#4F46E5] text-white shadow-2xs hover:bg-[#4338CA]"
-                            : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                        }`}
+                        className={`py-2 px-1 rounded-full text-[11px] font-semibold transition-all cursor-pointer text-center select-none ${isSelected
+                          ? "bg-[#4F46E5] text-white shadow-2xs hover:bg-[#4338CA]"
+                          : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                          }`}
                       >
                         {slot}
                       </button>
@@ -1055,14 +1051,12 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
                   role="switch"
                   aria-checked={perCompanyLimit}
                   onClick={() => setPerCompanyLimit(!perCompanyLimit)}
-                  className={`w-11 h-6 rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
-                    perCompanyLimit ? "bg-[#4F46E5]" : "bg-slate-200"
-                  }`}
+                  className={`w-11 h-6 rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${perCompanyLimit ? "bg-[#4F46E5]" : "bg-slate-200"
+                    }`}
                 >
                   <div
-                    className={`w-5 h-5 rounded-full bg-white shadow-sm transform transition-transform duration-200 ${
-                      perCompanyLimit ? "translate-x-5" : "translate-x-0"
-                    }`}
+                    className={`w-5 h-5 rounded-full bg-white shadow-sm transform transition-transform duration-200 ${perCompanyLimit ? "translate-x-5" : "translate-x-0"
+                      }`}
                   />
                 </button>
               </div>
@@ -1082,14 +1076,12 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
                   role="switch"
                   aria-checked={pauseInterviewing}
                   onClick={() => setPauseInterviewing(!pauseInterviewing)}
-                  className={`w-11 h-6 rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
-                    pauseInterviewing ? "bg-[#4F46E5]" : "bg-slate-200"
-                  }`}
+                  className={`w-11 h-6 rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${pauseInterviewing ? "bg-[#4F46E5]" : "bg-slate-200"
+                    }`}
                 >
                   <div
-                    className={`w-5 h-5 rounded-full bg-white shadow-sm transform transition-transform duration-200 ${
-                      pauseInterviewing ? "translate-x-5" : "translate-x-0"
-                    }`}
+                    className={`w-5 h-5 rounded-full bg-white shadow-sm transform transition-transform duration-200 ${pauseInterviewing ? "translate-x-5" : "translate-x-0"
+                      }`}
                   />
                 </button>
               </div>
@@ -1160,14 +1152,12 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
                     role="switch"
                     aria-checked={reviewBeforeSubmit}
                     onClick={() => setReviewBeforeSubmit(!reviewBeforeSubmit)}
-                    className={`w-11 h-6 rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
-                      reviewBeforeSubmit ? "bg-[#4F46E5]" : "bg-slate-200"
-                    }`}
+                    className={`w-11 h-6 rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${reviewBeforeSubmit ? "bg-[#4F46E5]" : "bg-slate-200"
+                      }`}
                   >
                     <div
-                      className={`w-5 h-5 rounded-full bg-white shadow-sm transform transition-transform duration-200 ${
-                        reviewBeforeSubmit ? "translate-x-5" : "translate-x-0"
-                      }`}
+                      className={`w-5 h-5 rounded-full bg-white shadow-sm transform transition-transform duration-200 ${reviewBeforeSubmit ? "translate-x-5" : "translate-x-0"
+                        }`}
                     />
                   </button>
                 </div>
@@ -1190,11 +1180,10 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
                           key={qual}
                           type="button"
                           onClick={() => setMatchQuality(qual)}
-                          className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer select-none ${
-                            isSel
-                              ? "bg-[#4F46E5] text-white shadow-xs hover:bg-[#4338CA]"
-                              : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
-                          }`}
+                          className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer select-none ${isSel
+                            ? "bg-[#4F46E5] text-white shadow-xs hover:bg-[#4338CA]"
+                            : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+                            }`}
                         >
                           {qual}
                         </button>
@@ -1246,11 +1235,10 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
                             key={mode}
                             type="button"
                             onClick={() => setResumeOptimizationMode(mode)}
-                            className={`px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer ${
-                              isSel
-                                ? "bg-[#4F46E5] text-white shadow-2xs hover:bg-[#4338CA]"
-                                : "text-slate-600 hover:text-slate-900"
-                            }`}
+                            className={`px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer ${isSel
+                              ? "bg-[#4F46E5] text-white shadow-2xs hover:bg-[#4338CA]"
+                              : "text-slate-600 hover:text-slate-900"
+                              }`}
                           >
                             {mode}
                           </button>
