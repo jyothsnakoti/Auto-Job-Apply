@@ -6,6 +6,7 @@ import {
   X,
   ChevronDown,
   Briefcase,
+  Mail,
   MapPin,
   Check,
   CheckCircle2,
@@ -19,6 +20,12 @@ import {
 } from "lucide-react";
 import { getJobs, applyToJobs, getStoredAppliedJobIds } from "../services/api";
 
+// Helper to determine if a job originates from Email (Vendor) vs Job Portal
+const isEmailVendorJob = (job) => {
+  const src = String(job?.sourceType || job?.source || "").trim().toLowerCase();
+  return src.includes("email") || src.includes("vendor");
+};
+
 // 8 Reference C2C Job Records precisely matching Image 2
 const C2C_INITIAL_JOBS = [
   {
@@ -31,6 +38,8 @@ const C2C_INITIAL_JOBS = [
     city: "Plano, TX",
     workplace: "Onsite",
     jobType: "C2C",
+    sourceType: "Job Portal",
+    source: "Job Portal",
     posted: "Oct 2, 2026",
     postedDate: "2026-10-02",
     matchPercent: 61.9,
@@ -58,6 +67,8 @@ const C2C_INITIAL_JOBS = [
     city: "Chicago, IL",
     workplace: "Hybrid",
     jobType: "C2C",
+    sourceType: "Email (Vendor)",
+    source: "Email (Vendor)",
     posted: "Oct 2, 2026",
     postedDate: "2026-10-02",
     matchPercent: 61.9,
@@ -85,6 +96,8 @@ const C2C_INITIAL_JOBS = [
     city: "Seattle, WA",
     workplace: "Remote",
     jobType: "C2C",
+    sourceType: "Job Portal",
+    source: "Job Portal",
     posted: "Oct 2, 2026",
     postedDate: "2026-10-02",
     matchPercent: 61.9,
@@ -112,6 +125,8 @@ const C2C_INITIAL_JOBS = [
     city: "Austin, TX",
     workplace: "Remote",
     jobType: "C2C",
+    sourceType: "Email (Vendor)",
+    source: "Email (Vendor)",
     posted: "Oct 2, 2026",
     postedDate: "2026-10-02",
     matchPercent: 61.9,
@@ -139,6 +154,8 @@ const C2C_INITIAL_JOBS = [
     city: "San Jose, CA",
     workplace: "Remote",
     jobType: "C2C",
+    sourceType: "Email (Vendor)",
+    source: "Email (Vendor)",
     posted: "Sep 26, 2026",
     postedDate: "2026-09-26",
     matchPercent: 61.9,
@@ -166,6 +183,8 @@ const C2C_INITIAL_JOBS = [
     city: "New York, NY",
     workplace: "Hybrid",
     jobType: "C2C",
+    sourceType: "Job Portal",
+    source: "Job Portal",
     posted: "Sep 26, 2026",
     postedDate: "2026-09-26",
     matchPercent: 61.9,
@@ -193,6 +212,8 @@ const C2C_INITIAL_JOBS = [
     city: "Dallas, TX",
     workplace: "Remote",
     jobType: "C2C",
+    sourceType: "Email (Vendor)",
+    source: "Email (Vendor)",
     posted: "Sep 26, 2026",
     postedDate: "2026-09-26",
     matchPercent: 61.9,
@@ -220,6 +241,8 @@ const C2C_INITIAL_JOBS = [
     city: "Atlanta, GA",
     workplace: "Onsite",
     jobType: "C2C",
+    sourceType: "Job Portal",
+    source: "Job Portal",
     posted: "Sep 26, 2026",
     postedDate: "2026-09-26",
     matchPercent: 61.9,
@@ -280,6 +303,12 @@ const [emailNotConnected, setEmailNotConnected] = useState(false);
   // Application States
   const [appliedJobIds, setAppliedJobIds] = useState(() => {
     try {
+      const hasReset = localStorage.getItem("c2c_applied_reset_v2");
+      if (!hasReset) {
+        localStorage.removeItem("c2c_applied_job_ids");
+        localStorage.setItem("c2c_applied_reset_v2", "true");
+        return [];
+      }
       const stored = localStorage.getItem("c2c_applied_job_ids");
       return stored ? JSON.parse(stored) : [];
     } catch {
@@ -329,35 +358,51 @@ const [emailNotConnected, setEmailNotConnected] = useState(false);
         const res = await getJobs({ employmentType: "contract", q: "c2c", size: 40 });
         if (res?.items && Array.isArray(res.items) && res.items.length > 0) {
           // Normalize and merge API jobs with C2C designation
-          const apiFormatted = res.items.map((item, idx) => ({
-            id: item.id || item.jobId || `api-c2c-${idx}`,
-            jobId: item.jobId || item.id || `api-c2c-${idx}`,
-            title: item.title?.includes("C2C") ? item.title : `${item.title || "Software Specialist"} (C2C)`,
-            company: item.company || item.companyName || "Verified Partner",
-            isVerified: true,
-            location: item.location || item.city || "United States",
-            city: item.city || item.location || "United States",
-            workplace: item.workplace || item.workMode || "Remote",
-            jobType: "C2C",
-            posted: item.posted || "Oct 2, 2026",
-            postedDate: item.postedDate || "2026-10-02",
-            matchPercent: item.matchScore || item.matchPercent || 61.9,
-            role: item.role || "Developer",
-            description: item.description || "Exciting C2C contract opportunity.",
-            responsibilities: Array.isArray(item.responsibilities) && item.responsibilities.length > 0
-              ? item.responsibilities
-              : [
-                  "Collaborate with the cross-functional team on enterprise requirements.",
-                  "Implement scalable, maintainable, and high-quality software solutions.",
-                  "Participate in design sessions, code reviews, and automated testing.",
-                ],
-            requiredSkills: Array.isArray(item.requiredSkills) && item.requiredSkills.length > 0
-              ? item.requiredSkills
-              : ["C2C", "Contract", "Software Development"],
-            preferredSkills: Array.isArray(item.preferredSkills) ? item.preferredSkills : [],
-            experience: item.experience || "3+ years",
-            salary: item.salary || "$70 - $95 / hr (C2C)",
-          }));
+          const apiFormatted = res.items.map((item, idx) => {
+            const rawSource = item.sourceType || item.source || item.jobSource || item.origin || "";
+            let resolvedSource = "Job Portal";
+            if (typeof rawSource === "string" && (rawSource.toLowerCase().includes("email") || rawSource.toLowerCase().includes("vendor"))) {
+              resolvedSource = "Email (Vendor)";
+            } else if (typeof rawSource === "string" && rawSource.toLowerCase().includes("portal")) {
+              resolvedSource = "Job Portal";
+            } else if (rawSource) {
+              resolvedSource = rawSource;
+            } else {
+              resolvedSource = idx % 2 === 0 ? "Job Portal" : "Email (Vendor)";
+            }
+
+            return {
+              id: item.id || item.jobId || `api-c2c-${idx}`,
+              jobId: item.jobId || item.id || `api-c2c-${idx}`,
+              title: item.title?.includes("C2C") ? item.title : `${item.title || "Software Specialist"} (C2C)`,
+              company: item.company || item.companyName || "Verified Partner",
+              isVerified: true,
+              location: item.location || item.city || "United States",
+              city: item.city || item.location || "United States",
+              workplace: item.workplace || item.workMode || "Remote",
+              jobType: "C2C",
+              sourceType: resolvedSource,
+              source: item.source || resolvedSource,
+              posted: item.posted || "Oct 2, 2026",
+              postedDate: item.postedDate || "2026-10-02",
+              matchPercent: item.matchScore || item.matchPercent || 61.9,
+              role: item.role || "Developer",
+              description: item.description || "Exciting C2C contract opportunity.",
+              responsibilities: Array.isArray(item.responsibilities) && item.responsibilities.length > 0
+                ? item.responsibilities
+                : [
+                    "Collaborate with the cross-functional team on enterprise requirements.",
+                    "Implement scalable, maintainable, and high-quality software solutions.",
+                    "Participate in design sessions, code reviews, and automated testing.",
+                  ],
+              requiredSkills: Array.isArray(item.requiredSkills) && item.requiredSkills.length > 0
+                ? item.requiredSkills
+                : ["C2C", "Contract", "Software Development"],
+              preferredSkills: Array.isArray(item.preferredSkills) ? item.preferredSkills : [],
+              experience: item.experience || "3+ years",
+              salary: item.salary || "$70 - $95 / hr (C2C)",
+            };
+          });
           setJobs(apiFormatted);
         }
       } catch (err) {
@@ -853,11 +898,19 @@ const [emailNotConnected, setEmailNotConnected] = useState(false);
                     className="bg-white rounded-[16px] border border-[#E2E8F0] p-4.5 flex flex-col justify-between shadow-2xs hover:shadow-md hover:border-[#C7D2FE] transition-all group"
                   >
                     <div>
-                      {/* Card Top Row: Briefcase Icon + Match Percentage */}
+                      {/* Card Top Row: Source Badge Pill + Match Percentage */}
                       <div className="flex items-center justify-between">
-                        <div className="w-9 h-9 rounded-lg bg-[#EFF6FF] border border-[#DBEAFE] flex items-center justify-center text-[#3B82F6] group-hover:scale-105 transition-transform">
-                          <Briefcase className="w-4.5 h-4.5" />
-                        </div>
+                        {isEmailVendorJob(job) ? (
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#EFF6FF] text-[#2563EB] text-[12px] font-semibold">
+                            <Mail className="w-3.5 h-3.5 text-[#2563EB]" />
+                            <span>Email (Vendor)</span>
+                          </div>
+                        ) : (
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#EFEEFF] text-[#1A0EA5] text-[12px] font-semibold">
+                            <Briefcase className="w-3.5 h-3.5 text-[#1A0EA5]" />
+                            <span>Job Portal</span>
+                          </div>
+                        )}
                         <span className="text-[12px] font-medium text-slate-500">
                           {job.matchPercent}% match
                         </span>
@@ -900,17 +953,55 @@ const [emailNotConnected, setEmailNotConnected] = useState(false);
                       </div>
                     </div>
 
-                    {/* Action Buttons: View Details & Apply Now */}
-                    <div className="flex items-center gap-2 pt-4 mt-3 border-t border-slate-100/80">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedJobModal(job)}
-                        className="flex-1 h-[36px] font-semibold rounded-[10px] border border-[#E2E8F0] bg-white text-[12.5px] text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors cursor-pointer flex items-center justify-center"
-                      >
-                        View Details
-                      </button>
-
-                     
+                    {/* Action Buttons: Apply */}
+                    <div className="pt-3.5 mt-1">
+                      {isEmailVendorJob(job) ? (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedJobModal(job)}
+                          className={`w-full h-[36px] font-semibold rounded-[10px] text-[13px] transition-all flex items-center justify-center cursor-pointer ${
+                            isApplied
+                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100/60"
+                              : "bg-[#EAF4FF] text-[#2563EB] border border-[#C7E0FF] hover:bg-[#DCEBFF] hover:border-[#ADCFFF] active:bg-[#CEE3FF]"
+                          }`}
+                        >
+                          {isApplied ? (
+                            <span className="flex items-center gap-1.5">
+                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>Applied</span>
+                            </span>
+                          ) : (
+                            "Apply"
+                          )}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={isApplied || isApplying}
+                          onClick={(e) => handleApply(job, e)}
+                          className={`w-full h-[36px] font-semibold rounded-[10px] text-[13px] transition-all flex items-center justify-center ${
+                            isApplied
+                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-not-allowed shadow-none"
+                              : isApplying
+                              ? "bg-[#EFEEFF]/80 text-[#4F46E5] border border-[#D8D4FF] cursor-not-allowed"
+                              : "bg-[#EFEEFF] text-[#4F46E5] border border-[#D8D4FF] hover:bg-[#E4E2FF] hover:border-[#C4BFFF] active:bg-[#D6D0FF] cursor-pointer"
+                          }`}
+                        >
+                          {isApplying ? (
+                            <span className="flex items-center gap-1.5">
+                              <span className="w-3.5 h-3.5 border-2 border-[#4F46E5]/40 border-t-[#4F46E5] rounded-full animate-spin" />
+                              <span>Applying...</span>
+                            </span>
+                          ) : isApplied ? (
+                            <span className="flex items-center gap-1.5">
+                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>Applied</span>
+                            </span>
+                          ) : (
+                            "Apply"
+                          )}
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -1120,7 +1211,7 @@ const [emailNotConnected, setEmailNotConnected] = useState(false);
         <div className="bg-white border border-slate-200 rounded-xl p-6 sm:p-8 shadow-sm">
           <div className="border-b border-slate-200 pb-5">
             <h1 className="text-2xl font-bold text-slate-900">
-              Your Name
+              Koti Jyothsna
             </h1>
 
             <p className="text-sm text-slate-500 mt-1">

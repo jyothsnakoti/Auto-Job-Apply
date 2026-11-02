@@ -344,7 +344,6 @@ const UpgradePlan = () => {
       await deleteSavedCard(cardToDelete.id);
       setDeleteSuccessMessage("Card deleted successfully.");
       setCardToDelete(null);
-      setOpenMenuCardId(null);
       await fetchPaymentMethod();
       setTimeout(() => {
         setDeleteSuccessMessage("");

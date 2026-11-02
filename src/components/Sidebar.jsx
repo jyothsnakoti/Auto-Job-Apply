@@ -143,7 +143,7 @@ const Sidebar = () => {
 
       {/* Sidebar Aside */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 h-screen w-[320px] min-w-[320px] shrink-0 flex flex-col border-r border-slate-100 bg-white px-5 sm:px-6 py-5 overflow-y-auto transform transition-transform duration-450 ease-in-out lg:static lg:translate-x-0 lg:z-30 ${
+        className={`fixed inset-y-0 left-0 z-50 h-screen w-[320px] min-w-[320px] shrink-0 flex flex-col border-r border-slate-100 bg-white px-5 sm:px-6 py-5 overflow-y-auto no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden transform transition-transform duration-450 ease-in-out lg:static lg:translate-x-0 lg:z-30 ${
           isMobileOpen
             ? "translate-x-0 shadow-2xl"
             : "-translate-x-full lg:translate-x-0 shadow-none"

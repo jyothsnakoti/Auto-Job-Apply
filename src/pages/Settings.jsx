@@ -18,6 +18,21 @@ const Settings = () => {
   // Application Questions State
   const [questionsMode, setQuestionsMode] = useState("saved_answers");
 
+  // Daily Application Cap State (synchronized with Full Time Auto Apply / Shared Daily Cap)
+  const [dailyApplicationCap, setDailyApplicationCap] = useState(() => {
+    try {
+      const saved = localStorage.getItem("fullTimeAutoApplySettings");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.dailyTarget !== undefined) {
+          const num = parseInt(parsed.dailyTarget, 10);
+          if (!isNaN(num)) return Math.max(1, Math.min(150, num));
+        }
+      }
+    } catch (e) {}
+    return 10;
+  });
+
   // Toast State
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
 
@@ -51,6 +66,10 @@ const Settings = () => {
           if (prof.applicationQuestionsMode) {
             setQuestionsMode(prof.applicationQuestionsMode);
           }
+          if (prof.fullTimeTarget !== undefined || prof.dailyTarget !== undefined || prof.dailyCap !== undefined) {
+            const num = parseInt(prof.fullTimeTarget ?? prof.dailyTarget ?? prof.dailyCap, 10);
+            if (!isNaN(num)) setDailyApplicationCap(Math.max(1, Math.min(150, num)));
+          }
         }
       } catch (err) {
         console.warn("Could not load initial settings:", err);
@@ -58,6 +77,24 @@ const Settings = () => {
     };
 
     fetchSettings();
+
+    // Listen for sync from Shared Daily Cap in FullTimeAutoApply
+    const handleSync = (e) => {
+      try {
+        const data = e.detail || (e.key === "fullTimeAutoApplySettings" && e.newValue ? JSON.parse(e.newValue) : null);
+        if (data && data.dailyTarget !== undefined) {
+          const num = parseInt(data.dailyTarget, 10);
+          if (!isNaN(num)) setDailyApplicationCap(Math.max(1, Math.min(150, num)));
+        }
+      } catch (err) {}
+    };
+    window.addEventListener("fullTimeSettingsUpdated", handleSync);
+    window.addEventListener("storage", handleSync);
+
+    return () => {
+      window.removeEventListener("fullTimeSettingsUpdated", handleSync);
+      window.removeEventListener("storage", handleSync);
+    };
   }, []);
 
   const sendSettingsPatch = async (updates) => {
@@ -66,6 +103,7 @@ const Settings = () => {
       autoApproveEdits: updates.autoApproveEdits !== undefined ? updates.autoApproveEdits : autoApprove,
       reviewBeforeSubmit: updates.reviewBeforeSubmit !== undefined ? updates.reviewBeforeSubmit : reviewBeforeSubmitToggle,
       applicationQuestionsMode: updates.applicationQuestionsMode !== undefined ? updates.applicationQuestionsMode : questionsMode,
+      fullTimeTarget: updates.fullTimeTarget !== undefined ? updates.fullTimeTarget : dailyApplicationCap,
     };
 
     try {

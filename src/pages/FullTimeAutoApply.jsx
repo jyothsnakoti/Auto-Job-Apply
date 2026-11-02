@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
 import fulltimeone from "../assets/fulltimeone.svg";
@@ -77,12 +78,16 @@ const TWENTY_FOUR_SLOTS = [
 const INITIAL_RUN_TIMES = ["2 AM", "8 AM", "2 PM", "8 PM"];
 
 const FullTimeAutoApply = () => {
+  const navigate = useNavigate();
+
   // Settings States
-  const [isEnabled, setIsEnabled] = useState(true);
+  const [isEnabled, setIsEnabled] = useState(false);
   const [dailyTarget, setDailyTarget] = useState(10);
+  const [draftDailyCap, setDraftDailyCap] = useState(10);
+
   const [selectedRunTimes, setSelectedRunTimes] = useState(INITIAL_RUN_TIMES);
 
-  // Lanes State (Max 5 lanes)
+  // Lanes State (Max 3 lanes)
   const [lanes, setLanes] = useState([
     {
       id: "lane-default",
@@ -127,10 +132,41 @@ const FullTimeAutoApply = () => {
       const saved = localStorage.getItem("fullTimeAutoApplySettings");
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed.isEnabled !== undefined) setIsEnabled(parsed.isEnabled);
-        if (parsed.dailyTarget !== undefined) setDailyTarget(parsed.dailyTarget);
+        if (parsed.isEnabled !== undefined && parsed.isPaidPlanActive) {
+          setIsEnabled(parsed.isEnabled);
+        } else {
+          setIsEnabled(false);
+        }
+        if (parsed.dailyTarget !== undefined) {
+          const cap = parseInt(parsed.dailyTarget, 10);
+          if (!isNaN(cap)) {
+            setDailyTarget(cap);
+            setDraftDailyCap(cap);
+          }
+        }
         if (Array.isArray(parsed.selectedRunTimes)) setSelectedRunTimes(parsed.selectedRunTimes);
-        if (Array.isArray(parsed.lanes) && parsed.lanes.length > 0) setLanes(parsed.lanes);
+        if (Array.isArray(parsed.lanes) && parsed.lanes.length > 0) {
+          const seen = new Set();
+          const uniqueLanes = [];
+          for (const l of parsed.lanes) {
+            if (l.isDefault) {
+              uniqueLanes.push(l);
+              continue;
+            }
+            const key = (l.name || "").toLowerCase().trim();
+            if (!seen.has(key) && seen.size < 3) {
+              seen.add(key);
+              uniqueLanes.push(l);
+            }
+          }
+          setLanes(uniqueLanes);
+          try {
+            parsed.lanes = uniqueLanes;
+            localStorage.setItem("fullTimeAutoApplySettings", JSON.stringify(parsed));
+          } catch (err) {
+            // ignore
+          }
+        }
         if (parsed.perCompanyLimit !== undefined) setPerCompanyLimit(parsed.perCompanyLimit);
         if (parsed.pauseInterviewing !== undefined) setPauseInterviewing(parsed.pauseInterviewing);
         if (parsed.standingInstructions !== undefined) setStandingInstructions(parsed.standingInstructions);
@@ -154,6 +190,13 @@ const FullTimeAutoApply = () => {
             else if (opt.toLowerCase() === "aggressive") setResumeOptimizationMode("Aggressive");
             else setResumeOptimizationMode("Honest");
           }
+          if (prof.fullTimeTarget !== undefined || prof.dailyTarget !== undefined) {
+            const num = parseInt(prof.fullTimeTarget ?? prof.dailyTarget, 10);
+            if (!isNaN(num)) {
+              setDailyTarget(num);
+              setDraftDailyCap(num);
+            }
+          }
         }
       } catch (err) {
         // Backend optional/fallback
@@ -174,10 +217,10 @@ const FullTimeAutoApply = () => {
     if (toast.show) {
       const timer = setTimeout(() => {
         setToast((prev) => ({ ...prev, show: false }));
-      }, 3500);
+      }, 4000);
       return () => clearTimeout(timer);
     }
-  }, [toast.show]);
+  }, [toast]);
 
   // Handle run time selection (max 4)
   const toggleRunTime = (time) => {
@@ -196,52 +239,96 @@ const FullTimeAutoApply = () => {
     }
   };
 
-  // Stepper increment/decrement
-  const handleTargetChange = (val) => {
+  // Stepper increment/decrement for Shared Daily Cap
+  const handleSharedCapChange = (val) => {
     const num = parseInt(val, 10);
-    if (isNaN(num)) {
-      setDailyTarget(1);
-    } else {
-      const clamped = Math.max(1, Math.min(150, num));
-      setDailyTarget(clamped);
+    const clamped = isNaN(num) ? 1 : Math.max(1, Math.min(150, num));
+    setDailyTarget(clamped);
+    setDraftDailyCap(clamped);
+
+    try {
+      const saved = localStorage.getItem("fullTimeAutoApplySettings");
+      const parsed = saved ? JSON.parse(saved) : {};
+      parsed.dailyTarget = clamped;
+      localStorage.setItem("fullTimeAutoApplySettings", JSON.stringify(parsed));
+      window.dispatchEvent(new CustomEvent("fullTimeSettingsUpdated", { detail: parsed }));
+    } catch (e) {
+      console.warn("Could not sync shared daily cap:", e);
     }
   };
+  const handleTargetChange = handleSharedCapChange;
 
-  // Trigger Add Lane Flow in the Left Assistant (Matching Image 2)
-  const handleTriggerAddLaneInChat = () => {
-    if (lanes.length >= 5) {
+  // Toggle Auto Apply (Requires Upgraded Plan)
+  const handleToggleAutoApply = () => {
+    if (!isEnabled) {
       setToast({
         show: true,
-        message: "Maximum of 5 lanes reached.",
+        message: "Upgrade plan to enable Full Time Auto Apply.",
+        type: "warning",
+        action: {
+          label: "Upgrade Plan",
+          onClick: () => navigate("/subscriptions"),
+        },
+      });
+      return;
+    }
+    setIsEnabled(false);
+  };
+
+  // Trigger Add Lane Flow in the Left Assistant (Matching Image 1)
+  const handleTriggerAddLaneInChat = () => {
+    const currentCustomLanes = lanes.filter((l) => !l.isDefault);
+    if (currentCustomLanes.length >= 3) {
+      setToast({
+        show: true,
+        message: "Maximum of 3 lanes reached (3 of 3 active).",
         type: "warning",
       });
       return;
     }
 
-    // 1. User message matching Image 2
+    const allOptions = [
+      "Data Engineer NewYORK",
+      "Data Engineer Hybrid",
+      "Data Engineer avoid Microsoft",
+    ];
+
+    const availablePills = allOptions.filter(
+      (opt) =>
+        !currentCustomLanes.some(
+          (l) => l.name.toLowerCase().trim() === opt.toLowerCase().trim()
+        )
+    );
+
+    if (availablePills.length === 0) {
+      setToast({
+        show: true,
+        message: "All 3 lanes have already been added (3 of 3 active).",
+        type: "warning",
+      });
+      return;
+    }
+
+    // 1. User message matching Image 1
     const userMsg = {
       sender: "user",
       text: "I want to add another Auto Apply lane for a different kind of role. Ask me what to target, then dry-run it and show me what it would apply to before saving anything.",
       time: new Date(),
     };
 
-    // 2. Assistant message matching Image 2
+    // 2. Assistant message matching Image 1
     const botMsg = {
       sender: "bot",
       isLaneSetup: true,
       thoughtTitle: "Thought process",
       thoughtStatus: "Reading your Auto Apply setup",
-      text: `This account isn't eligible yet: Auto Apply needs the Power plan, and this account has no active subscription, plus Auto Apply itself is currently off. I can still set up and save a new lane now so it's ready to go once the plan is active, but it won't actually run or apply anything until then.
+      text: `This account isn't eligible yet. Auto Apply needs the Power plan, and this account has no active subscription, plus Auto Apply itself is currently off, I can still set up and save a new lane now so it's ready to go once the plan is active, but it won't actually run or apply anything until then.
 
 Also worth noting: configExists is false, meaning you've never saved Auto Apply settings before. The one lane shown is just the system default, not something you chose.
 
-That said, let's get your second lane defined. What different kind of role do you want this new lane to target (e.g. a different role family like data engineering, product management, a different seniority band, or something else)? And any location/remote preference that should differ from your main search?`,
+That said, let's get your next lane defined. What different kind of role do you want this new lane to target?`,
       time: new Date(),
-      quickPills: [
-        "Data Engineering (Remote)",
-        "Product Management",
-        "Senior Full Stack Developer",
-      ],
+      quickPills: availablePills,
     };
 
     setChatMessages((prev) => [...prev, userMsg, botMsg]);
@@ -257,38 +344,127 @@ That said, let's get your second lane defined. What different kind of role do yo
     }, 100);
   };
 
+  // Helper to resolve lane details from selection
+  const getLaneDetails = (roleText) => {
+    const text = (roleText || "").trim();
+    const lower = text.toLowerCase();
+
+    if (lower.includes("newyork") || lower.includes("new york")) {
+      return {
+        name: "Data Engineer NewYORK",
+        description: "Excellent and better · New York, NY · Mid-Level & Senior · $130k+",
+      };
+    }
+    if (lower.includes("hybrid")) {
+      return {
+        name: "Data Engineer Hybrid",
+        description: "Excellent and better · Remote & Hybrid · Mid-Level & Senior · $120k+",
+      };
+    }
+    if (lower.includes("microsoft") || lower.includes("avoid")) {
+      return {
+        name: "Data Engineer avoid Microsoft",
+        description: "Excellent and better · Excludes Microsoft · $125k+",
+      };
+    }
+    if (lower.includes("product")) {
+      return {
+        name: "Product Management",
+        description: "Excellent and better · Mid-Level & Senior · $110k+",
+      };
+    }
+    if (lower.includes("remote")) {
+      return {
+        name: text,
+        description: "Excellent and better · Remote only · $115k+",
+      };
+    }
+
+    return {
+      name: text,
+      description: "Excellent and better · Mid-Level & Senior · $110k+",
+    };
+  };
+
   // Handle user responding to the lane question
   const handleUserLaneResponse = (roleText) => {
-    if (!roleText.trim()) return;
+    if (!roleText || !roleText.trim()) return;
 
-    const userMsg = { sender: "user", text: roleText, time: new Date() };
+    const details = getLaneDetails(roleText);
+
+    // Prevent duplicate lanes: "should not repate again"
+    const currentCustomLanes = lanes.filter((l) => !l.isDefault);
+    const isDuplicate = currentCustomLanes.some(
+      (l) => l.name.toLowerCase().trim() === details.name.toLowerCase().trim()
+    );
+
+    if (isDuplicate) {
+      setToast({
+        show: true,
+        message: `Lane "${details.name}" is already active.`,
+        type: "warning",
+      });
+      return;
+    }
+
+    if (currentCustomLanes.length >= 3) {
+      setToast({
+        show: true,
+        message: "Maximum of 3 lanes reached (3 of 3 active).",
+        type: "warning",
+      });
+      return;
+    }
+
+    const userMsg = { sender: "user", text: details.name, time: new Date() };
     setChatMessages((prev) => [...prev, userMsg]);
     setIsTyping(true);
 
     setTimeout(() => {
-      const cleanRole = roleText.replace(/\(.*?\)/g, "").trim() || roleText.trim();
-      const isRemote = roleText.toLowerCase().includes("remote");
-      const description = isRemote
-        ? "Excellent and better · Remote only"
-        : "Excellent and better · No filters";
-
       const newLane = {
-        id: `lane-${Date.now()}`,
-        name: cleanRole,
-        description: description,
+        id: `lane-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        name: details.name,
+        description: details.description,
         active: true,
         isDefault: false,
       };
 
-      setLanes((prev) => [...prev, newLane]);
+      const updatedLanes = [...lanes, newLane];
+      setLanes(updatedLanes);
+
+      try {
+        const saved = localStorage.getItem("fullTimeAutoApplySettings");
+        const parsed = saved ? JSON.parse(saved) : {};
+        parsed.lanes = updatedLanes;
+        localStorage.setItem("fullTimeAutoApplySettings", JSON.stringify(parsed));
+        window.dispatchEvent(new CustomEvent("fullTimeSettingsUpdated", { detail: parsed }));
+      } catch (e) {
+        console.warn("Could not save lanes to localStorage:", e);
+      }
+
       setIsAwaitingLaneRole(false);
+
+      const allOptions = [
+        "Data Engineer NewYORK",
+        "Data Engineer Hybrid",
+        "Data Engineer avoid Microsoft",
+      ];
+      const remainingPills = allOptions.filter(
+        (opt) =>
+          !updatedLanes.some(
+            (l) => l.name.toLowerCase().trim() === opt.toLowerCase().trim()
+          )
+      );
+
+      const newCustomCount = updatedLanes.filter((l) => !l.isDefault).length;
 
       const botMsg = {
         sender: "bot",
-        text: `Got it! I've configured your new lane for "${cleanRole}" (${description}) and added it to your LANES list on the right.
+        text: `Got it! I've configured your new lane for "${details.name}" (${details.description}) and added it to your LANES list on the right (${newCustomCount} of 3 active).
 
 Every lane draws from your shared daily budget of ${dailyTarget} applications per day, best matches first. You can adjust its criteria in Manual settings or delete it anytime. Click "Save Settings" whenever you're ready to persist these changes!`,
         time: new Date(),
+        quickPills: remainingPills.length > 0 ? remainingPills : undefined,
       };
 
       setChatMessages((prev) => [...prev, botMsg]);
@@ -296,7 +472,7 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
 
       setToast({
         show: true,
-        message: `Lane "${cleanRole}" added to Auto Apply setup.`,
+        message: `Lane "${details.name}" added (${newCustomCount} of 3 active).`,
         type: "success",
       });
     }, 600);
@@ -304,7 +480,19 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
 
   // Remove a custom lane
   const handleRemoveLane = (id) => {
-    setLanes(lanes.filter((l) => l.id !== id || l.isDefault));
+    setLanes((prev) => {
+      const updated = prev.filter((l) => l.id !== id);
+      try {
+        const saved = localStorage.getItem("fullTimeAutoApplySettings");
+        const parsed = saved ? JSON.parse(saved) : {};
+        parsed.lanes = updated;
+        localStorage.setItem("fullTimeAutoApplySettings", JSON.stringify(parsed));
+        window.dispatchEvent(new CustomEvent("fullTimeSettingsUpdated", { detail: parsed }));
+      } catch (e) {
+        console.warn("Could not save lanes to localStorage:", e);
+      }
+      return updated;
+    });
     setToast({
       show: true,
       message: "Lane removed.",
@@ -372,7 +560,11 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
     if (!inputMessage.trim()) return;
     const text = inputMessage;
     setInputMessage("");
-    handleAssistantQuery(text);
+    if (isAwaitingLaneRole) {
+      handleUserLaneResponse(text);
+    } else {
+      handleAssistantQuery(text);
+    }
   };
 
   // Copy message text
@@ -383,7 +575,7 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
   };
 
   // Save Settings handler
-  const handleSaveSettings = async () => {
+  const handleSaveSettings = async (customCap = null) => {
     if (isEnabled && selectedRunTimes.length === 0) {
       setToast({
         show: true,
@@ -393,10 +585,19 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
       return;
     }
 
+    const targetCap =
+      customCap !== null
+        ? customCap
+        : typeof draftDailyCap === "number" && !isNaN(draftDailyCap)
+          ? draftDailyCap
+          : dailyTarget;
+
+    setDailyTarget(targetCap);
+
     setIsSaving(true);
     const settingsPayload = {
       isEnabled,
-      dailyTarget,
+      dailyTarget: targetCap,
       selectedRunTimes,
       lanes,
       perCompanyLimit,
@@ -413,6 +614,7 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
     // Save to local storage for immediate persistence
     try {
       localStorage.setItem("fullTimeAutoApplySettings", JSON.stringify(settingsPayload));
+      window.dispatchEvent(new CustomEvent("fullTimeSettingsUpdated", { detail: settingsPayload }));
     } catch (e) {
       console.warn("Could not save to localStorage:", e);
     }
@@ -422,7 +624,7 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
       await updateProfileSettings({
         resumeOptimization: resumeOptimizationMode === "Off" ? "off" : resumeOptimizationMode.toLowerCase(),
         autoApply: isEnabled,
-        fullTimeTarget: dailyTarget,
+        fullTimeTarget: targetCap,
       });
     } catch (err) {
       console.log("Profile backend synced or offline, settings saved locally.");
@@ -457,7 +659,8 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
       ? `${runTimesList.slice(0, -1).join(", ")} and ${runTimesList[runTimesList.length - 1]}`
       : runTimesList.join(" and ");
 
-  const activeLanesCount = lanes.filter((l) => l.active).length;
+  const customLanes = lanes.filter((l) => !l.isDefault);
+  const activeLanesCount = customLanes.length;
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#F8FAFC]">
@@ -465,42 +668,53 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
       <Sidebar />
 
       {/* Main Content Area (Scrollable) */}
-      <div className="flex min-w-0 flex-1 flex-col h-screen overflow-y-auto bg-[#F8FAFC]">
+      <div className="flex min-w-0 flex-1 flex-col h-screen overflow-y-auto bg-[#F8FAFC] no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         {/* Top Header */}
         <Header />
 
         {/* Main Content */}
         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-7 flex flex-col gap-6 w-full bg-[#F8FAFC]">
-          {/* Page Heading */}
-          <div className="flex flex-col gap-1">
-            <h1 className="text-[22px] sm:text-[24px] font-bold text-slate-900 tracking-tight">
-              Full Time Auto Apply
-            </h1>
-            <p className="text-[13.5px] sm:text-[14px] text-slate-500">
-              Let our AI find and apply to the best full time jobs that match your resume and preferences.
-            </p>
-          </div>
-
-          {/* Toast Notification */}
-          {toast.show && (
-            <div
-              className={`fixed top-5 right-5 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg border text-sm font-medium transition-all transform animate-in fade-in slide-in-from-top-2 duration-200 ${toast.type === "success"
-                ? "bg-white text-indigo-700 border-indigo-200 shadow-indigo-500/10"
-                : toast.type === "warning"
-                  ? "bg-white text-amber-700 border-amber-200 shadow-amber-500/10"
-                  : "bg-white text-rose-700 border-rose-200 shadow-rose-500/10"
-                }`}
-            >
-              {toast.type === "success" ? (
-                <CheckCircle2 className="w-5 h-5 text-[#4F46E5] shrink-0" />
-              ) : toast.type === "warning" ? (
-                <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
-              ) : (
-                <AlertCircle className="w-5 h-5 text-rose-500 shrink-0" />
-              )}
-              <span>{toast.message}</span>
+          {/* Page Heading & Right-Aligned Notification Row */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 min-h-[46px]">
+            <div className="flex flex-col gap-1">
+              <h1 className="text-[22px] sm:text-[24px] font-bold text-slate-900 tracking-tight">
+                Full Time Auto Apply
+              </h1>
+              <p className="text-[13.5px] sm:text-[14px] text-slate-500">
+                Let our AI find and apply to the best full time jobs that match your resume and preferences.
+              </p>
             </div>
-          )}
+
+            {/* Toast Notification (Aligned on right side of title line) */}
+            {toast.show && (
+              <div
+                className={`flex items-center gap-3 px-4 py-2 sm:py-2.5 rounded-xl shadow-xs border text-sm font-medium transition-all transform animate-in fade-in slide-in-from-right-2 duration-200 shrink-0 self-start sm:self-center ${toast.type === "success"
+                  ? "bg-white text-indigo-700 border-indigo-200"
+                  : toast.type === "warning"
+                    ? "bg-white text-amber-900 border-amber-300 shadow-amber-500/5"
+                    : "bg-white text-rose-700 border-rose-200"
+                  }`}
+              >
+                {toast.type === "success" ? (
+                  <CheckCircle2 className="w-5 h-5 text-[#4F46E5] shrink-0" />
+                ) : toast.type === "warning" ? (
+                  <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-5 h-5 text-rose-500 shrink-0" />
+                )}
+                <span className="font-medium text-[13.5px]">{toast.message}</span>
+                {toast.action && (
+                  <button
+                    type="button"
+                    onClick={toast.action.onClick}
+                    className="ml-1 px-3 py-1.5 rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-semibold cursor-pointer transition-colors shadow-2xs shrink-0"
+                  >
+                    {toast.action.label}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* 2-Column Responsive Layout */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -548,7 +762,7 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
 
                     <div
                       ref={chatScrollRef}
-                      className="flex-1 min-h-[300px] max-h-[460px] overflow-y-auto pr-1 flex flex-col gap-4"
+                      className="flex-1 min-h-[300px] max-h-[460px] overflow-y-auto pr-1 flex flex-col gap-4 no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
                     >
                       {chatMessages.map((msg, idx) => {
                         const isUser = msg.sender === "user";
@@ -710,12 +924,31 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
             </div>
 
             {/* ================= RIGHT SECTION: Image 2 Data in Image 1 Colors ================= */}
-            <div className="lg:col-span-5 flex flex-col gap-3">
-              {/* Settings Header Row (Image 1 Header) */}
-              <div className="flex items-center justify-between mb-0.5">
+            <div className="lg:col-span-5 flex flex-col gap-3.5 mt-4">
+              {/* Enable Full Time Auto Apply Banner Card (Image 1 Box, Above Lanes, Outside Container) */}
+              <div className="relative flex items-center justify-between gap-4 rounded-2xl border border-[#6A5CFF] border-l-[6px] bg-[#EFEEFF] p-3.5 sm:p-4 shadow-2xs">
+                <div className="min-w-0 pr-2">
+                  <h3 className="text-[14px] sm:text-[14.5px] font-bold text-[#1A0EA5] tracking-tight">
+                    Enable Full Time Auto Apply For Primary Resume
+                  </h3>
+                  <p className="mt-0.5 text-[12px] sm:text-[12.5px] text-[#1A0EA5]/90 leading-relaxed">
+                    Turn on auto-apply to apply automatically using your saved settings.
+                  </p>
+                </div>
 
-
-
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={isEnabled}
+                  onClick={handleToggleAutoApply}
+                  className={`relative h-6 w-11 shrink-0 rounded-full p-0.5 transition-colors duration-200 cursor-pointer ${isEnabled ? "bg-[#6A5CFF]" : "bg-slate-300"
+                    }`}
+                >
+                  <span
+                    className={`block h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${isEnabled ? "translate-x-5" : "translate-x-0"
+                      }`}
+                  />
+                </button>
               </div>
 
               {/* Unified Settings Card Containing Image 2 Data in Image 1 Colors */}
@@ -727,54 +960,52 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
                       Lanes
                     </span>
                     <span className="text-[12px] font-semibold text-slate-500">
-                      {activeLanesCount} of 5 active
+                      {activeLanesCount} of 3 active
                     </span>
                   </div>
 
-                  {/* Active Lanes List */}
-                  <div className="flex flex-col gap-2.5">
-                    {lanes.map((lane) => (
-                      <div
-                        key={lane.id}
-                        className="p-3.5 rounded-xl border border-[#E2E8F0] bg-white flex items-center justify-between shadow-2xs"
-                      >
-                        <div className="flex items-start gap-2.5">
-                          <div className="w-2 h-2 rounded-full bg-[#4F46E5] mt-1.5 shrink-0" />
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-[14px] font-bold text-slate-900 leading-none">
+                  {/* Custom Lane Cards (Matching Image 3) */}
+                  {customLanes.length > 0 && (
+                    <div className="flex flex-col gap-2.5">
+                      {customLanes.map((lane) => (
+                        <div
+                          key={lane.id}
+                          className="bg-white rounded-2xl border border-slate-200 p-4 flex items-start justify-between shadow-2xs hover:border-slate-300 transition-all group"
+                        >
+                          <div className="flex flex-col min-w-0 pr-3">
+                            <div className="flex items-center gap-2.5">
+                              <span className="w-2 h-2 rounded-full bg-[#4F46E5] shrink-0" />
+                              <h4 className="text-[14px] sm:text-[14.5px] font-bold text-slate-900 tracking-tight truncate">
                                 {lane.name}
-                              </span>
+                              </h4>
                             </div>
-                            <p className="text-[12.5px] text-slate-500 mt-1">
+                            <p className="text-[12px] sm:text-[12.5px] text-slate-500 mt-1 pl-4.5 font-normal leading-relaxed">
                               {lane.description}
                             </p>
                           </div>
-                        </div>
 
-                        {!lane.isDefault && (
                           <button
                             type="button"
                             onClick={() => handleRemoveLane(lane.id)}
-                            className="text-slate-400 hover:text-rose-600 p-1 rounded-md transition-colors cursor-pointer"
+                            className="text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer shrink-0"
                             title="Delete lane"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   {/* Add a lane button: Triggers Question in Left Assistant */}
                   <button
                     type="button"
                     onClick={handleTriggerAddLaneInChat}
-                    disabled={lanes.length >= 5}
+                    disabled={customLanes.length >= 3}
                     className="w-full py-3 px-4 rounded-xl border border-dashed border-[#CBD5E1] hover:border-[#818CF8] bg-white hover:bg-[#EEF2FF]/40 text-slate-700 hover:text-[#4F46E5] text-[13px] font-medium flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Plus className="w-4 h-4 text-[#4F46E5]" />
-                    <span>Add a lane for another kind of role</span>
+                    <span>Add a lane </span>
                   </button>
                 </div>
 
@@ -813,35 +1044,9 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
                       Shared Daily Cap
                     </span>
                     <div className="flex items-center gap-1.5">
-                      <div className="h-7 w-16 rounded-md border border-[#E2E8F0] bg-white flex items-center justify-between px-1.5 text-xs font-semibold text-slate-800 shadow-2xs hover:border-slate-300">
-                        <input
-                          type="number"
-                          min={1}
-                          max={150}
-                          value={dailyTarget}
-                          onChange={(e) => handleTargetChange(e.target.value)}
-                          className="w-8 bg-transparent text-center focus:outline-none font-semibold text-slate-900 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                        />
-                        <div className="flex flex-col text-slate-400">
-                          <button
-                            type="button"
-                            onClick={() => handleTargetChange(dailyTarget + 1)}
-                            className="hover:text-indigo-600 cursor-pointer"
-                            title="Increase"
-                          >
-                            <ChevronUp className="w-2.5 h-2.5 stroke-[2.5]" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleTargetChange(dailyTarget - 1)}
-                            className="hover:text-indigo-600 cursor-pointer"
-                            title="Decrease"
-                          >
-                            <ChevronDown className="w-2.5 h-2.5 stroke-[2.5]" />
-                          </button>
-                        </div>
-                      </div>
-                      <span className="text-[12px] font-semibold text-slate-600">/ day</span>
+
+
+                      <span className="text-[12px] font-semibold text-slate-600">10 / day</span>
                     </div>
                   </div>
 
@@ -868,7 +1073,10 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
                 <div className="p-4.5 flex flex-col">
                   <button
                     type="button"
-                    onClick={() => setIsManualModalOpen(true)}
+                    onClick={() => {
+                      setDraftDailyCap(dailyTarget);
+                      setIsManualModalOpen(true);
+                    }}
                     className="w-full flex items-center justify-between cursor-pointer select-none group py-1"
                   >
                     <div className="flex items-center gap-2.5">
@@ -876,7 +1084,7 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
                         <SlidersHorizontal className="w-3.5 h-3.5" />
                       </div>
                       <span className="text-[14px] font-semibold text-slate-800 group-hover:text-[#4F46E5] transition-colors">
-                        settings
+                        Settings
                       </span>
                     </div>
 
@@ -894,7 +1102,7 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
       {/* ================= MANUAL SETTINGS POPUP MODAL (Anchored to Right Corner, Image 2 Blue) ================= */}
       {isManualModalOpen && (
         <div
-          className="fixed inset-0 z-50 bg-slate-900/35 backdrop-blur-xs flex justify-end items-start sm:items-stretch overflow-hidden"
+          className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-sm flex justify-end items-stretch overflow-hidden"
           onClick={() => setIsManualModalOpen(false)}
         >
           <div
@@ -904,11 +1112,14 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
             {/* Modal Header */}
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
               <h2 className="text-[17px] font-bold text-slate-900">
-                settings
+                Settings
               </h2>
               <button
                 type="button"
-                onClick={() => setIsManualModalOpen(false)}
+                onClick={() => {
+                  setDraftDailyCap(dailyTarget);
+                  setIsManualModalOpen(false);
+                }}
                 className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
                 title="Close"
               >
@@ -916,8 +1127,32 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
               </button>
             </div>
 
+            {/* In-Modal Toast Notification */}
+            {toast.show && (
+              <div className="mx-6 mt-4 p-3.5 rounded-xl border border-amber-300 bg-white shadow-xs flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-1 duration-200 shrink-0">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
+                  <span className="text-[13px] font-medium text-amber-900">
+                    {toast.message}
+                  </span>
+                </div>
+                {toast.action && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsManualModalOpen(false);
+                      toast.action.onClick();
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-semibold cursor-pointer transition-colors shadow-2xs shrink-0"
+                  >
+                    {toast.action.label}
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* Modal Scrollable Body */}
-            <div className="p-6 overflow-y-auto flex flex-col gap-6">
+            <div className="p-6 overflow-y-auto flex flex-col gap-6 no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
               {/* SECTION 1: Auto Apply Banner */}
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-start gap-3.5">
@@ -927,7 +1162,7 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
                   <div>
                     <div className="flex items-center gap-2">
                       <h3 className="text-[17px] font-bold text-slate-900">Auto Apply</h3>
-                      
+
                     </div>
                     <p className="text-[13px] text-slate-500 mt-1 leading-relaxed">
                       Set it once. Autoapply applies to your best new matches at the times you choose, up to 4 times a day.
@@ -951,41 +1186,39 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
               <div className="h-px w-full bg-slate-100" />
 
               {/* SECTION 2: Enable auto-apply */}
-             
-{/* SECTION 2: Enable auto-apply */}
 
-{/* SECTION 2: Enable auto-apply */}
+              {/* SECTION 2: Enable auto-apply */}
 
-{/* SECTION 2: Enable auto-apply */}
-<div className="relative flex items-center justify-between gap-4 rounded-xl border border-[#6A5CFF] border-l-4 bg-[#EFEEFF] p-3 sm:p-4">
+              {/* SECTION 2: Enable auto-apply */}
 
-  <div className="min-w-0">
-    <h4 className="text-[14px] font-bold text-[#1A0EA5]">
-      Enable auto-apply
-    </h4>
+              {/* SECTION 2: Enable auto-apply */}
+              <div className="relative flex items-center justify-between gap-4 rounded-xl border border-[#6A5CFF] border-l-4 bg-[#EFEEFF] p-3 sm:p-4">
 
-    <p className="mt-0.5 text-[12px] text-[#1A0EA5]">
-      Turn on auto-apply to apply automatically using your saved settings.
-    </p>
-  </div>
+                <div className="min-w-0">
+                  <h4 className="text-[14px] font-bold text-[#1A0EA5]">
+                    Enable auto-apply
+                  </h4>
 
-  <button
-    type="button"
-    role="switch"
-    aria-checked={isEnabled}
-    onClick={() => setIsEnabled((prev) => !prev)}
-    className={`relative h-6 w-11 shrink-0 rounded-full p-0.5 transition-colors duration-200 cursor-pointer ${
-      isEnabled ? "bg-[#6A5CFF]" : "bg-slate-300"
-    }`}
-  >
-    <span
-      className={`block h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-        isEnabled ? "translate-x-5" : "translate-x-0"
-      }`}
-    />
-  </button>
+                  <p className="mt-0.5 text-[12px] text-[#1A0EA5]">
+                    Turn on auto-apply to apply automatically using your saved settings.
+                  </p>
+                </div>
 
-</div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={isEnabled}
+                  onClick={handleToggleAutoApply}
+                  className={`relative h-6 w-11 shrink-0 rounded-full p-0.5 transition-colors duration-200 cursor-pointer ${isEnabled ? "bg-[#6A5CFF]" : "bg-slate-300"
+                    }`}
+                >
+                  <span
+                    className={`block h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${isEnabled ? "translate-x-5" : "translate-x-0"
+                      }`}
+                  />
+                </button>
+
+              </div>
 
 
 
@@ -1001,8 +1234,23 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
                     type="number"
                     min={1}
                     max={150}
-                    value={dailyTarget}
-                    onChange={(e) => handleTargetChange(e.target.value)}
+                    value={draftDailyCap}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "") {
+                        setDraftDailyCap("");
+                      } else {
+                        const num = parseInt(val, 10);
+                        if (!isNaN(num)) {
+                          setDraftDailyCap(Math.max(1, Math.min(150, num)));
+                        }
+                      }
+                    }}
+                    onBlur={() => {
+                      if (!draftDailyCap || isNaN(parseInt(draftDailyCap, 10))) {
+                        setDraftDailyCap(dailyTarget);
+                      }
+                    }}
                     className="w-24 text-[15px] font-semibold text-slate-900 pb-1 border-b border-slate-300 focus:border-[#4F46E5] focus:outline-none"
                   />
                 </div>
@@ -1045,33 +1293,33 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
 
               <div className="h-px w-full bg-slate-100" />
 
-              
-{/* SECTION 5: Per-company limit */}
-<div className="flex items-center justify-between gap-4">
-  <div className="flex-1">
-    <h4 className="text-[14px] font-bold text-slate-900">
-      Per-company limit
-    </h4>
-    <p className="text-[12.5px] text-slate-500 mt-0.5">
-      Stop applying to a company once it has this many of your applications from the last 30 days.
-    </p>
-  </div>
 
-  <div className="shrink-0">
-  <input
-    type="number"
-    min={1}
-    max={30}
-    value={perCompanyLimit}
-    onChange={(e) =>
-      setPerCompanyLimit(
-        Math.max(1, Math.min(30, Number(e.target.value) || 1))
-      )
-    }
-    className="w-20 h-9 px-3 rounded-lg border border-[#E2E8F0] bg-white text-[14px] font-medium text-slate-800 shadow-sm outline-none transition-all focus:border-[#4F46E5] focus:ring-2 focus:ring-[#EEF2FF]"
-  />
-</div>
-</div>
+              {/* SECTION 5: Per-company limit */}
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex-1">
+                  <h4 className="text-[14px] font-bold text-slate-900">
+                    Per-company limit
+                  </h4>
+                  <p className="text-[12.5px] text-slate-500 mt-0.5">
+                    Stop applying to a company once it has this many of your applications from the last 30 days.
+                  </p>
+                </div>
+
+                <div className="shrink-0">
+                  <input
+                    type="number"
+                    min={1}
+                    max={30}
+                    value={perCompanyLimit}
+                    onChange={(e) =>
+                      setPerCompanyLimit(
+                        Math.max(1, Math.min(30, Number(e.target.value) || 1))
+                      )
+                    }
+                    className="w-20 h-9 px-3 rounded-lg border border-[#E2E8F0] bg-white text-[14px] font-medium text-slate-800 shadow-sm outline-none transition-all focus:border-[#4F46E5] focus:ring-2 focus:ring-[#EEF2FF]"
+                  />
+                </div>
+              </div>
 
 
               {/* SECTION 6: Pause companies you're interviewing with (Image 2 Blue, NOT green) */}
@@ -1099,108 +1347,23 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
                 </button>
               </div>
 
-              {/* SECTION 7: Resume Profile, Filters & Match Quality (Image 2 Blue Accents) */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 flex flex-col gap-5 shadow-2xs">
-                {/* Resume Profile */}
-                <div className="flex flex-col gap-2">
-                  
-                
-                  
-                </div>
+              <div className="h-px w-full bg-slate-100" />
 
-                
+              
 
-                {/* Minimum Match Quality (Image 2 Blue active pill) */}
-                <div className="flex flex-col gap-2">
-                  <span className="text-[12px] font-bold text-slate-900 uppercase tracking-wider">
-                    Minimum Match Quality
-                  </span>
-                  <p className="text-[12px] text-slate-500 leading-relaxed">
-                    We only auto-apply to jobs that are at least this strong a match for this resume. A higher bar means fewer, sharper applications; a lower bar means more volume.
-                  </p>
-                  
+              <div className="h-px w-full bg-slate-100" />
 
 
-<div className="flex flex-wrap items-center gap-2 pt-1">
-  {[">80%", ">70%", ">60%"].map((qual) => {
-    const isSel = matchQuality === qual;
-
-    return (
-      <button
-        key={qual}
-        type="button"
-        onClick={() => setMatchQuality(qual)}
-        className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all cursor-pointer ${
-          isSel
-            ? "bg-[#EEF2FF] border-[#C7D2FE] text-[#4F46E5]"
-            : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-        }`}
-      >
-        {qual}
-      </button>
-    );
-  })}
-</div>
-
-
-
-                  <p className="text-[12px] text-slate-400 mt-0.5">
-                    Only your very best matches. Fewest applications, highest quality. The preview updates as you change this.
-                  </p>
-                </div>
-
-                <div className="h-px w-full bg-slate-100" />
-
-                {/* SECTION 8: Optimization (Image 2 Blue active pill) */}
-                <div className="flex flex-col gap-3">
-                 
-
-               
-{/* Resume optimization */}
-<div className="flex items-center justify-between gap-4">
-  <div>
-    <h5 className="text-[13.5px] font-bold text-slate-900">
-      Resume optimization
-    </h5>
-    <p className="text-[12px] text-slate-500 mt-0.5">
-      Reorder and highlight relevant experience for each job.
-    </p>
-  </div>
-
-  <div className="flex items-center gap-1 p-0.5 rounded-full border border-slate-200 bg-white shrink-0">
-    {["Off", "On"].map((mode) => {
-      const isSel = resumeOptimizationMode === mode;
-
-      return (
-        <button
-          key={mode}
-          type="button"
-          onClick={() => setResumeOptimizationMode(mode)}
-          className={`px-4 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer ${
-            isSel
-              ? "bg-[#4F46E5] text-white shadow-2xs hover:bg-[#4338CA]"
-              : "text-slate-600 hover:text-slate-900"
-          }`}
-        >
-          {mode}
-        </button>
-      );
-    })}
-  </div>
-</div>
-
-
-                  {/* Cover letter */}
-                  
-                </div>
-              </div>
             </div>
 
             {/* Modal Footer */}
             <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-2.5 bg-slate-50/80 shrink-0">
               <button
                 type="button"
-                onClick={() => setIsManualModalOpen(false)}
+                onClick={() => {
+                  setDraftDailyCap(dailyTarget);
+                  setIsManualModalOpen(false);
+                }}
                 className="px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-[13px] font-medium text-slate-700 cursor-pointer transition-colors"
               >
                 Close
