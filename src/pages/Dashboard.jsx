@@ -1884,6 +1884,7 @@ useEffect(() => {
               <h2 className="text-[18px] md:text-[20px] font-bold text-[#0F172A] tracking-tight">
                 Applications
               </h2>
+              <button type="button" onClick={() => navigate("/tracker")} className="text-[13px] font-medium text-[#2563EB] hover:text-[#1D4ED8] flex items-center gap-1 transition-colors cursor-pointer"><span>Open Tracker</span><span>&rarr;</span></button>
             </div>
 
             {/* Filter Tabs */}

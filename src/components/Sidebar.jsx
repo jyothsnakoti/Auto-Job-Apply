@@ -13,6 +13,8 @@ import autoApplyActiveIcon from "../assets/apply1.png";
 import profileActiveIcon from "../assets/profile1.png";
 import subscriptionActiveIcon from "../assets/Subscription1.svg";
 import settingsActiveIcon from "../assets/settings1.png";
+import trackerIcon from "../assets/tracker.svg";
+import trackerActiveIcon from "../assets/Tracker1.png";
 import FullTime1 from "../assets/FullTime1.svg";
 import FullTime2 from "../assets/FullTime2.svg";
 import C2C from "../assets/C2C.svg";
@@ -36,7 +38,7 @@ const navigationItems = [
     icon: FullTime1,
     activeIcon: fulltimeone,
   },
-   {
+  {
     name: "Full Time Bulk Apply ",
     path: "/auto-apply",
     icon: autoApplyIcon,
@@ -48,7 +50,6 @@ const navigationItems = [
     icon: FullTime2,
     activeIcon: fulltimethree,
   },
- 
   {
     name: "C2C One At A Time",
     path: "/c2c-jobs",
@@ -61,7 +62,12 @@ const navigationItems = [
     icon: C2C1,
     activeIcon: fulltimefive,
   },
-  
+  {
+    name: "Tracker",
+    path: "/tracker",
+    icon: trackerIcon,
+    activeIcon: trackerActiveIcon,
+  },
   {
     name: "Profile",
     path: "/profile",
@@ -192,15 +198,15 @@ const Sidebar = () => {
             >
               {({ isActive }) => (
                 <>
-                 <img
-  src={isActive ? item.activeIcon : item.icon}
-  alt=""
-  className={`shrink-0 object-contain ${
-    item.name === "Bulk Full Time Apply"
-      ? "h-[17px] w-[17px]" 
-      : "h-[20px] w-[20px]"
-  }`}
-/>
+                  <img
+                    src={isActive ? item.activeIcon : item.icon}
+                    alt=""
+                    className={`shrink-0 object-contain ${
+                      item.name === "Bulk Full Time Apply"
+                        ? "h-[17px] w-[17px]" 
+                        : "h-[20px] w-[20px]"
+                    }`}
+                  />
 
                   <span className="whitespace-nowrap">{item.name}</span>
                 </>

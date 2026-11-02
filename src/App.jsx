@@ -23,6 +23,7 @@ import {
 import Dashboard from './pages/Dashboard';
 import BrowseJobs from './pages/BrowseJobs';
 import AutoApply from './pages/AutoApply'; 
+import Tracker from './pages/Tracker';
 import Profile from './pages/Profile';
 import Settings from './pages/Settings';
 import UpgradePlan from './pages/UpgradePlan';
@@ -46,6 +47,8 @@ function App() {
         <Route path="/password-updated" element={<PasswordUpdated />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/Dashboard" element={<Dashboard />} />
+        <Route path="/tracker" element={<Tracker />} />
+        <Route path="/Tracker" element={<Tracker />} />
         <Route path="/browse-jobs" element={<BrowseJobs />} />
         <Route path="/full-time-auto-apply" element={<FullTimeAutoApply />} />
         <Route path="/fulltime-auto-apply" element={<FullTimeAutoApply />} />
@@ -74,4 +77,3 @@ function App() {
 }
 
 export default App;
-
