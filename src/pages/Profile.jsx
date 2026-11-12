@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
+import PaymentMethodCard from "../components/PaymentMethodCard";
 import {
   getOnboardingProfile,
   getStoredUser,
@@ -14,6 +15,42 @@ import {
   setPrimaryResume,
   validateResumeFile,
 } from "../services/api";
+
+const ALL_COUNTRIES = [
+  "India",
+  "United States",
+  "United Kingdom",
+  "Canada",
+  "Germany",
+  "Australia",
+  "Singapore",
+  "France",
+  "Netherlands",
+  "Ireland",
+  "Switzerland",
+  "United Arab Emirates",
+  "Sweden",
+  "Japan",
+  "Spain",
+  "Italy",
+  "Brazil",
+  "New Zealand",
+  "Poland",
+  "Portugal",
+  "Mexico",
+  "South Africa",
+  "Norway",
+  "Denmark",
+  "Finland",
+  "Belgium",
+  "Austria",
+  "Saudi Arabia",
+  "Qatar",
+  "Malaysia",
+  "Philippines",
+];
+
+const MAX_RESUMES = 3;
 
 const toCapitalizedYesNo = (val, defaultVal = "No") => {
   if (val === true || val === "yes" || val === "Yes" || val === "YES") return "Yes";
@@ -79,6 +116,32 @@ const Profile = () => {
   const [openToRelocate, setOpenToRelocate] = useState("Yes");
   const [citizenship, setCitizenship] = useState([]);
   const [targetCountries, setTargetCountries] = useState([]);
+  const workCountriesRef = useRef(null);
+  const citizenshipRef = useRef(null);
+  const [isWorkCountriesOpen, setIsWorkCountriesOpen] = useState(false);
+  const [workCountrySearch, setWorkCountrySearch] = useState("");
+  const [isCitizenshipOpen, setIsCitizenshipOpen] = useState(false);
+  const [citizenshipSearch, setCitizenshipSearch] = useState("");
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (workCountriesRef.current && !workCountriesRef.current.contains(e.target)) {
+        setIsWorkCountriesOpen(false);
+      }
+      if (citizenshipRef.current && !citizenshipRef.current.contains(e.target)) {
+        setIsCitizenshipOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filteredWorkCountries = ALL_COUNTRIES.filter((c) =>
+    c.toLowerCase().includes(workCountrySearch.toLowerCase())
+  );
+  const filteredCitizenshipCountries = ALL_COUNTRIES.filter((c) =>
+    c.toLowerCase().includes(citizenshipSearch.toLowerCase())
+  );
 
   // Diversity & Inclusion State
   const [gender, setGender] = useState("Male");
@@ -202,6 +265,7 @@ const Profile = () => {
     try {
       setDeletingResumeId(targetId);
       setDownloadError(null);
+      setResumeUploadError(null);
       await deleteResume(targetId);
       await fetchUserResumes();
       setToast({
@@ -242,11 +306,39 @@ const Profile = () => {
     }
   };
 
-  const handleResumeFileSelect = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const canUploadResume =
+    !isLoadingResumes && !resumeLoadError && resumes.length < MAX_RESUMES;
 
-    e.target.value = "";
+  const handleUploadResumeClick = () => {
+    if (isLoadingResumes || resumeLoadError || isUploadingResume) return;
+    if (resumes.length >= MAX_RESUMES) {
+      setResumeUploadError(
+        `Maximum of ${MAX_RESUMES} resumes allowed. Please delete an existing resume before uploading a new one.`
+      );
+      return;
+    }
+    resumeFileInputRef.current?.click();
+  };
+
+  const handleResumeFileSelect = async (e) => {
+    const file = e?.target?.files?.[0];
+    if (e?.target) {
+      e.target.value = "";
+    }
+
+    if (isLoadingResumes || resumeLoadError) {
+      setResumeUploadError("Unable to verify your current resumes. Please wait or retry.");
+      return;
+    }
+
+    if (resumes.length >= MAX_RESUMES) {
+      setResumeUploadError(
+        `Maximum of ${MAX_RESUMES} resumes allowed. Please delete an existing resume before uploading a new one.`
+      );
+      return;
+    }
+
+    if (!file || isUploadingResume) return;
 
     const validation = validateResumeFile(file);
     if (!validation.valid) {
@@ -294,8 +386,8 @@ const Profile = () => {
             addressLine1: prof.addressLine1 || prof.address || "",
             city: prof.city || "",
             state: prof.state || "",
-            postcode: prof.postcode || prof.postalCode || "",
-            countyDistrict: prof.countyDistrict || prof.district || "",
+            postcode: prof.postcode || prof.postalCode || prof.zip || prof.postal_code || "",
+            countyDistrict: prof.countyDistrict || prof.district || prof.county_district || "",
             country: prof.country || "",
           });
 
@@ -425,25 +517,82 @@ const Profile = () => {
         .map((s) => s.trim())
         .filter(Boolean);
 
-      const addressLine1 = parts[0] || rawLocationDetails.addressLine1 || currentLocation || "";
-      const city = parts[1] || rawLocationDetails.city || "";
-      const state = parts[2] || rawLocationDetails.state || "";
-      const country = parts[3] || parts[parts.length - 1] || rawLocationDetails.country || "";
+      let addressLine1 = rawLocationDetails.addressLine1 || "";
+      let city = rawLocationDetails.city || "";
+      let state = rawLocationDetails.state || "";
+      let postcode = rawLocationDetails.postcode || "";
+      const countyDistrict = rawLocationDetails.countyDistrict || "";
+      let country = rawLocationDetails.country || "";
+
+      if (parts.length === 5 && /^\d{4,10}$/.test(parts[3])) {
+        addressLine1 = parts[0];
+        city = parts[1];
+        state = parts[2];
+        postcode = parts[3];
+        country = parts[4];
+      } else if (parts.length >= 4) {
+        addressLine1 = parts.slice(0, parts.length - 3).join(", ");
+        city = parts[parts.length - 3];
+        state = parts[parts.length - 2];
+        country = parts[parts.length - 1];
+      } else if (parts.length === 3) {
+        const lastIsCountry = ALL_COUNTRIES.some(
+          (c) => c.toLowerCase() === parts[2].toLowerCase()
+        );
+        if (lastIsCountry) {
+          addressLine1 = rawLocationDetails.addressLine1 || parts[0];
+          city = parts[0];
+          state = parts[1];
+          country = parts[2];
+        } else {
+          addressLine1 = parts[0];
+          city = parts[1];
+          state = parts[2];
+          country = rawLocationDetails.country || "India";
+        }
+      } else if (parts.length === 2) {
+        addressLine1 = parts[0];
+        city = parts[1];
+      } else if (parts.length === 1) {
+        addressLine1 = parts[0];
+      }
+
+      if (!country) {
+        country = "India";
+      }
 
       const payload = {
         addressLine1,
         city,
         state,
-        postcode: rawLocationDetails.postcode || "",
-        countyDistrict: rawLocationDetails.countyDistrict || "",
+        postcode,
+        countyDistrict,
         country,
         willingToRelocate: openToRelocate.toLowerCase() === "no" ? "no" : "yes",
       };
 
       const response = await updateLocationProfile(payload);
+
+      setRawLocationDetails({
+        addressLine1,
+        city,
+        state,
+        postcode,
+        countyDistrict,
+        country,
+      });
+
+      const normalizedAddress = [addressLine1, city, state, country]
+        .filter(Boolean)
+        .join(", ");
+      if (normalizedAddress) {
+        setCurrentLocation(normalizedAddress);
+      }
+
       const message =
-        response?.message ||
-        (typeof response === "string" ? response : "Location & work authorization updated.");
+        (typeof response === "string" && response.trim()
+          ? response
+          : response?.message) || "Location & work authorization updated.";
 
       setToast({
         show: true,
@@ -452,6 +601,8 @@ const Profile = () => {
       });
 
       setIsEditingLocation(false);
+      setIsWorkCountriesOpen(false);
+      setIsCitizenshipOpen(false);
     } catch (err) {
       console.error("Failed to save location profile:", err);
       const errMsg =
@@ -509,12 +660,12 @@ const Profile = () => {
 
   const removeCountry = (cToRemove) => {
     if (!isEditingLocation) return;
-    setTargetCountries(targetCountries.filter((c) => c !== cToRemove));
+    setTargetCountries((prev) => prev.filter((c) => c !== cToRemove));
   };
 
   const removeCitizenship = (cToRemove) => {
     if (!isEditingLocation) return;
-    setCitizenship(citizenship.filter((c) => c !== cToRemove));
+    setCitizenship((prev) => prev.filter((c) => c !== cToRemove));
   };
 
   return (
@@ -540,9 +691,12 @@ const Profile = () => {
           </div>
 
           {/* Top Row: Personal Information + Resume Management */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 w-full items-stretch">
-            {/* 1. Personal Information (7 Cols) */}
-            <div className="lg:col-span-7 bg-white rounded-[20px] border border-[#E2E8F0] p-6 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col justify-between">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 w-full items-start">
+            {/* Left Column (7 Cols): Personal Information & Payment Method */}
+            <div className="lg:col-span-7 flex flex-col gap-6 w-full">
+              {/* 1. Personal Information Card */}
+              <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-6 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col">
+
               <div>
                 {/* Header */}
                 <div className="flex items-start justify-between gap-4">
@@ -609,24 +763,16 @@ const Profile = () => {
                     <label className="text-[12.5px] font-medium text-[#64748B]">
                       Phone Number
                     </label>
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center gap-1.5 h-[40px] px-2.5 rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-slate-700 shrink-0">
-                        <span className="text-base leading-none">🇮🇳</span>
-                        <svg className="w-3 h-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                          <path d="m6 9 6 6 6-6" />
-                        </svg>
-                      </div>
-                      <input
-                        type="text"
-                        value={phone}
-                        readOnly={!isEditingPersonal}
-                        onChange={(e) => setPhone(e.target.value)}
-                        className={`flex-1 h-[40px] px-3.5 rounded-[10px] border text-[13px] font-medium outline-none transition-all min-w-0 ${isEditingPersonal
-                            ? "border-indigo-400 bg-white text-[#0F172A] ring-2 ring-indigo-500/10 focus:border-indigo-500"
-                            : "border-[#E2E8F0] bg-slate-50/50 text-[#0F172A] cursor-default"
-                          }`}
-                      />
-                    </div>
+                    <input
+                      type="text"
+                      value={phone}
+                      readOnly={!isEditingPersonal}
+                      onChange={(e) => setPhone(e.target.value)}
+                      className={`h-[40px] px-3.5 rounded-[10px] border text-[13px] font-medium outline-none transition-all ${isEditingPersonal
+                          ? "border-indigo-400 bg-white text-[#0F172A] ring-2 ring-indigo-500/10 focus:border-indigo-500"
+                          : "border-[#E2E8F0] bg-slate-50/50 text-[#0F172A] cursor-default"
+                        }`}
+                    />
                   </div>
 
                   {/* LinkedIn Profile */}
@@ -690,6 +836,10 @@ const Profile = () => {
                   </div>
                 )}
               </div>
+              </div>
+
+              {/* 2. Payment Method Card */}
+              <PaymentMethodCard />
             </div>
 
             {/* 2. Resume Management (5 Cols) */}
@@ -904,37 +1054,41 @@ const Profile = () => {
                   </div>
                 )}
 
-                {/* Hidden File Input */}
-                <input
-                  ref={resumeFileInputRef}
-                  type="file"
-                  accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                  onChange={handleResumeFileSelect}
-                  style={{ display: "none" }}
-                />
+                {canUploadResume && (
+                  <>
+                    {/* Hidden File Input */}
+                    <input
+                      ref={resumeFileInputRef}
+                      type="file"
+                      accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                      onChange={handleResumeFileSelect}
+                      style={{ display: "none" }}
+                    />
 
-                {/* Upload New Resume Button */}
-                <button
-                  type="button"
-                  onClick={() => resumeFileInputRef.current?.click()}
-                  disabled={isUploadingResume}
-                  className="w-full mt-4 h-[40px] px-4 rounded-[10px] bg-[#4F46E5] hover:bg-[#4338CA] text-white text-[13px] font-semibold flex items-center justify-center gap-1.5 shadow-2xs active:scale-[0.99] transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  {isUploadingResume ? (
-                    <>
-                      <svg className="w-4 h-4 text-white animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                      </svg>
-                      <span>Uploading...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-base leading-none font-normal">+</span>
-                      <span>Upload New Resume</span>
-                    </>
-                  )}
-                </button>
+                    {/* Upload New Resume Button */}
+                    <button
+                      type="button"
+                      onClick={handleUploadResumeClick}
+                      disabled={isUploadingResume}
+                      className="w-full mt-4 h-[40px] px-4 rounded-[10px] bg-[#4F46E5] hover:bg-[#4338CA] text-white text-[13px] font-semibold flex items-center justify-center gap-1.5 shadow-2xs active:scale-[0.99] transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {isUploadingResume ? (
+                        <>
+                          <svg className="w-4 h-4 text-white animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          </svg>
+                          <span>Uploading...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-base leading-none font-normal">+</span>
+                          <span>Upload New Resume</span>
+                        </>
+                      )}
+                    </button>
+                  </>
+                )}
             </div>
           </div>
         </div>
@@ -954,7 +1108,15 @@ const Profile = () => {
 
               <button
                 type="button"
-                onClick={() => setIsEditingLocation((prev) => !prev)}
+                onClick={() => {
+                  setIsEditingLocation((prev) => {
+                    if (prev) {
+                      setIsWorkCountriesOpen(false);
+                      setIsCitizenshipOpen(false);
+                    }
+                    return !prev;
+                  });
+                }}
                 className="flex items-center gap-1.5 text-[12.5px] font-semibold text-[#4F46E5] hover:text-[#4338CA] transition-colors cursor-pointer shrink-0"
               >
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -980,7 +1142,7 @@ const Profile = () => {
                     className="h-[42px] px-3.5 rounded-[10px] border border-indigo-400 bg-white text-[13px] text-[#0F172A] font-medium outline-none ring-2 ring-indigo-500/10 focus:border-indigo-500 transition-all"
                   />
                 ) : (
-                  <div className="flex items-center justify-between h-[42px] px-3.5 rounded-[10px] border border-[#E2E8F0] bg-slate-50/50 text-[13px] text-[#0F172A] font-medium">
+                  <div className="flex items-center justify-between h-[42px] px-3.5 rounded-[10px] border border-[#E2E8F0] bg-slate-50/50 text-[13px] text-[#0F172A] font-medium cursor-default">
                     <div className="flex items-center gap-2 min-w-0">
                       <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                         <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
@@ -1000,28 +1162,48 @@ const Profile = () => {
                 <label className="text-[12.5px] font-medium text-[#64748B] whitespace-nowrap">
                   Open to Relocate
                 </label>
-                <div className="flex items-center h-[42px] p-1 rounded-[10px] border border-[#E2E8F0] bg-[#F8FAFC]/60">
+                <div
+                  className={`flex items-center h-[42px] p-1 rounded-[10px] border transition-all ${
+                    isEditingLocation
+                      ? "border-indigo-400 bg-white ring-2 ring-indigo-500/10"
+                      : "border-[#E2E8F0] bg-[#F8FAFC]/60"
+                  }`}
+                >
                   <button
                     type="button"
                     disabled={!isEditingLocation}
-                    onClick={() => setOpenToRelocate("Yes")}
-                    className={`flex-1 h-full rounded-[8px] text-[13px] font-semibold transition-all ${isEditingLocation ? "cursor-pointer" : "cursor-default"
-                      } ${openToRelocate === "Yes"
+                    onClick={() => {
+                      if (!isEditingLocation) return;
+                      setOpenToRelocate("Yes");
+                    }}
+                    className={`flex-1 h-full rounded-[8px] text-[13px] font-semibold transition-all ${
+                      isEditingLocation ? "cursor-pointer" : "cursor-default"
+                    } ${
+                      openToRelocate === "Yes"
                         ? "bg-white border border-[#E2E8F0] text-[#4F46E5] shadow-[0_1px_2px_rgba(0,0,0,0.05)]"
-                        : "bg-transparent border border-transparent text-[#64748B] hover:text-[#0F172A]"
-                      }`}
+                        : `bg-transparent border border-transparent text-[#64748B] ${
+                            isEditingLocation ? "hover:text-[#0F172A]" : ""
+                          }`
+                    }`}
                   >
                     Yes
                   </button>
                   <button
                     type="button"
                     disabled={!isEditingLocation}
-                    onClick={() => setOpenToRelocate("No")}
-                    className={`flex-1 h-full rounded-[8px] text-[13px] font-semibold transition-all ${isEditingLocation ? "cursor-pointer" : "cursor-default"
-                      } ${openToRelocate === "No"
+                    onClick={() => {
+                      if (!isEditingLocation) return;
+                      setOpenToRelocate("No");
+                    }}
+                    className={`flex-1 h-full rounded-[8px] text-[13px] font-semibold transition-all ${
+                      isEditingLocation ? "cursor-pointer" : "cursor-default"
+                    } ${
+                      openToRelocate === "No"
                         ? "bg-white border border-[#E2E8F0] text-[#4F46E5] shadow-[0_1px_2px_rgba(0,0,0,0.05)]"
-                        : "bg-transparent border border-transparent text-[#64748B] hover:text-[#0F172A]"
-                      }`}
+                        : `bg-transparent border border-transparent text-[#64748B] ${
+                            isEditingLocation ? "hover:text-[#0F172A]" : ""
+                          }`
+                    }`}
                   >
                     No
                   </button>
@@ -1032,75 +1214,219 @@ const Profile = () => {
             {/* Countries: Citizenship & Target Countries */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Countries of Citizenship */}
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1.5 relative" ref={citizenshipRef}>
                 <label className="text-[12.5px] font-medium text-[#64748B]">
                   Countries of Citizenship
                 </label>
                 <div
-                  className={`min-h-[42px] p-1.5 px-3 rounded-[10px] border flex items-center justify-between gap-2 flex-wrap ${isEditingLocation
-                      ? "border-indigo-400 bg-white ring-2 ring-indigo-500/10"
-                      : "border-[#E2E8F0] bg-slate-50/50"
-                    }`}
+                  aria-disabled={!isEditingLocation}
+                  onClick={() => {
+                    if (!isEditingLocation) return;
+                    setIsCitizenshipOpen((prev) => !prev);
+                  }}
+                  className={`min-h-[42px] p-1.5 px-3 rounded-[10px] border flex items-center justify-between gap-2 flex-wrap transition-all ${
+                    isEditingLocation
+                      ? "border-indigo-400 bg-white ring-2 ring-indigo-500/10 cursor-pointer"
+                      : "border-[#E2E8F0] bg-slate-50/50 cursor-default"
+                  }`}
                 >
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {citizenship.map((c) => (
-                      <span
-                        key={c}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] bg-[#F1F5F9] text-[#334155] text-[12.5px] font-medium"
-                      >
-                        <span>{c}</span>
-                        {isEditingLocation && (
-                          <button
-                            type="button"
-                            onClick={() => removeCitizenship(c)}
-                            className="text-slate-400 hover:text-slate-700 cursor-pointer"
-                          >
-                            ✕
-                          </button>
-                        )}
-                      </span>
-                    ))}
+                  <div className="flex items-center gap-1.5 flex-wrap flex-1 min-w-0">
+                    {citizenship.length === 0 ? (
+                      <span className="text-[12.5px] text-slate-400 font-normal">Select countries</span>
+                    ) : (
+                      citizenship.map((c) => (
+                        <span
+                          key={c}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] bg-[#F1F5F9] text-[#334155] text-[12.5px] font-medium"
+                        >
+                          <span>{c}</span>
+                          {isEditingLocation && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeCitizenship(c);
+                              }}
+                              className="text-slate-400 hover:text-slate-700 cursor-pointer ml-0.5"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </span>
+                      ))
+                    )}
                   </div>
-                  <svg className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                  <svg
+                    className={`w-3.5 h-3.5 text-slate-400 shrink-0 ml-auto transition-transform duration-200 ${
+                      isEditingLocation && isCitizenshipOpen ? "rotate-180" : ""
+                    }`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                  >
                     <path d="m6 9 6 6 6-6" />
                   </svg>
                 </div>
+
+                {/* Dropdown Menu for Citizenship */}
+                {isEditingLocation && isCitizenshipOpen && (
+                  <div className="absolute left-0 right-0 top-full mt-1.5 bg-white rounded-xl border border-slate-200 shadow-xl p-2 z-40 max-h-60 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
+                    <div className="px-2 pb-2 pt-1 border-b border-slate-100 mb-1 sticky top-0 bg-white z-10">
+                      <input
+                        type="text"
+                        placeholder="Search countries..."
+                        value={citizenshipSearch}
+                        onChange={(e) => setCitizenshipSearch(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full h-8 px-2.5 rounded-lg border border-slate-200 text-xs outline-none focus:border-[#4F46E5] focus:ring-1 focus:ring-[#EEF2FF]"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      {filteredCitizenshipCountries.map((c) => {
+                        const isSelected = citizenship.includes(c);
+                        return (
+                          <button
+                            key={c}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (!isEditingLocation) return;
+                              if (isSelected) {
+                                setCitizenship(citizenship.filter((item) => item !== c));
+                              } else {
+                                setCitizenship([...citizenship, c]);
+                              }
+                            }}
+                            className={`w-full px-2.5 py-1.5 text-left text-xs rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
+                              isSelected
+                                ? "bg-[#EEF2FF] text-[#4F46E5] font-semibold"
+                                : "text-slate-700 hover:bg-slate-50 font-medium"
+                            }`}
+                          >
+                            <span>{c}</span>
+                            {isSelected && (
+                              <svg className="w-3.5 h-3.5 text-[#4F46E5] stroke-[2.5]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                            )}
+                          </button>
+                        );
+                      })}
+                      {filteredCitizenshipCountries.length === 0 && (
+                        <div className="py-3 text-center text-xs text-slate-400">No countries found</div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Countries where you want to work */}
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1.5 relative" ref={workCountriesRef}>
                 <label className="text-[12.5px] font-medium text-[#64748B]">
                   Countries where you want to work
                 </label>
                 <div
-                  className={`min-h-[42px] p-1.5 px-3 rounded-[10px] border flex items-center justify-between gap-2 flex-wrap ${isEditingLocation
-                      ? "border-indigo-400 bg-white ring-2 ring-indigo-500/10"
-                      : "border-[#E2E8F0] bg-slate-50/50"
-                    }`}
+                  aria-disabled={!isEditingLocation}
+                  onClick={() => {
+                    if (!isEditingLocation) return;
+                    setIsWorkCountriesOpen((prev) => !prev);
+                  }}
+                  className={`min-h-[42px] p-1.5 px-3 rounded-[10px] border flex items-center justify-between gap-2 flex-wrap transition-all ${
+                    isEditingLocation
+                      ? "border-indigo-400 bg-white ring-2 ring-indigo-500/10 cursor-pointer"
+                      : "border-[#E2E8F0] bg-slate-50/50 cursor-default"
+                  }`}
                 >
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {targetCountries.map((c) => (
-                      <span
-                        key={c}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] bg-[#F1F5F9] text-[#334155] text-[12.5px] font-medium"
-                      >
-                        <span>{c}</span>
-                        {isEditingLocation && (
-                          <button
-                            type="button"
-                            onClick={() => removeCountry(c)}
-                            className="text-slate-400 hover:text-slate-700 cursor-pointer"
-                          >
-                            ✕
-                          </button>
-                        )}
-                      </span>
-                    ))}
+                  <div className="flex items-center gap-1.5 flex-wrap flex-1 min-w-0">
+                    {targetCountries.length === 0 ? (
+                      <span className="text-[12.5px] text-slate-400 font-normal">Select countries</span>
+                    ) : (
+                      targetCountries.map((c) => (
+                        <span
+                          key={c}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] bg-[#F1F5F9] text-[#334155] text-[12.5px] font-medium"
+                        >
+                          <span>{c}</span>
+                          {isEditingLocation && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeCountry(c);
+                              }}
+                              className="text-slate-400 hover:text-slate-700 cursor-pointer ml-0.5"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </span>
+                      ))
+                    )}
                   </div>
-                  <svg className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                  <svg
+                    className={`w-3.5 h-3.5 text-slate-400 shrink-0 ml-auto transition-transform duration-200 ${
+                      isEditingLocation && isWorkCountriesOpen ? "rotate-180" : ""
+                    }`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                  >
                     <path d="m6 9 6 6 6-6" />
                   </svg>
                 </div>
+
+                {/* Dropdown Menu for Target Countries */}
+                {isEditingLocation && isWorkCountriesOpen && (
+                  <div className="absolute left-0 right-0 top-full mt-1.5 bg-white rounded-xl border border-slate-200 shadow-xl p-2 z-40 max-h-60 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
+                    <div className="px-2 pb-2 pt-1 border-b border-slate-100 mb-1 sticky top-0 bg-white z-10">
+                      <input
+                        type="text"
+                        placeholder="Search countries..."
+                        value={workCountrySearch}
+                        onChange={(e) => setWorkCountrySearch(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full h-8 px-2.5 rounded-lg border border-slate-200 text-xs outline-none focus:border-[#4F46E5] focus:ring-1 focus:ring-[#EEF2FF]"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      {filteredWorkCountries.map((c) => {
+                        const isSelected = targetCountries.includes(c);
+                        return (
+                          <button
+                            key={c}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (!isEditingLocation) return;
+                              if (isSelected) {
+                                setTargetCountries(targetCountries.filter((item) => item !== c));
+                              } else {
+                                setTargetCountries([...targetCountries, c]);
+                              }
+                            }}
+                            className={`w-full px-2.5 py-1.5 text-left text-xs rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
+                              isSelected
+                                ? "bg-[#EEF2FF] text-[#4F46E5] font-semibold"
+                                : "text-slate-700 hover:bg-slate-50 font-medium"
+                            }`}
+                          >
+                            <span>{c}</span>
+                            {isSelected && (
+                              <svg className="w-3.5 h-3.5 text-[#4F46E5] stroke-[2.5]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                            )}
+                          </button>
+                        );
+                      })}
+                      {filteredWorkCountries.length === 0 && (
+                        <div className="py-3 text-center text-xs text-slate-400">No countries found</div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1146,27 +1472,15 @@ const Profile = () => {
                   </div>
                 </div>
 
-                {/* 2x2 Dropdowns Grid */}
+                {/* 2x2 Read-only Data Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5">
                   {/* Gender */}
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[12.5px] font-medium text-[#64748B]">
                       Gender
                     </label>
-                    <div className="relative">
-                      <select
-                        value={gender}
-                        onChange={(e) => setGender(e.target.value)}
-                        className="w-full h-[40px] px-3.5 pr-8 rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#0F172A] font-medium outline-none appearance-none transition-all cursor-pointer focus:border-slate-400"
-                      >
-                        <option>Male</option>
-                        <option>Female</option>
-                        <option>Non-binary</option>
-                        <option>Prefer not to say</option>
-                      </select>
-                      <svg className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-3.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                        <path d="m6 9 6 6 6-6" />
-                      </svg>
+                    <div className="w-full h-[40px] px-3.5 rounded-[10px] border border-[#E2E8F0] bg-slate-50/50 text-[13px] text-[#0F172A] font-medium flex items-center min-w-0">
+                      <span className="truncate">{gender}</span>
                     </div>
                   </div>
 
@@ -1175,22 +1489,8 @@ const Profile = () => {
                     <label className="text-[12.5px] font-medium text-[#64748B]">
                       Race / Ethnicity
                     </label>
-                    <div className="relative">
-                      <select
-                        value={ethnicity}
-                        onChange={(e) => setEthnicity(e.target.value)}
-                        className="w-full h-[40px] px-3.5 pr-8 rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#0F172A] font-medium outline-none appearance-none transition-all cursor-pointer focus:border-slate-400"
-                      >
-                        <option>Prefer not to say</option>
-                        <option>Asian</option>
-                        <option>Black / African American</option>
-                        <option>Hispanic / Latino</option>
-                        <option>White / Caucasian</option>
-                        <option>Other</option>
-                      </select>
-                      <svg className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-3.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                        <path d="m6 9 6 6 6-6" />
-                      </svg>
+                    <div className="w-full h-[40px] px-3.5 rounded-[10px] border border-[#E2E8F0] bg-slate-50/50 text-[13px] text-[#0F172A] font-medium flex items-center min-w-0">
+                      <span className="truncate">{ethnicity}</span>
                     </div>
                   </div>
 
@@ -1199,19 +1499,8 @@ const Profile = () => {
                     <label className="text-[12.5px] font-medium text-[#64748B]">
                       Veteran Status
                     </label>
-                    <div className="relative">
-                      <select
-                        value={veteran}
-                        onChange={(e) => setVeteran(e.target.value)}
-                        className="w-full h-[40px] px-3.5 pr-8 rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#0F172A] font-medium outline-none appearance-none transition-all cursor-pointer focus:border-slate-400"
-                      >
-                        <option>No</option>
-                        <option>Yes</option>
-                        <option>Prefer not to say</option>
-                      </select>
-                      <svg className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-3.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                        <path d="m6 9 6 6 6-6" />
-                      </svg>
+                    <div className="w-full h-[40px] px-3.5 rounded-[10px] border border-[#E2E8F0] bg-slate-50/50 text-[13px] text-[#0F172A] font-medium flex items-center min-w-0">
+                      <span className="truncate">{veteran}</span>
                     </div>
                   </div>
 
@@ -1220,19 +1509,8 @@ const Profile = () => {
                     <label className="text-[12.5px] font-medium text-[#64748B]">
                       Disability Status
                     </label>
-                    <div className="relative">
-                      <select
-                        value={disability}
-                        onChange={(e) => setDisability(e.target.value)}
-                        className="w-full h-[40px] px-3.5 pr-8 rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#0F172A] font-medium outline-none appearance-none transition-all cursor-pointer focus:border-slate-400"
-                      >
-                        <option>No</option>
-                        <option>Yes</option>
-                        <option>Prefer not to say</option>
-                      </select>
-                      <svg className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-3.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                        <path d="m6 9 6 6 6-6" />
-                      </svg>
+                    <div className="w-full h-[40px] px-3.5 rounded-[10px] border border-[#E2E8F0] bg-slate-50/50 text-[13px] text-[#0F172A] font-medium flex items-center min-w-0">
+                      <span className="truncate">{disability}</span>
                     </div>
                   </div>
                 </div>

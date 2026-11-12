@@ -2,184 +2,342 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
-import fulltimeone from "../assets/fulltimeone.svg";
 import {
-  Sparkles,
-  Send,
-  Settings,
-  SlidersHorizontal,
-  ChevronDown,
-  ChevronRight,
-  ChevronUp,
   AlertCircle,
   CheckCircle2,
-  RotateCcw,
-  Bot,
-  User,
-  Plus,
-  Trash2,
-  Copy,
   Check,
-  MoreHorizontal,
+  FileText,
+  MapPin,
+  Briefcase,
+  Layers,
+  Coins,
+  Clock,
+  ChevronDown,
   X,
-  Lock,
-  Zap,
-  Target,
-  Workflow,
-  FileCheck,
 } from "lucide-react";
-import { getOnboardingProfile, updateProfileSettings } from "../services/api";
+import {
+  getOnboardingProfile,
+  updateProfileSettings,
+  getResumes,
+  getBillingStatus,
+} from "../services/api";
 
-const SUGGESTED_QUESTIONS = [
+const WORKPLACE_OPTIONS = ["Remote", "Hybrid", "On-site"];
+
+const EXPERIENCE_OPTIONS = [
+  "Entry Level (0–1 yrs)",
+  "Junior (1–3 yrs)",
+  "Mid-Level (3–5 yrs)",
+  "Senior (5–8 yrs)",
+  "Lead / Principal (8+ yrs)",
+];
+
+const JOB_TYPE_OPTIONS = ["Full-time"];
+
+const SALARY_OPTIONS = [
+  "Any",
+  "$80k+",
+  "$100k+",
+  "$110k+",
+  "$120k+",
+  "$140k+",
+  "$160k+",
+  "$180k+",
+];
+
+const TIME_OPTIONS = [
+  "08:00 AM",
+  "09:00 AM",
+  "10:00 AM",
+  "11:00 AM",
+  "12:00 PM",
+  "01:00 PM",
+  "02:00 PM",
+  "03:00 PM",
+  "04:00 PM",
+  "05:00 PM",
+];
+
+// All timezone slots default to disabled (unchecked, empty time box) until enabled by Pro user
+const DEFAULT_TIMEZONE_SLOTS = [
   {
-    id: "jobs-fit",
-    text: "What jobs fit me?",
-    icon: Target,
+    id: "pst",
+    code: "PST",
+    name: "Pacific Standard Time",
+    time: "08:00 AM",
+    enabled: false,
   },
   {
-    id: "how-works",
-    text: "How does Auto Apply work?",
-    icon: Workflow,
+    id: "mst",
+    code: "MST",
+    name: "Mountain Standard Time",
+    time: "12:00 PM",
+    enabled: false,
   },
   {
-    id: "resume-ready",
-    text: "Is my resume ready?",
-    icon: FileCheck,
+    id: "cst",
+    code: "CST",
+    name: "Central Standard Time",
+    time: "02:00 PM",
+    enabled: false,
+  },
+  {
+    id: "est",
+    code: "EST",
+    name: "Eastern Standard Time",
+    time: "05:00 PM",
+    enabled: false,
   },
 ];
 
-const TWENTY_FOUR_SLOTS = [
-  "12 AM",
-  "1 AM",
-  "2 AM",
-  "3 AM",
-  "4 AM",
-  "5 AM",
-  "6 AM",
-  "7 AM",
-  "8 AM",
-  "9 AM",
-  "10 AM",
-  "11 AM",
-  "12 PM",
-  "1 PM",
-  "2 PM",
-  "3 PM",
-  "4 PM",
-  "5 PM",
-  "6 PM",
-  "7 PM",
-  "8 PM",
-  "9 PM",
-  "10 PM",
-  "11 PM",
-];
+/**
+ * Normalizes and checks whether the response from GET /api/billing/status indicates an active Pro plan.
+ * Checks explicit proPlan boolean, isPro boolean, as well as planName / planCode containing 'pro'.
+ */
+export const evaluateProPlan = (data) => {
+  if (!data) return false;
+  const res = data?.data && typeof data.data === "object" ? data.data : data;
 
-const INITIAL_RUN_TIMES = ["2 AM", "8 AM", "2 PM", "8 PM"];
+  // 1. Direct boolean flags
+  if (typeof res?.proPlan === "boolean") return res.proPlan;
+  if (typeof res?.isPro === "boolean") return res.isPro;
+  if (typeof res?.isProPlan === "boolean") return res.isProPlan;
+  if (typeof res?.isProActive === "boolean") return res.isProActive;
+
+  // 2. String boolean flags
+  if (typeof res?.proPlan === "string") {
+    return res.proPlan.toLowerCase() === "true";
+  }
+
+  // 3. Plan code / name evaluation from backend
+  const hasPlan = Boolean(
+    res?.hasPlan === true ||
+    res?.has_plan === true ||
+    res?.status === true ||
+    res?.isSubscribed === true ||
+    res?.active === true ||
+    res?.planActive === true ||
+    (typeof res?.status === "string" &&
+      ["active", "true", "subscribed", "paid"].includes(res.status.toLowerCase()))
+  );
+
+  const planIdentifier = String(
+    res?.planCode ||
+    res?.plancode ||
+    res?.planName ||
+    res?.plan ||
+    res?.subscriptionPlan ||
+    res?.subscription ||
+    res?.tier ||
+    ""
+  )
+    .toLowerCase()
+    .trim();
+
+  // If user has an active plan and its identifier specifies 'pro'
+  if (hasPlan && planIdentifier.includes("pro")) {
+    return true;
+  }
+
+  return false;
+};
 
 const FullTimeAutoApply = () => {
   const navigate = useNavigate();
 
-  // Settings States
+  // Pro Subscription State
+  const [isProPlan, setIsProPlan] = useState(() => {
+    try {
+      const stored =
+        localStorage.getItem("billingStatus") ||
+        sessionStorage.getItem("billingStatus");
+      if (stored) {
+        return evaluateProPlan(JSON.parse(stored));
+      }
+    } catch (e) { }
+    return false;
+  });
+
+  const [isVerifyingBilling, setIsVerifyingBilling] = useState(false);
+  const verifyingPromiseRef = useRef(null);
+
+  // Enable Full Time Auto Apply Toggle State
   const [isEnabled, setIsEnabled] = useState(false);
+
+  // Dropdown Open State ('workplace' | 'experience' | 'salary' | 'time-pst' | ...)
+  const [openDropdown, setOpenDropdown] = useState(null);
+
+  // Settings States (default to empty / "Select option", toggle buttons off default)
+  const [primaryResume, setPrimaryResume] = useState(
+    "Koti_Jyothsna_Frontend_Developer_Resume.docx"
+  );
+  const [workplaceTypes, setWorkplaceTypes] = useState([]);
+  const [experienceLevels, setExperienceLevels] = useState([]);
+  const [jobTypes, setJobTypes] = useState(["Full-time"]);
+  const [minSalary, setMinSalary] = useState("");
+  const [keywords, setKeywords] = useState(
+    "React, TypeScript, Next.js, Tailwind CSS"
+  );
+  const [standingInstructions, setStandingInstructions] = useState(
+    "Prioritize modern front-end frameworks and high-performance web applications."
+  );
+
   const [dailyTarget, setDailyTarget] = useState(10);
-  const [draftDailyCap, setDraftDailyCap] = useState(10);
-
-  const [selectedRunTimes, setSelectedRunTimes] = useState(INITIAL_RUN_TIMES);
-
-  // Lanes State (Max 3 lanes)
-  const [lanes, setLanes] = useState([
-    {
-      id: "lane-default",
-      name: "Default",
-      description: "Excellent and better · No filters",
-      active: true,
-      isDefault: true,
-    },
-  ]);
-
-  // Manual Settings Modal State
-  const [isManualModalOpen, setIsManualModalOpen] = useState(false);
-
-  // Manual Settings Internal States (Matching Images 1, 2, 3)
-  const [perCompanyLimit, setPerCompanyLimit] = useState(10);
-  const [pauseInterviewing, setPauseInterviewing] = useState(true);
-  const [selectedResumeProfile, setSelectedResumeProfile] = useState("Default (default)");
-  const [standingInstructions, setStandingInstructions] = useState("");
-  const [reviewBeforeSubmit, setReviewBeforeSubmit] = useState(false);
+  const [timezoneSlots, setTimezoneSlots] = useState(DEFAULT_TIMEZONE_SLOTS);
+  const [perCompanyLimit, setPerCompanyLimit] = useState(0);
+  const [pauseInterviewing, setPauseInterviewing] = useState(false);
   const [matchQuality, setMatchQuality] = useState(">80%");
   const [resumeOptimizationMode, setResumeOptimizationMode] = useState("Honest");
 
-  // Shared daily cap used count
-  const [usedCount] = useState(0);
-
-  // Chat / Assistant States
-  const [chatMessages, setChatMessages] = useState([]);
-  const [inputMessage, setInputMessage] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
-  const [isAwaitingLaneRole, setIsAwaitingLaneRole] = useState(false);
-  const [copiedIndex, setCopiedIndex] = useState(null);
-  const chatScrollRef = useRef(null);
-  const chatInputRef = useRef(null);
-
-  // UI States
+  // UI Feedback States
   const [isSaving, setIsSaving] = useState(false);
-  const [toast, setToast] = useState({ show: false, message: "", type: "success" });
+  const [toast, setToast] = useState({
+    show: false,
+    message: "",
+    type: "success",
+    action: null,
+  });
 
-  // Load saved settings on mount
+  /**
+   * Helper: displays the standard subscription toast message.
+   */
+  const showProPlanToast = () => {
+    setToast({
+      show: true,
+      message: "Upgrade plan to enable Full Time Auto Apply.",
+      type: "warning",
+      action: {
+        label: "Upgrade Plan",
+        onClick: () => navigate("/subscriptions"),
+      },
+    });
+  };
+
+  /**
+   * Calls the Billing Status API, validates latest subscription status,
+   * updates state, prevents duplicate simultaneous calls, and handles errors.
+   * Returns: boolean (isPro) or null (if network/API error occurred).
+   */
+  const verifyProPlan = async () => {
+    if (verifyingPromiseRef.current) {
+      return verifyingPromiseRef.current;
+    }
+
+    setIsVerifyingBilling(true);
+    const fetchPromise = (async () => {
+      try {
+        const data = await getBillingStatus();
+        const isPro = evaluateProPlan(data);
+        setIsProPlan(isPro);
+        if (!isPro) {
+          setIsEnabled(false);
+          setTimezoneSlots((prev) => prev.map((s) => ({ ...s, enabled: false })));
+          setPerCompanyLimit(0);
+        }
+        return isPro;
+      } catch (err) {
+        console.warn("[FullTimeAutoApply] Billing verification failed:", err);
+        // Do not assume user is Pro on failure; block action and alert user
+        setIsProPlan(false);
+        setToast({
+          show: true,
+          message: "Unable to verify subscription status. Please check your connection and try again.",
+          type: "error",
+          action: null,
+        });
+        return null;
+      } finally {
+        setIsVerifyingBilling(false);
+        verifyingPromiseRef.current = null;
+      }
+    })();
+
+    verifyingPromiseRef.current = fetchPromise;
+    return fetchPromise;
+  };
+
+  /**
+   * Guard for restricted setting interactions: validates latest Pro status before allowing action.
+   */
+  const handleRestrictedAction = async (actionCallback) => {
+    const isPro = await verifyProPlan();
+    if (isPro === null) {
+      // API call failed, error toast already shown
+      return;
+    }
+
+    if (isPro) {
+      if (actionCallback) actionCallback();
+    } else {
+      showProPlanToast();
+    }
+  };
+
+  // Load saved settings and resume profile on mount
   useEffect(() => {
     try {
       const saved = localStorage.getItem("fullTimeAutoApplySettings");
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed.isEnabled !== undefined && parsed.isPaidPlanActive) {
+        if (parsed.isEnabled !== undefined && (parsed.isPaidPlanActive || parsed.isProPlan)) {
           setIsEnabled(parsed.isEnabled);
         } else {
           setIsEnabled(false);
+        }
+        if (parsed.primaryResume) {
+          setPrimaryResume(parsed.primaryResume);
+        }
+        if (Array.isArray(parsed.workplaceTypes) && parsed.workplaceTypes.length > 0) {
+          setWorkplaceTypes(parsed.workplaceTypes);
+        }
+        if (Array.isArray(parsed.experienceLevels) && parsed.experienceLevels.length > 0) {
+          setExperienceLevels(parsed.experienceLevels);
+        }
+        if (Array.isArray(parsed.jobTypes) && parsed.jobTypes.length > 0) {
+          const valid = parsed.jobTypes.filter((t) => JOB_TYPE_OPTIONS.includes(t));
+          setJobTypes(valid.length > 0 ? valid : ["Full-time"]);
+        }
+        if (parsed.minSalary) {
+          setMinSalary(parsed.minSalary);
+        }
+        if (parsed.keywords !== undefined) {
+          setKeywords(parsed.keywords);
+        }
+        if (parsed.standingInstructions !== undefined) {
+          setStandingInstructions(parsed.standingInstructions);
         }
         if (parsed.dailyTarget !== undefined) {
           const cap = parseInt(parsed.dailyTarget, 10);
           if (!isNaN(cap)) {
             setDailyTarget(cap);
-            setDraftDailyCap(cap);
           }
         }
-        if (Array.isArray(parsed.selectedRunTimes)) setSelectedRunTimes(parsed.selectedRunTimes);
-        if (Array.isArray(parsed.lanes) && parsed.lanes.length > 0) {
-          const seen = new Set();
-          const uniqueLanes = [];
-          for (const l of parsed.lanes) {
-            if (l.isDefault) {
-              uniqueLanes.push(l);
-              continue;
-            }
-            const key = (l.name || "").toLowerCase().trim();
-            if (!seen.has(key) && seen.size < 3) {
-              seen.add(key);
-              uniqueLanes.push(l);
-            }
-          }
-          setLanes(uniqueLanes);
-          try {
-            parsed.lanes = uniqueLanes;
-            localStorage.setItem("fullTimeAutoApplySettings", JSON.stringify(parsed));
-          } catch (err) {
-            // ignore
-          }
+        if ((parsed.isPaidPlanActive || parsed.isProPlan) && Array.isArray(parsed.timezoneSlots) && parsed.timezoneSlots.length === 4) {
+          setTimezoneSlots(parsed.timezoneSlots);
+        } else {
+          setTimezoneSlots(DEFAULT_TIMEZONE_SLOTS);
         }
-        if (parsed.perCompanyLimit !== undefined) setPerCompanyLimit(parsed.perCompanyLimit);
-        if (parsed.pauseInterviewing !== undefined) setPauseInterviewing(parsed.pauseInterviewing);
-        if (parsed.standingInstructions !== undefined) setStandingInstructions(parsed.standingInstructions);
-        if (parsed.reviewBeforeSubmit !== undefined) setReviewBeforeSubmit(parsed.reviewBeforeSubmit);
-        if (parsed.matchQuality !== undefined) setMatchQuality(parsed.matchQuality);
-        if (parsed.resumeOptimizationMode !== undefined) setResumeOptimizationMode(parsed.resumeOptimizationMode);
+        if ((parsed.isPaidPlanActive || parsed.isProPlan) && parsed.perCompanyLimit !== undefined) {
+          setPerCompanyLimit(parsed.perCompanyLimit);
+        } else {
+          setPerCompanyLimit(0);
+        }
+        if (parsed.pauseInterviewing !== undefined) {
+          setPauseInterviewing(parsed.pauseInterviewing);
+        }
+        if (parsed.matchQuality !== undefined) {
+          setMatchQuality(parsed.matchQuality);
+        }
+        if (parsed.resumeOptimizationMode !== undefined) {
+          setResumeOptimizationMode(parsed.resumeOptimizationMode);
+        }
       }
     } catch (e) {
       console.warn("Failed to parse saved settings:", e);
     }
 
-    // Try fetching from server profile
-    const fetchProfileSettings = async () => {
+    // Fetch profile and resumes from backend
+    const fetchProfileData = async () => {
       try {
         const data = await getOnboardingProfile();
         if (data?.profile) {
@@ -194,23 +352,71 @@ const FullTimeAutoApply = () => {
             const num = parseInt(prof.fullTimeTarget ?? prof.dailyTarget, 10);
             if (!isNaN(num)) {
               setDailyTarget(num);
-              setDraftDailyCap(num);
             }
           }
         }
+      } catch (err) { }
+
+      try {
+        const resumesData = await getResumes();
+        if (Array.isArray(resumesData) && resumesData.length > 0) {
+          const names = resumesData
+            .map((r) => r.fileName || r.title || r.name)
+            .filter(Boolean);
+          if (names.length > 0) {
+            const matching = names.find(
+              (n) => n.toLowerCase().includes("koti") || n.toLowerCase().includes("jyothsna")
+            );
+            if (matching) {
+              setPrimaryResume(matching);
+            } else if (!names.includes(primaryResume)) {
+              setPrimaryResume(names[0]);
+            }
+          }
+        }
+      } catch (err) { }
+    };
+
+    fetchProfileData();
+
+    // Verify initial billing status on mount
+    const fetchInitialBilling = async () => {
+      try {
+        const data = await getBillingStatus();
+        const isPro = evaluateProPlan(data);
+        setIsProPlan(isPro);
+        if (!isPro) {
+          setIsEnabled(false);
+          setTimezoneSlots((prev) => prev.map((s) => ({ ...s, enabled: false })));
+          setPerCompanyLimit(0);
+        }
       } catch (err) {
-        // Backend optional/fallback
+        console.warn("[FullTimeAutoApply] Initial billing status check failed:", err);
       }
     };
-    fetchProfileSettings();
-  }, []);
+    fetchInitialBilling();
 
-  // Auto-scroll chat when new messages appear
-  useEffect(() => {
-    if (chatScrollRef.current) {
-      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
-    }
-  }, [chatMessages, isTyping]);
+    const handleBillingUpdate = (e) => {
+      if (e?.detail) {
+        const isPro = evaluateProPlan(e.detail);
+        setIsProPlan(isPro);
+        if (!isPro) {
+          setIsEnabled(false);
+          setTimezoneSlots((prev) => prev.map((s) => ({ ...s, enabled: false })));
+          setPerCompanyLimit(0);
+        }
+      } else {
+        fetchInitialBilling();
+      }
+    };
+
+    window.addEventListener("billingStatusUpdated", handleBillingUpdate);
+    window.addEventListener("storage", handleBillingUpdate);
+    return () => {
+      window.removeEventListener("billingStatusUpdated", handleBillingUpdate);
+      window.removeEventListener("storage", handleBillingUpdate);
+    };
+  }, []);
 
   // Toast auto-hide
   useEffect(() => {
@@ -222,413 +428,151 @@ const FullTimeAutoApply = () => {
     }
   }, [toast]);
 
-  // Handle run time selection (max 4)
-  const toggleRunTime = (time) => {
-    if (selectedRunTimes.includes(time)) {
-      setSelectedRunTimes(selectedRunTimes.filter((t) => t !== time));
-    } else {
-      if (selectedRunTimes.length >= 4) {
-        setToast({
-          show: true,
-          message: "You can select up to 4 run times per day. Please deselect one first.",
-          type: "warning",
-        });
-        return;
-      }
-      setSelectedRunTimes([...selectedRunTimes, time]);
-    }
-  };
+  // Toggle Auto Apply (Validated with Billing Status API)
+  const handleToggleAutoApply = async () => {
+    if (isVerifyingBilling) return;
 
-  // Stepper increment/decrement for Shared Daily Cap
-  const handleSharedCapChange = (val) => {
-    const num = parseInt(val, 10);
-    const clamped = isNaN(num) ? 1 : Math.max(1, Math.min(150, num));
-    setDailyTarget(clamped);
-    setDraftDailyCap(clamped);
-
-    try {
-      const saved = localStorage.getItem("fullTimeAutoApplySettings");
-      const parsed = saved ? JSON.parse(saved) : {};
-      parsed.dailyTarget = clamped;
-      localStorage.setItem("fullTimeAutoApplySettings", JSON.stringify(parsed));
-      window.dispatchEvent(new CustomEvent("fullTimeSettingsUpdated", { detail: parsed }));
-    } catch (e) {
-      console.warn("Could not sync shared daily cap:", e);
-    }
-  };
-  const handleTargetChange = handleSharedCapChange;
-
-  // Toggle Auto Apply (Requires Upgraded Plan)
-  const handleToggleAutoApply = () => {
-    if (!isEnabled) {
-      setToast({
-        show: true,
-        message: "Upgrade plan to enable Full Time Auto Apply.",
-        type: "warning",
-        action: {
-          label: "Upgrade Plan",
-          onClick: () => navigate("/subscriptions"),
-        },
-      });
-      return;
-    }
-    setIsEnabled(false);
-  };
-
-  // Trigger Add Lane Flow in the Left Assistant (Matching Image 1)
-  const handleTriggerAddLaneInChat = () => {
-    const currentCustomLanes = lanes.filter((l) => !l.isDefault);
-    if (currentCustomLanes.length >= 3) {
-      setToast({
-        show: true,
-        message: "Maximum of 3 lanes reached (3 of 3 active).",
-        type: "warning",
-      });
+    // 1. First call Billing Status API
+    const isPro = await verifyProPlan();
+    if (isPro === null) {
+      // API call failed, error toast already shown
       return;
     }
 
-    const allOptions = [
-      "Data Engineer NewYORK",
-      "Data Engineer Hybrid",
-      "Data Engineer avoid Microsoft",
-    ];
-
-    const availablePills = allOptions.filter(
-      (opt) =>
-        !currentCustomLanes.some(
-          (l) => l.name.toLowerCase().trim() === opt.toLowerCase().trim()
-        )
-    );
-
-    if (availablePills.length === 0) {
+    // 2. Check whether user has active Pro plan
+    if (isPro) {
+      const nextVal = !isEnabled;
+      setIsEnabled(nextVal);
       setToast({
         show: true,
-        message: "All 3 lanes have already been added (3 of 3 active).",
-        type: "warning",
-      });
-      return;
-    }
-
-    // 1. User message matching Image 1
-    const userMsg = {
-      sender: "user",
-      text: "I want to add another Auto Apply lane for a different kind of role. Ask me what to target, then dry-run it and show me what it would apply to before saving anything.",
-      time: new Date(),
-    };
-
-    // 2. Assistant message matching Image 1
-    const botMsg = {
-      sender: "bot",
-      isLaneSetup: true,
-      thoughtTitle: "Thought process",
-      thoughtStatus: "Reading your Auto Apply setup",
-      text: `This account isn't eligible yet. Auto Apply needs the Power plan, and this account has no active subscription, plus Auto Apply itself is currently off, I can still set up and save a new lane now so it's ready to go once the plan is active, but it won't actually run or apply anything until then.
-
-Also worth noting: configExists is false, meaning you've never saved Auto Apply settings before. The one lane shown is just the system default, not something you chose.
-
-That said, let's get your next lane defined. What different kind of role do you want this new lane to target?`,
-      time: new Date(),
-      quickPills: availablePills,
-    };
-
-    setChatMessages((prev) => [...prev, userMsg, botMsg]);
-    setIsAwaitingLaneRole(true);
-
-    setTimeout(() => {
-      if (chatInputRef.current) {
-        chatInputRef.current.focus();
-      }
-      if (chatScrollRef.current) {
-        chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
-      }
-    }, 100);
-  };
-
-  // Helper to resolve lane details from selection
-  const getLaneDetails = (roleText) => {
-    const text = (roleText || "").trim();
-    const lower = text.toLowerCase();
-
-    if (lower.includes("newyork") || lower.includes("new york")) {
-      return {
-        name: "Data Engineer NewYORK",
-        description: "Excellent and better · New York, NY · Mid-Level & Senior · $130k+",
-      };
-    }
-    if (lower.includes("hybrid")) {
-      return {
-        name: "Data Engineer Hybrid",
-        description: "Excellent and better · Remote & Hybrid · Mid-Level & Senior · $120k+",
-      };
-    }
-    if (lower.includes("microsoft") || lower.includes("avoid")) {
-      return {
-        name: "Data Engineer avoid Microsoft",
-        description: "Excellent and better · Excludes Microsoft · $125k+",
-      };
-    }
-    if (lower.includes("product")) {
-      return {
-        name: "Product Management",
-        description: "Excellent and better · Mid-Level & Senior · $110k+",
-      };
-    }
-    if (lower.includes("remote")) {
-      return {
-        name: text,
-        description: "Excellent and better · Remote only · $115k+",
-      };
-    }
-
-    return {
-      name: text,
-      description: "Excellent and better · Mid-Level & Senior · $110k+",
-    };
-  };
-
-  // Handle user responding to the lane question
-  const handleUserLaneResponse = (roleText) => {
-    if (!roleText || !roleText.trim()) return;
-
-    const details = getLaneDetails(roleText);
-
-    // Prevent duplicate lanes: "should not repate again"
-    const currentCustomLanes = lanes.filter((l) => !l.isDefault);
-    const isDuplicate = currentCustomLanes.some(
-      (l) => l.name.toLowerCase().trim() === details.name.toLowerCase().trim()
-    );
-
-    if (isDuplicate) {
-      setToast({
-        show: true,
-        message: `Lane "${details.name}" is already active.`,
-        type: "warning",
-      });
-      return;
-    }
-
-    if (currentCustomLanes.length >= 3) {
-      setToast({
-        show: true,
-        message: "Maximum of 3 lanes reached (3 of 3 active).",
-        type: "warning",
-      });
-      return;
-    }
-
-    const userMsg = { sender: "user", text: details.name, time: new Date() };
-    setChatMessages((prev) => [...prev, userMsg]);
-    setIsTyping(true);
-
-    setTimeout(() => {
-      const newLane = {
-        id: `lane-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-        name: details.name,
-        description: details.description,
-        active: true,
-        isDefault: false,
-      };
-
-      const updatedLanes = [...lanes, newLane];
-      setLanes(updatedLanes);
-
-      try {
-        const saved = localStorage.getItem("fullTimeAutoApplySettings");
-        const parsed = saved ? JSON.parse(saved) : {};
-        parsed.lanes = updatedLanes;
-        localStorage.setItem("fullTimeAutoApplySettings", JSON.stringify(parsed));
-        window.dispatchEvent(new CustomEvent("fullTimeSettingsUpdated", { detail: parsed }));
-      } catch (e) {
-        console.warn("Could not save lanes to localStorage:", e);
-      }
-
-      setIsAwaitingLaneRole(false);
-
-      const allOptions = [
-        "Data Engineer NewYORK",
-        "Data Engineer Hybrid",
-        "Data Engineer avoid Microsoft",
-      ];
-      const remainingPills = allOptions.filter(
-        (opt) =>
-          !updatedLanes.some(
-            (l) => l.name.toLowerCase().trim() === opt.toLowerCase().trim()
-          )
-      );
-
-      const newCustomCount = updatedLanes.filter((l) => !l.isDefault).length;
-
-      const botMsg = {
-        sender: "bot",
-        text: `Got it! I've configured your new lane for "${details.name}" (${details.description}) and added it to your LANES list on the right (${newCustomCount} of 3 active).
-
-Every lane draws from your shared daily budget of ${dailyTarget} applications per day, best matches first. You can adjust its criteria in Manual settings or delete it anytime. Click "Save Settings" whenever you're ready to persist these changes!`,
-        time: new Date(),
-        quickPills: remainingPills.length > 0 ? remainingPills : undefined,
-      };
-
-      setChatMessages((prev) => [...prev, botMsg]);
-      setIsTyping(false);
-
-      setToast({
-        show: true,
-        message: `Lane "${details.name}" added (${newCustomCount} of 3 active).`,
+        message: nextVal
+          ? "Full Time Auto Apply enabled for Primary Resume."
+          : "Full Time Auto Apply disabled.",
         type: "success",
+        action: null,
       });
-    }, 600);
+    } else {
+      setIsEnabled(false);
+      showProPlanToast();
+    }
   };
 
-  // Remove a custom lane
-  const handleRemoveLane = (id) => {
-    setLanes((prev) => {
-      const updated = prev.filter((l) => l.id !== id);
-      try {
-        const saved = localStorage.getItem("fullTimeAutoApplySettings");
-        const parsed = saved ? JSON.parse(saved) : {};
-        parsed.lanes = updated;
-        localStorage.setItem("fullTimeAutoApplySettings", JSON.stringify(parsed));
-        window.dispatchEvent(new CustomEvent("fullTimeSettingsUpdated", { detail: parsed }));
-      } catch (e) {
-        console.warn("Could not save lanes to localStorage:", e);
-      }
-      return updated;
-    });
-    setToast({
-      show: true,
-      message: "Lane removed.",
-      type: "success",
-    });
+  // Multi-select toggle helper
+  const toggleMultiSelect = (currentList, setList, item) => {
+    if (!isProPlan) {
+      handleRestrictedAction();
+      return;
+    }
+    if (currentList.includes(item)) {
+      setList(currentList.filter((i) => i !== item));
+    } else {
+      setList([...currentList, item]);
+    }
   };
 
-  // Handle suggested question card click
-  const handleSuggestedQuestionClick = (questionText) => {
-    if (isTyping) return; // Prevent duplicate submissions if user clicks repeatedly
-    handleAssistantQuery(questionText);
+  // Toggle enabled state of a timezone slot
+  const toggleTimezoneEnabled = (id) => {
+    if (!isProPlan) {
+      handleRestrictedAction();
+      return;
+    }
+    setOpenDropdown((curr) => (curr === `time-${id}` ? null : curr));
+    setTimezoneSlots((prev) =>
+      prev.map((slot) => {
+        if (slot.id !== id) return slot;
+        return { ...slot, enabled: !slot.enabled };
+      })
+    );
   };
 
-  // General assistant query simulation
-  const handleAssistantQuery = (queryText) => {
-    if (!queryText.trim()) return;
+  // Change time of a timezone slot
+  const changeTimezoneTime = (id, newTime) => {
+    if (!isProPlan) {
+      handleRestrictedAction();
+      return;
+    }
+    setTimezoneSlots((prev) =>
+      prev.map((slot) => {
+        if (slot.id !== id) return slot;
+        return { ...slot, time: newTime };
+      })
+    );
+    setOpenDropdown(null);
+  };
 
-    if (isAwaitingLaneRole) {
-      handleUserLaneResponse(queryText);
+  // Save Settings handler (Protected by Pro Validation)
+  const handleSaveSettings = async () => {
+    // 1. Call Billing Status API and check latest Pro status
+    const isPro = await verifyProPlan();
+    if (isPro === null) {
+      // Verification failed, error toast already shown
       return;
     }
 
-    const userMsg = { sender: "user", text: queryText, time: new Date() };
-    setChatMessages((prev) => [...prev, userMsg]);
-    setIsTyping(true);
-
-    setTimeout(() => {
-      let responseText = "";
-      const lower = queryText.toLowerCase();
-
-      if (lower.includes("fit me") || (lower.includes("what jobs") && lower.includes("fit"))) {
-        responseText =
-          "Based on your profile and uploaded resume, your best matches are Full Stack Software Engineer, Frontend Developer, and React / Node.js roles. ta currently identifies 24 active full-time positions matching your criteria with an 85%+ match score in your selected locations.";
-      } else if (lower.includes("how does auto apply work") || (lower.includes("auto apply") && lower.includes("work"))) {
-        responseText =
-          "Auto Apply continuously monitors newly posted job openings that fit your resume criteria and lanes. Up to 4 times a day during your configured run hours, it automatically submits tailored applications drawing from your daily cap, prioritizing your strongest matches first.";
-      } else if (lower.includes("resume ready") || lower.includes("is my resume")) {
-        responseText =
-          "Yes! Your primary resume 'Default (default)' is active, formatted for standard ATS systems, and verified. 122 matches were found this week. You can adjust ATS optimization in Manual settings to choose between 'Honest' and 'Aggressive' tailoring.";
-      } else if (lower.includes("lane")) {
-        responseText = `You currently have ${lanes.length} configured lane(s): ${lanes.map((l) => l.name).join(", ")}. Another lane changes what gets considered, not how much gets applied to. Click "Add a lane for another kind of role" to set up more.`;
-      } else if (lower.includes("remote")) {
-        responseText =
-          "I've prioritized remote full-time positions. Currently tracking 18 remote openings aligned with your experience and salary expectations.";
-      } else if (lower.includes("developer") || lower.includes("engineer")) {
-        responseText =
-          "Targeting full-time Software Developer opportunities. Resume highlights and tech stack matches are active for upcoming scheduled runs.";
-      } else if (lower.includes("target") || lower.includes("cap") || lower.includes("applications")) {
-        responseText = `Your current daily target is ${dailyTarget} applications. With your shared daily cap, every lane draws from this budget, best matches first.`;
-      } else if (lower.includes("settings") || lower.includes("run time") || lower.includes("schedule")) {
-        responseText = `Configured run times: ${selectedRunTimes.join(", ")}. Resume optimization is ${resumeOptimizationMode}. You can fine-tune these anytime in Manual settings.`;
-      } else {
-        responseText =
-          "I've noted that preference. I will use your resume and settings to match the most suitable full-time positions and prepare them for submission during your scheduled run windows.";
-      }
-
-      const botMsg = { sender: "bot", text: responseText, time: new Date() };
-      setChatMessages((prev) => [...prev, botMsg]);
-      setIsTyping(false);
-    }, 550);
-  };
-
-  const handleSendMessage = (e) => {
-    e?.preventDefault();
-    if (!inputMessage.trim()) return;
-    const text = inputMessage;
-    setInputMessage("");
-    if (isAwaitingLaneRole) {
-      handleUserLaneResponse(text);
-    } else {
-      handleAssistantQuery(text);
+    // 2. If proPlan is false, block save, show Pro toast and stay on current page
+    if (!isPro) {
+      showProPlanToast();
+      return;
     }
-  };
 
-  // Copy message text
-  const handleCopyMessage = (text, idx) => {
-    navigator.clipboard?.writeText(text);
-    setCopiedIndex(idx);
-    setTimeout(() => setCopiedIndex(null), 2000);
-  };
-
-  // Save Settings handler
-  const handleSaveSettings = async (customCap = null) => {
-    if (isEnabled && selectedRunTimes.length === 0) {
+    // 3. Pro validation passed - validate configuration
+    if (isEnabled && !timezoneSlots.some((s) => s.enabled)) {
       setToast({
         show: true,
-        message: "Please select at least 1 run time when Auto Apply is enabled.",
+        message: "Please select at least one timezone when Auto Apply is enabled.",
         type: "error",
+        action: null,
       });
       return;
     }
-
-    const targetCap =
-      customCap !== null
-        ? customCap
-        : typeof draftDailyCap === "number" && !isNaN(draftDailyCap)
-          ? draftDailyCap
-          : dailyTarget;
-
-    setDailyTarget(targetCap);
 
     setIsSaving(true);
+
     const settingsPayload = {
       isEnabled,
-      dailyTarget: targetCap,
-      selectedRunTimes,
-      lanes,
+      isProPlan: true,
+      primaryResume,
+      workplaceTypes,
+      experienceLevels,
+      jobTypes,
+      minSalary,
+      keywords: keywords.trim(),
+      standingInstructions: standingInstructions.trim(),
+      dailyTarget,
+      timezoneSlots,
+      selectedRunTimes: timezoneSlots
+        .filter((s) => s.enabled)
+        .map((s) => `${s.code} (${s.name}) at ${s.time}`),
       perCompanyLimit,
       pauseInterviewing,
-      selectedResumeProfile,
-      standingInstructions,
-      reviewBeforeSubmit,
       matchQuality,
       resumeOptimizationMode,
       timezone: "GMT+5:30",
       updatedAt: new Date().toISOString(),
     };
 
-    // Save to local storage for immediate persistence
     try {
-      localStorage.setItem("fullTimeAutoApplySettings", JSON.stringify(settingsPayload));
-      window.dispatchEvent(new CustomEvent("fullTimeSettingsUpdated", { detail: settingsPayload }));
+      localStorage.setItem(
+        "fullTimeAutoApplySettings",
+        JSON.stringify(settingsPayload)
+      );
+      window.dispatchEvent(
+        new CustomEvent("fullTimeSettingsUpdated", { detail: settingsPayload })
+      );
     } catch (e) {
       console.warn("Could not save to localStorage:", e);
     }
 
-    // Try updating profile settings via API
     try {
       await updateProfileSettings({
-        resumeOptimization: resumeOptimizationMode === "Off" ? "off" : resumeOptimizationMode.toLowerCase(),
+        resumeOptimization:
+          resumeOptimizationMode === "Off"
+            ? "off"
+            : resumeOptimizationMode.toLowerCase(),
         autoApply: isEnabled,
-        fullTimeTarget: targetCap,
+        fullTimeTarget: dailyTarget,
       });
-    } catch (err) {
-      console.log("Profile backend synced or offline, settings saved locally.");
-    }
+    } catch (err) { }
 
     setTimeout(() => {
       setIsSaving(false);
@@ -636,752 +580,716 @@ Every lane draws from your shared daily budget of ${dailyTarget} applications pe
         show: true,
         message: "Full Time Auto Apply settings saved successfully!",
         type: "success",
+        action: null,
       });
-    }, 400);
+    }, 350);
   };
 
-  const capPercentage = Math.min(100, Math.round((usedCount / dailyTarget) * 100));
-
-  // Formatted run time array and string display: matches Image 2
-  const runTimesList =
-    selectedRunTimes.length === 4 &&
-      selectedRunTimes.includes("2 AM") &&
-      selectedRunTimes.includes("8 AM") &&
-      selectedRunTimes.includes("2 PM") &&
-      selectedRunTimes.includes("8 PM")
-      ? ["2:30 AM", "8:30 AM", "2:30 PM", "8:30 PM"]
-      : selectedRunTimes.length > 0
-        ? selectedRunTimes
-        : ["2:30 AM", "8:30 AM", "2:30 PM", "8:30 PM"];
-
-  const runTimesFormatted =
-    runTimesList.length > 2
-      ? `${runTimesList.slice(0, -1).join(", ")} and ${runTimesList[runTimesList.length - 1]}`
-      : runTimesList.join(" and ");
-
-  const customLanes = lanes.filter((l) => !l.isDefault);
-  const activeLanesCount = customLanes.length;
+  const selectedCount = timezoneSlots.filter((s) => s.enabled).length;
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#F8FAFC]">
       {/* Left Sidebar */}
       <Sidebar />
 
-      {/* Main Content Area (Scrollable) */}
-      <div className="flex min-w-0 flex-1 flex-col h-screen overflow-y-auto bg-[#F8FAFC] no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+      {/* Main Content Area */}
+      <div className="flex min-w-0 flex-1 flex-col h-screen overflow-y-auto bg-[#F8FAFC]">
         {/* Top Header */}
         <Header />
 
-        {/* Main Content */}
-        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-7 flex flex-col gap-6 w-full bg-[#F8FAFC]">
-          {/* Page Heading & Right-Aligned Notification Row */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 min-h-[46px]">
-            <div className="flex flex-col gap-1">
-              <h1 className="text-[22px] sm:text-[24px] font-bold text-slate-900 tracking-tight">
-                Full Time Auto Apply
-              </h1>
-              <p className="text-[13.5px] sm:text-[14px] text-slate-500">
-                Let our AI find and apply to the best full time jobs that match your resume and preferences.
+        {/* Global Transparent Backdrop for closing open dropdowns */}
+        {openDropdown && (
+          <div
+            className="fixed inset-0 z-20"
+            onClick={() => setOpenDropdown(null)}
+          />
+        )}
+
+        {/* Floating Popup Toast Notification */}
+        {toast.show && (
+          <div className="fixed top-20 right-6 sm:right-8 z-[100] animate-in fade-in slide-in-from-top-3 duration-300 pointer-events-auto">
+            <div
+              className={`flex items-center gap-3 px-4 py-3 rounded-2xl shadow-[0_12px_40px_-8px_rgba(0,0,0,0.18)] border text-sm font-medium transition-all ${
+                toast.type === "success"
+                  ? "bg-white text-slate-800 border-indigo-200"
+                  : toast.type === "warning"
+                    ? "bg-white text-slate-800 border-amber-300 shadow-amber-500/10"
+                    : "bg-white text-slate-800 border-rose-200 shadow-rose-500/10"
+              }`}
+            >
+              {toast.type === "success" ? (
+                <CheckCircle2 className="w-5 h-5 text-[#4F46E5] shrink-0" />
+              ) : toast.type === "warning" ? (
+                <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
+              ) : (
+                <AlertCircle className="w-5 h-5 text-rose-500 shrink-0" />
+              )}
+              <span className="font-medium text-[13.5px] text-slate-800">{toast.message}</span>
+              {toast.action && (
+                <button
+                  type="button"
+                  onClick={toast.action.onClick}
+                  className="ml-1.5 px-3 py-1.5 rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-semibold cursor-pointer transition-colors shadow-2xs shrink-0"
+                >
+                  {toast.action.label}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setToast((prev) => ({ ...prev, show: false }))}
+                className="ml-1 text-slate-400 hover:text-slate-600 p-1 rounded-md hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
+                title="Dismiss"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Main Content Container */}
+        <main className="flex-1 px-4 sm:px-6 lg:px-10 py-6 sm:py-8 max-w-5xl w-full mx-auto flex flex-col gap-6">
+          {/* Page Heading & Subtitle */}
+          <div className="flex flex-col gap-1 min-h-[46px]">
+            <h1 className="text-[24px] sm:text-[26px] font-bold text-slate-900 tracking-tight">
+              Full Time Auto Select Auto Apply Settings
+            </h1>
+            <p className="text-[13.5px] sm:text-[14px] text-slate-500">
+              Automatically find and apply to the best full-time jobs that match your resume and preferences.
+            </p>
+          </div>
+
+          {/* Enable Auto Apply Toggle Section */}
+          <div className="relative flex items-center justify-between gap-4 rounded-2xl border border-[#6A5CFF] border-l-[6px] bg-[#EFEEFF] p-4 sm:p-5 shadow-2xs">
+            <div className="min-w-0 pr-2">
+              <h3 className="text-[14.5px] sm:text-[15px] font-bold text-[#1A0EA5] tracking-tight">
+                Enable Full Time Auto Apply For Primary Resume
+              </h3>
+              <p className="mt-1 text-[12.5px] sm:text-[13px] text-[#1A0EA5]/90 leading-relaxed">
+                Turn on auto-apply to apply automatically using your saved settings.
               </p>
             </div>
 
-            {/* Toast Notification (Aligned on right side of title line) */}
-            {toast.show && (
-              <div
-                className={`flex items-center gap-3 px-4 py-2 sm:py-2.5 rounded-xl shadow-xs border text-sm font-medium transition-all transform animate-in fade-in slide-in-from-right-2 duration-200 shrink-0 self-start sm:self-center ${toast.type === "success"
-                  ? "bg-white text-indigo-700 border-indigo-200"
-                  : toast.type === "warning"
-                    ? "bg-white text-amber-900 border-amber-300 shadow-amber-500/5"
-                    : "bg-white text-rose-700 border-rose-200"
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isEnabled}
+              disabled={isVerifyingBilling}
+              onClick={handleToggleAutoApply}
+              className={`relative h-6 w-11 shrink-0 rounded-full p-0.5 transition-colors duration-200 ${isVerifyingBilling ? "opacity-60 cursor-wait" : "cursor-pointer"
+                } ${isEnabled ? "bg-[#6A5CFF]" : "bg-slate-300"}`}
+              title={isEnabled ? "Disable Full Time Auto Apply" : "Enable Full Time Auto Apply"}
+            >
+              <span
+                className={`block h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${isEnabled ? "translate-x-5" : "translate-x-0"
                   }`}
-              >
-                {toast.type === "success" ? (
-                  <CheckCircle2 className="w-5 h-5 text-[#4F46E5] shrink-0" />
-                ) : toast.type === "warning" ? (
-                  <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
-                ) : (
-                  <AlertCircle className="w-5 h-5 text-rose-500 shrink-0" />
-                )}
-                <span className="font-medium text-[13.5px]">{toast.message}</span>
-                {toast.action && (
-                  <button
-                    type="button"
-                    onClick={toast.action.onClick}
-                    className="ml-1 px-3 py-1.5 rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-semibold cursor-pointer transition-colors shadow-2xs shrink-0"
-                  >
-                    {toast.action.label}
-                  </button>
-                )}
-              </div>
-            )}
+              />
+            </button>
           </div>
 
-          {/* 2-Column Responsive Layout */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            {/* ================= LEFT SECTION: Auto Apply Assistant ================= */}
-            <div className="lg:col-span-7 bg-white rounded-[20px] border border-[#E2E8F0] p-5 sm:p-7 mt-4 shadow-[0_1px_3px_rgba(15,23,42,0.03)] flex flex-col justify-between min-h-[560px]">
-              <div className="flex flex-col flex-1">
-                {/* Auto Apply Assistant Header (Image 2) */}
-                <div className="flex items-start gap-3.5 pb-4 border-b border-slate-100 mb-2">
-                  <div className="w-10 h-10 rounded-xl bg-[#EEF2FF] border border-[#E0E7FF] flex items-center justify-center shrink-0 mt-0.5">
-                    <img
-                      src={fulltimeone}
-                      alt="Auto Apply Assistant"
-                      className="w-5 h-5 object-contain"
-                    />
+          {/* ONE SINGLE CONTINUOUS WHITE CONTAINER FOR ALL SETTINGS */}
+          <div className="bg-white rounded-2xl border border-[#E2E8F0] p-6 sm:p-8 shadow-2xs flex flex-col gap-6">
+
+            {/* 1. Primary Resume */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-1">
+              <div className="flex items-center gap-3.5">
+                <div className="w-11 h-11 rounded-2xl bg-[#F0F2FF] flex items-center justify-center text-[#5551FF] shrink-0">
+                  <FileText className="w-5 h-5 stroke-[2]" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-[16px] text-slate-900 tracking-tight">
+                    Resume
+                  </h4>
+                  <p className="text-[12.5px] text-slate-500 mt-0.5">
+                    Selected primary resume used for all full-time automated applications.
+                  </p>
+                </div>
+              </div>
+
+              <div
+                onClick={() => {
+                  if (!isProPlan) {
+                    handleRestrictedAction();
+                  }
+                }}
+                className="w-full sm:w-[380px] rounded-2xl bg-[#F0F2FF]/70 border border-[#E0E4FC] px-4 py-2.5 flex items-center gap-2.5 text-[14px] font-medium text-slate-800 shadow-2xs cursor-pointer select-none"
+              >
+                <FileText className="w-4 h-4 text-[#5551FF] shrink-0" />
+                <span className="truncate font-semibold">{primaryResume}</span>
+              </div>
+            </div>
+
+            <div className="h-px w-full bg-slate-100" />
+
+            {/* 2. Workplace Type */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-1">
+              <div className="flex items-center gap-3.5">
+                <div className="w-11 h-11 rounded-2xl bg-[#F0F2FF] flex items-center justify-center text-[#5551FF] shrink-0">
+                  <MapPin className="w-5 h-5 stroke-[2]" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-[16px] text-slate-900 tracking-tight">
+                    Workplace Type
+                  </h4>
+                  <p className="text-[12.5px] text-slate-500 mt-0.5">
+                    Workplace arrangements you are willing to accept for your applications.
+                  </p>
+                </div>
+              </div>
+
+              <div className="relative w-full sm:w-[380px]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isProPlan) {
+                      handleRestrictedAction();
+                      return;
+                    }
+                    setOpenDropdown(openDropdown === "workplace" ? null : "workplace");
+                  }}
+                  className="w-full rounded-2xl bg-white border border-slate-200 px-4 py-2.5 flex items-center justify-between text-[14px] text-slate-800 font-medium shadow-2xs hover:border-slate-300 transition-colors cursor-pointer select-none"
+                >
+                  <span
+                    className={
+                      workplaceTypes.length > 0
+                        ? "truncate text-slate-800 font-medium"
+                        : "text-slate-400 font-normal"
+                    }
+                  >
+                    {workplaceTypes.length > 0
+                      ? workplaceTypes.join(", ")
+                      : "Select option"}
+                  </span>
+                  <ChevronDown
+                    className={`w-4 h-4 text-slate-500 shrink-0 transition-transform duration-150 ${openDropdown === "workplace" ? "rotate-180" : ""
+                      }`}
+                  />
+                </button>
+
+                {isProPlan && openDropdown === "workplace" && (
+                  <div className="absolute right-0 top-full mt-2 w-full bg-white rounded-2xl border border-slate-200 shadow-xl p-2 z-30 flex flex-col gap-1 animate-in fade-in zoom-in-95 duration-100">
+                    {WORKPLACE_OPTIONS.map((item) => {
+                      const isSelected = workplaceTypes.includes(item);
+                      return (
+                        <button
+                          key={item}
+                          type="button"
+                          onClick={() =>
+                            toggleMultiSelect(workplaceTypes, setWorkplaceTypes, item)
+                          }
+                          className={`w-full px-3 py-2 rounded-xl text-[13.5px] font-medium flex items-center justify-between transition-colors cursor-pointer ${isSelected
+                            ? "bg-[#F0F2FF] text-[#5551FF] font-semibold"
+                            : "hover:bg-slate-50 text-slate-700"
+                            }`}
+                        >
+                          <span>{item}</span>
+                          <div
+                            className={`w-4.5 h-4.5 rounded-md flex items-center justify-center transition-all ${isSelected
+                              ? "bg-[#5551FF] text-white"
+                              : "border border-slate-300"
+                              }`}
+                          >
+                            {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
-                  <div className="flex flex-col">
-                    <h2 className="text-[17px] font-bold text-slate-900 leading-snug">
-                      Auto Apply Assistant
-                    </h2>
-                    <p className="text-[13px] text-slate-500 mt-0.5 leading-relaxed">
-                      Tell me what kind of jobs you want to apply for. I'll use your resume and settings to find the best matches and apply automatically.
+                )}
+              </div>
+            </div>
+
+            <div className="h-px w-full bg-slate-100" />
+
+            {/* 3. Experience Level */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-1">
+              <div className="flex items-center gap-3.5">
+                <div className="w-11 h-11 rounded-2xl bg-[#F0F2FF] flex items-center justify-center text-[#5551FF] shrink-0">
+                  <Briefcase className="w-5 h-5 stroke-[2]" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-[16px] text-slate-900 tracking-tight">
+                    Experience Level
+                  </h4>
+                  <p className="text-[12.5px] text-slate-500 mt-0.5">
+                    Seniority bands and required years of professional experience.
+                  </p>
+                </div>
+              </div>
+
+              <div className="relative w-full sm:w-[380px]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isProPlan) {
+                      handleRestrictedAction();
+                      return;
+                    }
+                    setOpenDropdown(openDropdown === "experience" ? null : "experience");
+                  }}
+                  className="w-full rounded-2xl bg-white border border-slate-200 px-4 py-2.5 flex items-center justify-between text-[14px] text-slate-800 font-medium shadow-2xs hover:border-slate-300 transition-colors cursor-pointer select-none"
+                >
+                  <span
+                    className={
+                      experienceLevels.length > 0
+                        ? "truncate text-slate-800 font-medium"
+                        : "text-slate-400 font-normal"
+                    }
+                  >
+                    {experienceLevels.length > 0
+                      ? experienceLevels.join(", ")
+                      : "Select option"}
+                  </span>
+                  <ChevronDown
+                    className={`w-4 h-4 text-slate-500 shrink-0 transition-transform duration-150 ${openDropdown === "experience" ? "rotate-180" : ""
+                      }`}
+                  />
+                </button>
+
+                {isProPlan && openDropdown === "experience" && (
+                  <div className="absolute right-0 top-full mt-2 w-full bg-white rounded-2xl border border-slate-200 shadow-xl p-2 z-30 flex flex-col gap-1 max-h-64 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
+                    {EXPERIENCE_OPTIONS.map((item) => {
+                      const isSelected = experienceLevels.includes(item);
+                      return (
+                        <button
+                          key={item}
+                          type="button"
+                          onClick={() =>
+                            toggleMultiSelect(experienceLevels, setExperienceLevels, item)
+                          }
+                          className={`w-full px-3 py-2 rounded-xl text-[13.5px] font-medium flex items-center justify-between transition-colors cursor-pointer ${isSelected
+                            ? "bg-[#F0F2FF] text-[#5551FF] font-semibold"
+                            : "hover:bg-slate-50 text-slate-700"
+                            }`}
+                        >
+                          <span>{item}</span>
+                          <div
+                            className={`w-4.5 h-4.5 rounded-md flex items-center justify-center transition-all ${isSelected
+                              ? "bg-[#5551FF] text-white"
+                              : "border border-slate-300"
+                              }`}
+                          >
+                            {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="h-px w-full bg-slate-100" />
+
+            {/* 4. Job Type */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-1">
+              <div className="flex items-center gap-3.5">
+                <div className="w-11 h-11 rounded-2xl bg-[#F0F2FF] flex items-center justify-center text-[#5551FF] shrink-0">
+                  <Layers className="w-5 h-5 stroke-[2]" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-[16px] text-slate-900 tracking-tight">
+                    Job Type
+                  </h4>
+                  <p className="text-[12.5px] text-slate-500 mt-0.5">
+                    Full-time employment structure for targeted positions.
+                  </p>
+                </div>
+              </div>
+
+              <div
+                onClick={() => {
+                  if (!isProPlan) {
+                    handleRestrictedAction();
+                  }
+                }}
+                className="w-full sm:w-[380px] rounded-2xl bg-white border border-slate-200 px-4 py-2.5 flex items-center text-[14px] text-slate-800 font-medium shadow-2xs cursor-pointer select-none"
+              >
+                <span>Full-time</span>
+              </div>
+            </div>
+
+            <div className="h-px w-full bg-slate-100" />
+
+            {/* 5. Minimum Base Salary */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-1">
+              <div className="flex items-center gap-3.5">
+                <div className="w-11 h-11 rounded-2xl bg-[#F0F2FF] flex items-center justify-center text-[#5551FF] shrink-0">
+                  <Coins className="w-5 h-5 stroke-[2]" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-[16px] text-slate-900 tracking-tight">
+                    Minimum Base Salary
+                  </h4>
+                  <p className="text-[12.5px] text-slate-500 mt-0.5">
+                    Filter out job postings below your minimum target compensation.
+                  </p>
+                </div>
+              </div>
+
+              <div className="relative w-full sm:w-[380px]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isProPlan) {
+                      handleRestrictedAction();
+                      return;
+                    }
+                    setOpenDropdown(openDropdown === "salary" ? null : "salary");
+                  }}
+                  className="w-full rounded-2xl bg-white border border-slate-200 px-4 py-2.5 flex items-center justify-between text-[14px] text-slate-800 font-medium shadow-2xs hover:border-slate-300 transition-colors cursor-pointer select-none"
+                >
+                  <span
+                    className={
+                      minSalary
+                        ? "text-slate-800 font-medium"
+                        : "text-slate-400 font-normal"
+                    }
+                  >
+                    {minSalary || "Select option"}
+                  </span>
+                  <ChevronDown
+                    className={`w-4 h-4 text-slate-500 shrink-0 transition-transform duration-150 ${openDropdown === "salary" ? "rotate-180" : ""
+                      }`}
+                  />
+                </button>
+
+                {isProPlan && openDropdown === "salary" && (
+                  <div className="absolute right-0 top-full mt-2 w-full bg-white rounded-2xl border border-slate-200 shadow-xl p-2 z-30 flex flex-col gap-1 max-h-60 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
+                    {SALARY_OPTIONS.map((item) => {
+                      const isSelected = minSalary === item;
+                      return (
+                        <button
+                          key={item}
+                          type="button"
+                          onClick={() => {
+                            setMinSalary(item);
+                            setOpenDropdown(null);
+                          }}
+                          className={`w-full px-3 py-2 rounded-xl text-[13.5px] font-medium flex items-center justify-between transition-colors cursor-pointer ${isSelected
+                            ? "bg-[#F0F2FF] text-[#5551FF] font-semibold"
+                            : "hover:bg-slate-50 text-slate-700"
+                            }`}
+                        >
+                          <span>{item}</span>
+                          {isSelected && <Check className="w-4 h-4 stroke-[2.5]" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="h-px w-full bg-slate-100" />
+
+            {/* 6. Run Times Section */}
+            <div className="flex flex-col gap-4 py-1">
+              {/* Header */}
+              <div
+                className="flex items-center justify-between gap-4 cursor-pointer select-none"
+                onClick={() => {
+                  if (!isProPlan) {
+                    handleRestrictedAction();
+                  }
+                }}
+              >
+                <div className="flex items-center gap-3.5">
+                  <div className="w-11 h-11 rounded-2xl bg-[#F0F2FF] flex items-center justify-center text-[#5551FF] shrink-0">
+                    <Clock className="w-5 h-5 stroke-[2]" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-[16px] text-slate-900 tracking-tight">
+                      Auto Select Auto Apply Run Times
+                    </h4>
+                    <p className="text-[12.5px] text-slate-500 mt-0.5">
+                      Configure your auto-apply scheduling windows and applicable time zones.
                     </p>
                   </div>
                 </div>
 
-                {/* Conversation Thread or Clean Empty State */}
-                {chatMessages.length > 0 ? (
-                  <div className="mt-2 mb-4 flex flex-col flex-1 gap-3">
-                    <div className="flex items-center justify-between px-1">
-                      <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                        Conversation
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setChatMessages([]);
-                          setIsAwaitingLaneRole(false);
-                        }}
-                        className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer font-medium"
-                      >
-                        <RotateCcw className="w-3 h-3" />
-                        Clear conversation
-                      </button>
-                    </div>
-
-                    <div
-                      ref={chatScrollRef}
-                      className="flex-1 min-h-[300px] max-h-[460px] overflow-y-auto pr-1 flex flex-col gap-4 no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
-                    >
-                      {chatMessages.map((msg, idx) => {
-                        const isUser = msg.sender === "user";
-                        return (
-                          <div
-                            key={idx}
-                            className={`flex flex-col gap-1.5 ${isUser ? "items-end" : "items-start"
-                              }`}
-                          >
-                            {isUser ? (
-                              <div className="bg-[#4F46E5] text-white rounded-2xl p-4 sm:p-5 text-[13.5px] leading-relaxed max-w-full shadow-xs">
-                                {msg.text}
-                              </div>
-                            ) : (
-                              <div className="w-full flex items-start gap-3 pt-1">
-                                <div className="w-7 h-7 rounded-full bg-[#4F46E5] text-white flex items-center justify-center font-bold text-xs shrink-0 mt-0.5 shadow-2xs">
-                                  A
-                                </div>
-                                <div className="flex-1 flex flex-col gap-2">
-                                  {msg.isLaneSetup && (
-                                    <div className="flex flex-col gap-1 text-[12.5px] text-slate-500">
-                                      <div className="flex items-center gap-1.5 cursor-pointer select-none text-slate-400 hover:text-slate-600">
-                                        <span className="font-medium">Thought process</span>
-                                        <ChevronDown className="w-3 h-3" />
-                                      </div>
-                                      <div className="flex items-center gap-1.5 text-slate-600 font-medium">
-                                        <Check className="w-3.5 h-3.5 text-[#4F46E5] stroke-[2.5]" />
-                                        <span>Reading your Auto Apply setup</span>
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  <div className="text-[13px] sm:text-[13.5px] text-slate-800 leading-relaxed whitespace-pre-line">
-                                    {msg.text.split("configExists").map((part, i, arr) => (
-                                      <React.Fragment key={i}>
-                                        {part}
-                                        {i < arr.length - 1 && (
-                                          <code className="bg-slate-100 text-slate-800 font-mono text-xs px-1.5 py-0.5 rounded border border-slate-200">
-                                            configExists
-                                          </code>
-                                        )}
-                                      </React.Fragment>
-                                    ))}
-                                  </div>
-
-                                  {msg.quickPills && (
-                                    <div className="flex flex-wrap items-center gap-2 pt-1.5">
-                                      {msg.quickPills.map((pill, pIdx) => (
-                                        <button
-                                          key={pIdx}
-                                          type="button"
-                                          onClick={() => handleUserLaneResponse(pill)}
-                                          className="text-xs font-medium px-3 py-1.5 rounded-full border border-indigo-200 bg-indigo-50/60 text-indigo-700 hover:bg-[#4F46E5] hover:text-white transition-all cursor-pointer shadow-2xs"
-                                        >
-                                          + {pill}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  )}
-
-                                  <div className="flex items-center gap-2 text-slate-400 pt-1">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleCopyMessage(msg.text, idx)}
-                                      className="p-1 hover:text-slate-700 transition-colors cursor-pointer"
-                                      title="Copy message"
-                                    >
-                                      {copiedIndex === idx ? (
-                                        <Check className="w-3.5 h-3.5 text-[#4F46E5]" />
-                                      ) : (
-                                        <Copy className="w-3.5 h-3.5" />
-                                      )}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleAssistantQuery("Tell me more about lane setup")}
-                                      className="p-1 hover:text-slate-700 transition-colors cursor-pointer"
-                                      title="Retry / Regenerate"
-                                    >
-                                      <RotateCcw className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="p-1 hover:text-slate-700 transition-colors cursor-pointer"
-                                      title="More"
-                                    >
-                                      <MoreHorizontal className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-
-                      {isTyping && (
-                        <div className="flex items-center gap-2 text-xs text-slate-400 pl-8 italic">
-                          <Sparkles className="w-3.5 h-3.5 animate-spin text-indigo-500" />
-                          Assistant is thinking...
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex-1 flex flex-col items-center justify-center py-6 sm:py-8 pt-12 w-full">
-                    <div className="flex flex-col gap-3 w-full max-w-md sm:max-w-lg">
-                      {SUGGESTED_QUESTIONS.map((item) => {
-                        const Icon = item.icon;
-                        return (
-                          <button
-                            key={item.id}
-                            type="button"
-                            disabled={isTyping}
-                            onClick={() => handleSuggestedQuestionClick(item.text)}
-                            className="w-full p-3.5 sm:p-4 rounded-2xl border border-slate-200 hover:border-[#4F46E5] bg-white hover:bg-[#EEF2FF]/40 text-left transition-all duration-200 group cursor-pointer shadow-2xs hover:shadow-xs flex items-center gap-3.5 disabled:opacity-60 disabled:cursor-not-allowed"
-                          >
-                            <div className="w-9 h-9 rounded-xl bg-[#EEF2FF] border border-[#E0E7FF] flex items-center justify-center text-[#4F46E5] group-hover:bg-[#4F46E5] group-hover:text-white transition-colors shrink-0 shadow-2xs">
-                              <Icon className="w-4.5 h-4.5" />
-                            </div>
-                            <span className="text-[13.5px] sm:text-[14px] font-semibold text-slate-800 group-hover:text-[#4F46E5] transition-colors leading-snug">
-                              {item.text}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
+                <span
+                  className={`text-[12.5px] font-bold px-3 py-1 rounded-full shrink-0 transition-colors ${
+                    selectedCount > 0
+                      ? "bg-[#EEF2FF] text-[#5551FF]"
+                      : "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  {selectedCount}/4 selected
+                </span>
               </div>
 
-              {/* Bottom Chat Input */}
-              <div className="pt-5 mt-4 border-t border-slate-100">
-                <form
-                  onSubmit={handleSendMessage}
-                  className="rounded-xl border border-[#E2E8F0] bg-white px-4 py-2.5 flex items-center gap-3 focus-within:border-[#6366F1] focus-within:ring-2 focus-within:ring-[#EEF2FF] transition-all shadow-2xs"
-                >
-                  <input
-                    ref={chatInputRef}
-                    type="text"
-                    value={inputMessage}
-                    onChange={(e) => setInputMessage(e.target.value)}
-                    placeholder="Ask about your Auto Apply setup..."
-                    className="flex-1 bg-transparent text-[13.5px] text-slate-800 placeholder:text-slate-400 focus:outline-none"
-                  />
-                  <button
-                    type="submit"
-                    disabled={!inputMessage.trim()}
-                    className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${inputMessage.trim()
-                      ? "bg-[#EEF2FF] text-[#4F46E5] hover:bg-[#4F46E5] hover:text-white cursor-pointer"
-                      : "text-slate-300 cursor-not-allowed"
-                      }`}
-                    title="Send message"
-                  >
-                    <Send className="w-4 h-4" />
-                  </button>
-                </form>
+              {/* 4 Timezone Cards Stacked Vertically */}
+              <div className="flex flex-col gap-3 pt-1">
+                {timezoneSlots.map((slot) => {
+                  const isTimeDropdownOpen = openDropdown === `time-${slot.id}`;
+
+                  return (
+                    <div
+                      key={slot.id}
+                      onClick={() => {
+                        if (!isProPlan) {
+                          handleRestrictedAction();
+                          return;
+                        }
+                        toggleTimezoneEnabled(slot.id);
+                      }}
+                      className={`rounded-2xl border transition-all px-4 sm:px-5 py-3 sm:py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 cursor-pointer ${slot.enabled
+                          ? "bg-white border-[#E2E8F0] shadow-2xs hover:border-slate-300"
+                          : "bg-slate-50/60 border-slate-200/60 hover:border-slate-300"
+                        }`}
+                    >
+                      {/* Left: Checkbox + Vertical line + Code + Full name */}
+                      <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!isProPlan) {
+                              handleRestrictedAction();
+                              return;
+                            }
+                            toggleTimezoneEnabled(slot.id);
+                          }}
+                          className={`w-5 h-5 rounded-md flex items-center justify-center transition-all shrink-0 cursor-pointer ${slot.enabled
+                              ? "bg-[#5551FF] text-white shadow-2xs"
+                              : "bg-white border-2 border-slate-300"
+                            }`}
+                          title={slot.enabled ? "Disable slot" : "Enable slot"}
+                        >
+                          {slot.enabled && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                        </button>
+
+                        <div className="h-5 w-px bg-slate-200 mx-1.5 sm:mx-2 shrink-0" />
+
+                        <span
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!isProPlan) {
+                              handleRestrictedAction();
+                              return;
+                            }
+                            toggleTimezoneEnabled(slot.id);
+                          }}
+                          className={`font-bold text-[15px] sm:text-[16px] w-12 shrink-0 select-none cursor-pointer transition-colors ${slot.enabled ? "text-slate-900" : "text-slate-400"
+                            }`}
+                        >
+                          {slot.code}
+                        </span>
+
+                        <span
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!isProPlan) {
+                              handleRestrictedAction();
+                              return;
+                            }
+                            toggleTimezoneEnabled(slot.id);
+                          }}
+                          className={`text-[13px] sm:text-[14px] font-normal truncate select-none cursor-pointer transition-colors ${slot.enabled ? "text-slate-500" : "text-slate-400"
+                            }`}
+                        >
+                          {slot.name}
+                        </span>
+                      </div>
+
+                      {/* Right: "Run at" + Time Input Box (empty when unticked) */}
+                      <div className="flex items-center gap-3 sm:gap-4 shrink-0 pl-10 sm:pl-0">
+                        <span
+                          className={`text-[13px] sm:text-[13.5px] font-medium shrink-0 transition-colors ${slot.enabled ? "text-slate-500" : "text-slate-400"
+                            }`}
+                        >
+                          Run at
+                        </span>
+
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (!isProPlan) {
+                                handleRestrictedAction();
+                                return;
+                              }
+                              if (!slot.enabled) {
+                                setTimezoneSlots((prev) =>
+                                  prev.map((s) =>
+                                    s.id === slot.id ? { ...s, enabled: true } : s
+                                  )
+                                );
+                                setOpenDropdown(`time-${slot.id}`);
+                                return;
+                              }
+                              setOpenDropdown(isTimeDropdownOpen ? null : `time-${slot.id}`);
+                            }}
+                            className={`w-[120px] h-[38px] rounded-xl border px-3.5 py-1.5 flex items-center justify-between text-[13.5px] sm:text-[14px] font-semibold transition-all select-none cursor-pointer ${slot.enabled
+                                ? "border-slate-200 bg-white text-slate-800 shadow-2xs hover:border-slate-300"
+                                : "border-slate-200 bg-slate-50/70 text-slate-400 hover:border-slate-300"
+                              }`}
+                          >
+                            <span>{slot.enabled ? slot.time : ""}</span>
+                            <Clock className="w-4 h-4 text-slate-400 shrink-0" />
+                          </button>
+
+                          {/* Time Selector Dropdown */}
+                          {isProPlan && slot.enabled && isTimeDropdownOpen && (
+                            <div className="absolute right-0 top-full mt-2 w-36 bg-white rounded-2xl border border-slate-200 shadow-xl p-1.5 z-30 max-h-48 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
+                              {TIME_OPTIONS.map((t) => (
+                                <button
+                                  key={t}
+                                  type="button"
+                                  onClick={() => changeTimezoneTime(slot.id, t)}
+                                  className={`w-full px-2.5 py-1.5 rounded-lg text-xs font-semibold text-left transition-colors cursor-pointer ${slot.time === t
+                                    ? "bg-[#F0F2FF] text-[#5551FF]"
+                                    : "hover:bg-slate-50 text-slate-700"
+                                    }`}
+                                >
+                                  {t}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
-            {/* ================= RIGHT SECTION: Image 2 Data in Image 1 Colors ================= */}
-            <div className="lg:col-span-5 flex flex-col gap-3.5 mt-4">
-              {/* Enable Full Time Auto Apply Banner Card (Image 1 Box, Above Lanes, Outside Container) */}
-              <div className="relative flex items-center justify-between gap-4 rounded-2xl border border-[#6A5CFF] border-l-[6px] bg-[#EFEEFF] p-3.5 sm:p-4 shadow-2xs">
-                <div className="min-w-0 pr-2">
-                  <h3 className="text-[14px] sm:text-[14.5px] font-bold text-[#1A0EA5] tracking-tight">
-                    Enable Full Time Auto Apply For Primary Resume
-                  </h3>
-                  <p className="mt-0.5 text-[12px] sm:text-[12.5px] text-[#1A0EA5]/90 leading-relaxed">
-                    Turn on auto-apply to apply automatically using your saved settings.
-                  </p>
-                </div>
+            <div className="h-px w-full bg-slate-100" />
 
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={isEnabled}
-                  onClick={handleToggleAutoApply}
-                  className={`relative h-6 w-11 shrink-0 rounded-full p-0.5 transition-colors duration-200 cursor-pointer ${isEnabled ? "bg-[#6A5CFF]" : "bg-slate-300"
-                    }`}
-                >
-                  <span
-                    className={`block h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${isEnabled ? "translate-x-5" : "translate-x-0"
-                      }`}
-                  />
-                </button>
+            {/* 7. Per-Company Limit */}
+            <div
+              onClick={() => {
+                if (!isProPlan) {
+                  handleRestrictedAction();
+                }
+              }}
+              className="flex items-center justify-between gap-4 py-1"
+            >
+              <div className="flex-1">
+                <h4 className="text-[16px] font-bold text-slate-900 tracking-tight">
+                  Per-Company Limit
+                </h4>
+                <p className="text-[12.5px] text-slate-500 mt-0.5">
+                  Stop applying to a company once it has this many of your applications from the last 30 days.
+                </p>
               </div>
 
-              {/* Unified Settings Card Containing Image 2 Data in Image 1 Colors */}
-              <div className="bg-white rounded-[18px] border border-[#E2E8F0] shadow-2xs overflow-hidden">
-                {/* 1. LANES SECTION (Clean - Triggers Chat Flow) */}
-                <div className="p-5 border-b border-[#E2E8F0] flex flex-col gap-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11.5px] font-bold text-slate-400 uppercase tracking-wider">
-                      Lanes
-                    </span>
-                    <span className="text-[12px] font-semibold text-slate-500">
-                      {activeLanesCount} of 3 active
-                    </span>
-                  </div>
+              <div
+                onClick={(e) => {
+                  if (!isProPlan) {
+                    e.stopPropagation();
+                    handleRestrictedAction();
+                  }
+                }}
+                className="shrink-0"
+              >
+                <input
+                  type="number"
+                  min={0}
+                  max={30}
+                  value={perCompanyLimit}
+                  readOnly={!isProPlan}
+                  onFocus={(e) => {
+                    if (!isProPlan) {
+                      e.target.blur();
+                      handleRestrictedAction();
+                    }
+                  }}
+                  onChange={(e) => {
+                    if (!isProPlan) {
+                      handleRestrictedAction();
+                      return;
+                    }
+                    const val = e.target.value;
+                    if (val === "") {
+                      setPerCompanyLimit(0);
+                      return;
+                    }
+                    const num = parseInt(val, 10);
+                    if (!isNaN(num)) {
+                      setPerCompanyLimit(Math.max(0, Math.min(30, num)));
+                    }
+                  }}
+                  className={`w-20 h-10 px-3 rounded-xl border text-[14px] font-semibold shadow-2xs outline-none transition-all text-center select-none ${
+                    isProPlan
+                      ? "border-slate-200 bg-white text-slate-800 focus:border-[#4F46E5] focus:ring-2 focus:ring-[#EEF2FF] cursor-text"
+                      : "border-slate-200 bg-slate-50/70 text-slate-400 cursor-pointer"
+                  }`}
+                />
+              </div>
+            </div>
 
-                  {/* Custom Lane Cards (Matching Image 3) */}
-                  {customLanes.length > 0 && (
-                    <div className="flex flex-col gap-2.5">
-                      {customLanes.map((lane) => (
-                        <div
-                          key={lane.id}
-                          className="bg-white rounded-2xl border border-slate-200 p-4 flex items-start justify-between shadow-2xs hover:border-slate-300 transition-all group"
-                        >
-                          <div className="flex flex-col min-w-0 pr-3">
-                            <div className="flex items-center gap-2.5">
-                              <span className="w-2 h-2 rounded-full bg-[#4F46E5] shrink-0" />
-                              <h4 className="text-[14px] sm:text-[14.5px] font-bold text-slate-900 tracking-tight truncate">
-                                {lane.name}
-                              </h4>
-                            </div>
-                            <p className="text-[12px] sm:text-[12.5px] text-slate-500 mt-1 pl-4.5 font-normal leading-relaxed">
-                              {lane.description}
-                            </p>
-                          </div>
+            <div className="h-px w-full bg-slate-100" />
 
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveLane(lane.id)}
-                            className="text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer shrink-0"
-                            title="Delete lane"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+            {/* 8. Pause Companies You're Interviewing With */}
+            <div className="flex items-center justify-between gap-4 py-1">
+              <div>
+                <h4 className="text-[16px] font-bold text-slate-900 tracking-tight">
+                  Pause Companies You're Interviewing With
+                </h4>
+                <p className="text-[12.5px] text-slate-500 mt-0.5">
+                  Auto Apply stops applying to a company for 60 days after an interview or offer from it, or until it turns you down.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={pauseInterviewing}
+                onClick={() => {
+                  if (!isProPlan) {
+                    handleRestrictedAction();
+                    return;
+                  }
+                  setPauseInterviewing(!pauseInterviewing);
+                }}
+                className={`w-11 h-6 rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${pauseInterviewing ? "bg-[#5551FF]" : "bg-slate-200"
+                  }`}
+              >
+                <div
+                  className={`w-5 h-5 rounded-full bg-white shadow-sm transform transition-transform duration-200 ${pauseInterviewing ? "translate-x-5" : "translate-x-0"
+                    }`}
+                />
+              </button>
+            </div>
 
-                  {/* Add a lane button: Triggers Question in Left Assistant */}
-                  <button
-                    type="button"
-                    onClick={handleTriggerAddLaneInChat}
-                    disabled={customLanes.length >= 3}
-                    className="w-full py-3 px-4 rounded-xl border border-dashed border-[#CBD5E1] hover:border-[#818CF8] bg-white hover:bg-[#EEF2FF]/40 text-slate-700 hover:text-[#4F46E5] text-[13px] font-medium flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Plus className="w-4 h-4 text-[#4F46E5]" />
-                    <span>Add a lane </span>
-                  </button>
-                </div>
+            <div className="h-px w-full bg-slate-100" />
 
-                {/* 2. RUN TIMES SECTION */}
-                <div className="p-5 border-b border-[#E2E8F0] flex flex-col gap-2">
-                  <span className="text-[11.5px] font-bold text-slate-400 uppercase tracking-wider">
-                    Run Times
+            {/* 9. Save Settings Button (Protected by Pro Validation) */}
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <div
+                onClick={() => {
+                  if (!isProPlan) {
+                    handleRestrictedAction();
+                  }
+                }}
+                className={!isProPlan ? "cursor-not-allowed" : ""}
+              >
+                <button
+                  type="button"
+                  onClick={handleSaveSettings}
+                  disabled={!isProPlan || isSaving || isVerifyingBilling}
+                  className={`px-6 py-3 rounded-xl text-[14px] font-bold transition-all flex items-center gap-2 select-none ${
+                    !isProPlan
+                      ? "bg-slate-200 text-slate-400 shadow-none pointer-events-none cursor-not-allowed"
+                      : "bg-[#4F46E5] hover:bg-[#4338CA] text-white cursor-pointer shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  }`}
+                >
+                  <Check className="w-4.5 h-4.5 stroke-[2.5]" />
+                  <span>
+                    {isVerifyingBilling
+                      ? "Verifying Plan..."
+                      : isSaving
+                        ? "Saving Settings..."
+                        : "Save Settings"}
                   </span>
-                  <div className="flex flex-wrap items-center gap-x-4 sm:gap-x-5 gap-y-1.5 text-[15px] sm:text-[15.5px] font-bold text-slate-900 mt-0.5">
-                    {runTimesList.map((time, idx) => {
-                      const isSecondToLast = idx === runTimesList.length - 2;
-                      const hasComma = runTimesList.length > 2 && idx < runTimesList.length - 2;
-
-                      return (
-                        <React.Fragment key={idx}>
-                          <span className="whitespace-nowrap">
-                            {time}
-                            {hasComma ? "," : ""}
-                          </span>
-                          {isSecondToLast && runTimesList.length > 1 && (
-                            <span className="text-slate-500 font-medium whitespace-nowrap">and</span>
-                          )}
-                        </React.Fragment>
-                      );
-                    })}
-                  </div>
-                  <p className="text-[12.5px] text-slate-500 mt-0.5">
-                    The default times. Pick your own in Manual settings.
-                  </p>
-                </div>
-
-                {/* 3. SHARED DAILY CAP SECTION */}
-                <div className="p-5 border-b border-[#E2E8F0] flex flex-col gap-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11.5px] font-bold text-slate-400 uppercase tracking-wider">
-                      Shared Daily Cap
-                    </span>
-                    <div className="flex items-center gap-1.5">
-
-
-                      <span className="text-[12px] font-semibold text-slate-600">10 / day</span>
-                    </div>
-                  </div>
-
-                  {/* Progress Bar (Image 1 Colors) */}
-                  <div className="w-full h-1.5 rounded-full bg-slate-100 overflow-hidden mt-0.5">
-                    <div
-                      className="h-full bg-[#4F46E5] transition-all duration-300 rounded-full"
-                      style={{ width: `${Math.max(usedCount > 0 ? 5 : 0, capPercentage)}%` }}
-                    />
-                  </div>
-
-                  {/* Used / Today info */}
-                  <div className="text-[13px] font-medium text-slate-700">
-                    {usedCount} of {dailyTarget} used today
-                  </div>
-
-                  {/* Explanation text */}
-                  <p className="text-[12px] text-slate-500 leading-relaxed">
-                    Every lane draws from this one budget, best matches first. Another lane changes what gets considered, not how much gets applied to.
-                  </p>
-                </div>
-
-                {/* 4. MANUAL SETTINGS BUTTON: Opens Popup Modal */}
-                <div className="p-4.5 flex flex-col">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDraftDailyCap(dailyTarget);
-                      setIsManualModalOpen(true);
-                    }}
-                    className="w-full flex items-center justify-between cursor-pointer select-none group py-1"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-7 h-7 rounded-lg bg-[#EFF6FF] border border-[#DBEAFE] flex items-center justify-center text-[#4F46E5] shrink-0 group-hover:bg-[#EEF2FF] transition-colors">
-                        <SlidersHorizontal className="w-3.5 h-3.5" />
-                      </div>
-                      <span className="text-[14px] font-semibold text-slate-800 group-hover:text-[#4F46E5] transition-colors">
-                        Settings
-                      </span>
-                    </div>
-
-                    <div className="text-slate-400 group-hover:text-indigo-600 transition-colors">
-                      <ChevronRight className="w-4.5 h-4.5" />
-                    </div>
-                  </button>
-                </div>
+                </button>
               </div>
             </div>
           </div>
         </main>
       </div>
-
-      {/* ================= MANUAL SETTINGS POPUP MODAL (Anchored to Right Corner, Image 2 Blue) ================= */}
-      {isManualModalOpen && (
-        <div
-          className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-sm flex justify-end items-stretch overflow-hidden"
-          onClick={() => setIsManualModalOpen(false)}
-        >
-          <div
-            className="bg-white w-full max-w-xl h-full sm:h-[96vh] sm:my-auto sm:mr-4 md:mr-6 rounded-none sm:rounded-2xl flex flex-col shadow-2xl border border-slate-200 animate-in slide-in-from-right duration-300 overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
-              <h2 className="text-[17px] font-bold text-slate-900">
-                Settings
-              </h2>
-              <button
-                type="button"
-                onClick={() => {
-                  setDraftDailyCap(dailyTarget);
-                  setIsManualModalOpen(false);
-                }}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-                title="Close"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* In-Modal Toast Notification */}
-            {toast.show && (
-              <div className="mx-6 mt-4 p-3.5 rounded-xl border border-amber-300 bg-white shadow-xs flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-1 duration-200 shrink-0">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
-                  <span className="text-[13px] font-medium text-amber-900">
-                    {toast.message}
-                  </span>
-                </div>
-                {toast.action && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsManualModalOpen(false);
-                      toast.action.onClick();
-                    }}
-                    className="px-3 py-1.5 rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-semibold cursor-pointer transition-colors shadow-2xs shrink-0"
-                  >
-                    {toast.action.label}
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* Modal Scrollable Body */}
-            <div className="p-6 overflow-y-auto flex flex-col gap-6 no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-              {/* SECTION 1: Auto Apply Banner */}
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-start gap-3.5">
-                  <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-[#4F46E5] shrink-0 mt-0.5">
-                    <Zap className="w-5 h-5 fill-[#4F46E5]/15 text-[#4F46E5]" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-[17px] font-bold text-slate-900">Auto Apply</h3>
-
-                    </div>
-                    <p className="text-[13px] text-slate-500 mt-1 leading-relaxed">
-                      Set it once. Autoapply applies to your best new matches at the times you choose, up to 4 times a day.
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsManualModalOpen(false);
-                    handleTriggerAddLaneInChat();
-                  }}
-                  className="shrink-0 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-[12.5px] font-semibold px-3.5 py-2 rounded-full flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Tune with AI</span>
-                </button>
-              </div>
-
-              <div className="h-px w-full bg-slate-100" />
-
-              {/* SECTION 2: Enable auto-apply */}
-
-              {/* SECTION 2: Enable auto-apply */}
-
-              {/* SECTION 2: Enable auto-apply */}
-
-              {/* SECTION 2: Enable auto-apply */}
-              <div className="relative flex items-center justify-between gap-4 rounded-xl border border-[#6A5CFF] border-l-4 bg-[#EFEEFF] p-3 sm:p-4">
-
-                <div className="min-w-0">
-                  <h4 className="text-[14px] font-bold text-[#1A0EA5]">
-                    Enable auto-apply
-                  </h4>
-
-                  <p className="mt-0.5 text-[12px] text-[#1A0EA5]">
-                    Turn on auto-apply to apply automatically using your saved settings.
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={isEnabled}
-                  onClick={handleToggleAutoApply}
-                  className={`relative h-6 w-11 shrink-0 rounded-full p-0.5 transition-colors duration-200 cursor-pointer ${isEnabled ? "bg-[#6A5CFF]" : "bg-slate-300"
-                    }`}
-                >
-                  <span
-                    className={`block h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${isEnabled ? "translate-x-5" : "translate-x-0"
-                      }`}
-                  />
-                </button>
-
-              </div>
-
-
-
-
-              {/* SECTION 3: Daily application cap */}
-              <div className="flex flex-col gap-1.5">
-                <h4 className="text-[14px] font-bold text-slate-900">Daily application cap</h4>
-                <p className="text-[12.5px] text-slate-500">
-                  At most this many auto-applications per day (1–150)
-                </p>
-                <div className="mt-1">
-                  <input
-                    type="number"
-                    min={1}
-                    max={150}
-                    value={draftDailyCap}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val === "") {
-                        setDraftDailyCap("");
-                      } else {
-                        const num = parseInt(val, 10);
-                        if (!isNaN(num)) {
-                          setDraftDailyCap(Math.max(1, Math.min(150, num)));
-                        }
-                      }
-                    }}
-                    onBlur={() => {
-                      if (!draftDailyCap || isNaN(parseInt(draftDailyCap, 10))) {
-                        setDraftDailyCap(dailyTarget);
-                      }
-                    }}
-                    className="w-24 text-[15px] font-semibold text-slate-900 pb-1 border-b border-slate-300 focus:border-[#4F46E5] focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* SECTION 4: Run times (24 Slots matching Image 1, styled with Image 2 Blue) */}
-              <div className="flex flex-col gap-2">
-                <h4 className="text-[14px] font-bold text-slate-900">Run times</h4>
-                <p className="text-[12.5px] text-slate-500 leading-relaxed">
-                  Pick up to 4 times a day. Each run picks up jobs posted since the last one. Times are in your time zone (GMT+5:30).
-                </p>
-
-                {/* 24 slots: 12 AM to 11 PM */}
-                <div className="grid grid-cols-8 gap-1.5 pt-2">
-                  {TWENTY_FOUR_SLOTS.map((slot) => {
-                    const isSelected = selectedRunTimes.includes(slot);
-                    return (
-                      <button
-                        key={slot}
-                        type="button"
-                        onClick={() => toggleRunTime(slot)}
-                        className={`py-2 px-1 rounded-full text-[11px] font-semibold transition-all cursor-pointer text-center select-none ${isSelected
-                          ? "bg-[#4F46E5] text-white shadow-2xs hover:bg-[#4338CA]"
-                          : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                          }`}
-                      >
-                        {slot}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="text-[12px] text-slate-500 mt-1">
-                  <p>Default times: 2:30 AM, 8:30 AM, 2:30 PM and 8:30 PM.</p>
-                  <p className="text-slate-400 mt-0.5">
-                    4 runs a day is the most. Turn one off to pick another. ({selectedRunTimes.length}/4 selected)
-                  </p>
-                </div>
-              </div>
-
-              <div className="h-px w-full bg-slate-100" />
-
-
-              {/* SECTION 5: Per-company limit */}
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex-1">
-                  <h4 className="text-[14px] font-bold text-slate-900">
-                    Per-company limit
-                  </h4>
-                  <p className="text-[12.5px] text-slate-500 mt-0.5">
-                    Stop applying to a company once it has this many of your applications from the last 30 days.
-                  </p>
-                </div>
-
-                <div className="shrink-0">
-                  <input
-                    type="number"
-                    min={1}
-                    max={30}
-                    value={perCompanyLimit}
-                    onChange={(e) =>
-                      setPerCompanyLimit(
-                        Math.max(1, Math.min(30, Number(e.target.value) || 1))
-                      )
-                    }
-                    className="w-20 h-9 px-3 rounded-lg border border-[#E2E8F0] bg-white text-[14px] font-medium text-slate-800 shadow-sm outline-none transition-all focus:border-[#4F46E5] focus:ring-2 focus:ring-[#EEF2FF]"
-                  />
-                </div>
-              </div>
-
-
-              {/* SECTION 6: Pause companies you're interviewing with (Image 2 Blue, NOT green) */}
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <h4 className="text-[14px] font-bold text-slate-900">
-                    Pause companies you're interviewing with
-                  </h4>
-                  <p className="text-[12.5px] text-slate-500 mt-0.5">
-                    Auto Apply stops applying to a company for 60 days after an interview or offer from it, or until it turns you down.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={pauseInterviewing}
-                  onClick={() => setPauseInterviewing(!pauseInterviewing)}
-                  className={`w-11 h-6 rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${pauseInterviewing ? "bg-[#4F46E5]" : "bg-slate-200"
-                    }`}
-                >
-                  <div
-                    className={`w-5 h-5 rounded-full bg-white shadow-sm transform transition-transform duration-200 ${pauseInterviewing ? "translate-x-5" : "translate-x-0"
-                      }`}
-                  />
-                </button>
-              </div>
-
-              <div className="h-px w-full bg-slate-100" />
-
-              
-
-              <div className="h-px w-full bg-slate-100" />
-
-
-            </div>
-
-            {/* Modal Footer */}
-            <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-2.5 bg-slate-50/80 shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  setDraftDailyCap(dailyTarget);
-                  setIsManualModalOpen(false);
-                }}
-                className="px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-[13px] font-medium text-slate-700 cursor-pointer transition-colors"
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  handleSaveSettings();
-                  setIsManualModalOpen(false);
-                }}
-                className="px-5 py-2 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] text-white text-[13px] font-semibold cursor-pointer shadow-xs transition-colors"
-              >
-                Save Settings
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

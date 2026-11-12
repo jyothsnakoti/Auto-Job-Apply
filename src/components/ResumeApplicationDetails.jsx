@@ -3,6 +3,8 @@ import React, { useState, useMemo } from "react";
 const ResumeApplicationDetails = ({
   resumeApplications = [],
   onResumeChange,
+  submittedCount,
+  totalSubmittedCount,
 }) => {
   const [selectedResume, setSelectedResume] = useState("all");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -24,24 +26,31 @@ const ResumeApplicationDetails = ({
       ? null
       : resumes.find((resume) => resume.id === selectedResume);
 
+  const resumesSum = resumes.reduce((total, resume) => total + resume.count, 0);
+
+  const resolvedAllCount =
+    typeof submittedCount === "number"
+      ? submittedCount
+      : typeof totalSubmittedCount === "number"
+      ? totalSubmittedCount
+      : resumesSum;
+
   const totalApplications =
     selectedResume === "all"
-      ? resumes.reduce((total, resume) => total + resume.count, 0)
-      : selectedResumeData?.count ?? 0;
+      ? resolvedAllCount
+      : (selectedResumeData?.count ?? (resumes.length === 1 ? resolvedAllCount : 0));
 
   const selectedResumeName =
     selectedResumeData?.name || "All resumes";
 
   return (
-    <div className="relative w-full min-w-0 self-start rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-sm sm:p-5">
+    <div className="relative flex h-full w-full min-w-0 flex-col justify-between rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-sm sm:p-5">
       {/* Header and compact dropdown */}
       <div className="flex min-w-0 items-start justify-between gap-4">
         <div className="flex min-w-0 items-center gap-1.5">
           <h2 className="truncate text-sm font-regular text-[#0F172A] sm:text-base">
-            Application submitted  Count
+            Submitted
           </h2>
-
-          
         </div>
 
         {/* Dropdown stays inside the card */}

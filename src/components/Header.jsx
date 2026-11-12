@@ -117,8 +117,8 @@ const Header = () => {
 
   return (
     <header className="sticky top-0 z-20 flex h-[70px] w-full shrink-0 items-center justify-between bg-white border-b border-[#F1F5F9] px-4 sm:px-6 lg:px-8 shadow-[0_1px_3px_0_rgba(0,0,0,0.02)]">
-      {/* Left side: Hamburger button (mobile) + Search Bar */}
-      <div className="flex items-center gap-2 sm:gap-3 flex-1 max-w-[540px]">
+      {/* Left side: Hamburger button (mobile) */}
+      <div className="flex items-center">
         {/* Mobile Hamburger Toggle Button */}
         <button
           type="button"
@@ -130,33 +130,12 @@ const Header = () => {
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-
-        {/* Search Bar */}
-        <div className="flex h-[40px] w-full items-center gap-2.5 rounded-full border border-[#E2E8F0] bg-white px-3 sm:px-4 focus-within:border-slate-400 transition-colors min-w-0">
-          {/* Search Icon */}
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            className="shrink-0 text-[#94A3B8]"
-          >
-            <circle cx="11" cy="11" r="7" />
-            <path d="m20 20-3.5-3.5" />
-          </svg>
-
-          <input
-            type="text"
-            placeholder="Search jobs, companies, skills..."
-            className="w-full min-w-0 border-0 bg-transparent text-[12.5px] sm:text-[13px] text-slate-700 outline-none placeholder:text-[#94A3B8]"
-          />
-        </div>
       </div>
 
-      {/* User Profile & Dropdown */}
-      <div ref={dropdownRef} className="relative ml-3 sm:ml-4 shrink-0">
+      {/* Right side: User Profile & Dropdown */}
+      <div className="flex items-center gap-3 sm:gap-4 ml-auto shrink-0">
+        {/* User Profile & Dropdown */}
+        <div ref={dropdownRef} className="relative shrink-0">
         <button
           type="button"
           onClick={() => setIsDropdownOpen((prev) => !prev)}
@@ -230,6 +209,7 @@ const Header = () => {
             </button>
           </div>
         )}
+        </div>
       </div>
     </header>
   );

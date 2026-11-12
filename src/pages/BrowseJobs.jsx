@@ -1,8 +1,6552 @@
+// // import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+// // import { useNavigate } from "react-router-dom";
+// // import Sidebar from "../components/Sidebar";
+// // import Header from "../components/Header";
+// // import EnhancedResumeViewer from "../components/EnhancedResumeViewer";
+// // import {
+// //   getJobs,
+// //   getPrimaryResumeId,
+// //   getOnboardingState,
+// //   getStoredResumeId,
+// //   getStoredJobMatches,
+// //   getEnhancedResume,
+// //   downloadEnhancedResume,
+// //   getJobId,
+// //   getJobById,
+// //   checkUserHasResume,
+// //   applyToJobs,
+// //   applyToJobsInBatches,
+// //   extractNumericJobId,
+// //   extractNumericResumeId,
+// //   getBillingStatus,
+// //   getStoredAppliedJobIds,
+// //   isJobAlreadyApplied,
+// //   getApplicationStatuses,
+// //   isJobSubmitted,
+// //   isApplicationActiveStatus,
+// //   isApplyNowHiddenForJob,
+// //   getMatchingApplicationForJob,
+// //   extractJobIdFromApplicationRecord,
+// //   normalizeApplicationStatus,
+// // } from "../services/api";
+// // import {
+// //   getResumes,
+// //   setPrimaryResume,
+// //   refreshResumeMatches,
+// // } from "../services/resumeService";
+// // // Verified tick icon
+// // const VerifiedTick = () => (
+// //   <svg className="w-3.5 h-3.5 text-[#4F46E5] inline-block shrink-0" fill="currentColor" viewBox="0 0 20 20">
+// //     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+// //   </svg>
+// // );
+
+// // import {
+// //   cleanHtmlText,
+// //   formatPostedDate,
+// //   extractCleanJobTitle,
+// //   extractCleanCompany,
+// //   transformMatchToJob,
+// //   buildJobQueryParams,
+// // } from "../utils/jobHelpers";
+
+// // // Standard filter static options
+// // const dateOptions = [
+// //   "Last 6 hours",
+// //   "Last 24 hours",
+// //   "Last 7 days",
+// //   "Last 14 days",
+// //   "Last 30 days",
+// //   "All time",
+// // ];
+
+// // const workplaceOptions = ["Remote", "On-site", "Hybrid"];
+
+// // const experienceOptions = [
+// //   "Entry Level (0-1 yrs)",
+// //   "Junior (1-3 yrs)",
+// //   "Mid-Level (3-5 yrs)",
+// //   "Senior (5-8 yrs)",
+// //   "Lead / Principal (8+ yrs)",
+// // ];
+
+// // const jobTypeOptions = [
+// //   "Full-time",
+// //   "Part-time",
+// //   "Contract",
+// //   "Internship",
+// //   "Freelance",
+// // ];
+
+// // const BrowseJobs = () => {
+// //   const navigate = useNavigate();
+// //   const [searchQuery, setSearchQuery] = useState("");
+// //   const [activeDropdown, setActiveDropdown] = useState(null);
+// //   const [selectedJobModal, setSelectedJobModal] = useState(null);
+// //   const [isLoadingJobDetails, setIsLoadingJobDetails] = useState(false);
+// //   const [isJobSaved, setIsJobSaved] = useState(false);
+
+// //   // Helper to open job modal and fetch full job details from GET /api/jobs/{originalJobId}
+// //   const handleOpenJobModal = async (job) => {
+// //     if (!job) return;
+// //     setSelectedJobModal(job);
+
+// //     const originalJobId = getJobId(job);
+// //     console.log("[BrowseJobs] Opening job modal. Original Job ID:", originalJobId);
+
+// //     if (originalJobId) {
+// //       try {
+// //         setIsLoadingJobDetails(true);
+// //         console.log(`[BrowseJobs] Fetching job details from GET /api/jobs/${originalJobId}...`);
+// //         const details = await getJobById(originalJobId);
+// //         console.log(`[BrowseJobs] GET /api/jobs/${originalJobId} details response:`, details);
+
+// //         if (details && typeof details === "object") {
+// //           setSelectedJobModal((prevModal) => {
+// //             if (!prevModal) return prevModal;
+// //             const currentModalId = getJobId(prevModal);
+// //             if (currentModalId === originalJobId) {
+// //               return {
+// //                 ...prevModal,
+// //                 ...details,
+// //                 title: details.title || details.jobTitle || prevModal.title,
+// //                 company: details.companyName || details.company || prevModal.company,
+// //                 companyDomain: details.companyDomain || prevModal.companyDomain,
+// //                 location: details.location || prevModal.location,
+// //                 fullLocation: details.location || details.fullLocation || prevModal.fullLocation,
+// //                 description: details.description || details.jobDescription || prevModal.description,
+// //                 preview: details.preview || details.description || details.jobDescription || prevModal.preview,
+// //                 responsibilities: Array.isArray(details.responsibilities) && details.responsibilities.length > 0
+// //                   ? details.responsibilities
+// //                   : prevModal.responsibilities,
+// //                 requiredSkills: Array.isArray(details.requiredSkills) && details.requiredSkills.length > 0
+// //                   ? details.requiredSkills
+// //                   : (Array.isArray(details.skills) ? details.skills : prevModal.requiredSkills),
+// //                 preferredSkills: Array.isArray(details.preferredSkills) && details.preferredSkills.length > 0
+// //                   ? details.preferredSkills
+// //                   : prevModal.preferredSkills,
+// //                 experience: details.experience || details.requiredExperience || prevModal.experience,
+// //                 workMode: details.workplace || details.workMode || prevModal.workMode,
+// //                 type: details.employmentType || details.type || prevModal.type,
+// //                 salary: details.salary || details.salaryRange || prevModal.salary,
+// //                 applyUrl: details.applyUrl || details.jobUrl || details.url || prevModal.applyUrl,
+// //               };
+// //             }
+// //             return prevModal;
+// //           });
+// //         }
+// //       } catch (err) {
+// //         console.warn(`[BrowseJobs] GET /api/jobs/${originalJobId} fetch warning:`, err?.message);
+// //       } finally {
+// //         setIsLoadingJobDetails(false);
+// //       }
+// //     }
+// //   };
+
+// //   // Dynamic Jobs State with Page-based Cache { [pageNumber]: [jobs] }
+// //   const [jobsCache, setJobsCache] = useState({});
+// //   const jobsCacheRef = useRef({});
+// //   const [activePage, setActivePage] = useState(1);
+// //   const [pageSize] = useState(20);
+// //   const [totalItems, setTotalItems] = useState(0);
+// //   const [totalPages, setTotalPages] = useState(1);
+// //   const [sortOption, setSortOption] = useState("best_match"); // 'best_match' or 'newest'
+
+// //   const [isLoadingJobs, setIsLoadingJobs] = useState(true);
+// //   const [isLoadingPage, setIsLoadingPage] = useState(false);
+// //   const [loadMoreError, setLoadMoreError] = useState(null);
+// //   const [fetchError, setFetchError] = useState(null);
+// //   const [hasMoreJobs, setHasMoreJobs] = useState(true);
+// //   const [hasResume, setHasResume] = useState(false);
+// //   const [activeResumeId, setActiveResumeId] = useState(() => {
+// //     try {
+// //       return (
+// //         localStorage.getItem("selected_resume_id") ||
+// //         localStorage.getItem("resume_id") ||
+// //         localStorage.getItem("resumeId") ||
+// //         sessionStorage.getItem("selected_resume_id") ||
+// //         sessionStorage.getItem("resume_id") ||
+// //         sessionStorage.getItem("resumeId") ||
+// //         null
+// //       );
+// //     } catch {
+// //       return null;
+// //     }
+// //   });
+// //   const fetchingPagesRef = useRef(new Set());
+// //   const resumeDropdownRef = useRef(null);
+
+// //   // Resume Selector States & Logic
+// //   const [userResumes, setUserResumes] = useState([]);
+// //   const [isLoadingResumes, setIsLoadingResumes] = useState(false);
+// //   const [selectedResume, setSelectedResume] = useState(() => {
+// //     try {
+// //       const storedData =
+// //         localStorage.getItem("selected_resume_data") ||
+// //         sessionStorage.getItem("selected_resume_data");
+// //       return storedData ? JSON.parse(storedData) : null;
+// //     } catch {
+// //       return null;
+// //     }
+// //   });
+// //   const [isResumeDropdownOpen, setIsResumeDropdownOpen] = useState(false);
+// //   const [isSettingPrimary, setIsSettingPrimary] = useState(false);
+
+// //   const selectedResumeRef = useRef(selectedResume);
+// //   selectedResumeRef.current = selectedResume;
+// //   const activeResumeIdRef = useRef(activeResumeId);
+// //   activeResumeIdRef.current = activeResumeId;
+// //   // Dynamic ATS Resume Matches Status & Refresh
+// //   const [matchStatus, setMatchStatus] = useState({
+// //     hasPrimaryResume: null,
+// //     refreshing: false,
+// //     matchCount: 0,
+// //     lastComputedAt: null,
+// //     progress: null,
+// //     lastResult: null,
+// //   });
+// //   const [isLoadingMatchStatus, setIsLoadingMatchStatus] = useState(true);
+// //   const [isRequestingRefresh, setIsRequestingRefresh] = useState(false);
+// //   const [refreshSuccessMessage, setRefreshSuccessMessage] = useState(null);
+// //   const prevRefreshingRef = useRef(false);
+// //   const pollingTimeoutRef = useRef(null);
+// //   const hasAutoRefreshedRef = useRef(false);
+
+// //   // Enhance Resume States
+// //   const [isEnhancing, setIsEnhancing] = useState(false);
+// //   const [isDownloadingResume, setIsDownloadingResume] = useState(false);
+// //   const [enhanceError, setEnhanceError] = useState(null);
+// //   const [enhanceSuccess, setEnhanceSuccess] = useState(null);
+// //   const [enhancedResultsMap, setEnhancedResultsMap] = useState({});
+// //   const [showEnhancedModal, setShowEnhancedModal] = useState(false);
+// //   const [copiedResume, setCopiedResume] = useState(false);
+
+// //   // Application Service States & Toast Notifications
+// //   const [appliedJobIds, setAppliedJobIds] = useState(() => getStoredAppliedJobIds());
+// //   const [applicationMap, setApplicationMap] = useState(() => new Map());
+// //   const [submittedJobIdSet, setSubmittedJobIdSet] = useState(() => new Set());
+// //   const [isStatusLoading, setIsStatusLoading] = useState(true);
+// //   const [statusError, setStatusError] = useState(null);
+// //   const [applyingCardIds, setApplyingCardIds] = useState({});
+// //   const [isApplyingPanelJob, setIsApplyingPanelJob] = useState(false);
+// //   const [panelApplyStatus, setPanelApplyStatus] = useState(null);
+// //   const [isAutoApplyingAll, setIsAutoApplyingAll] = useState(false);
+// //   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
+
+// //   const fetchApplicationStatuses = useCallback(async (forceRefresh = false) => {
+// //     setIsStatusLoading(true);
+// //     setStatusError(null);
+// //     try {
+// //       const res = await getApplicationStatuses({ forceRefresh });
+// //       setApplicationMap(res.applicationMap || new Map());
+// //       setSubmittedJobIdSet(res.submittedJobIdSet || new Set());
+// //     } catch (err) {
+// //       console.error("[BrowseJobs] Failed to fetch application statuses:", err);
+// //       setStatusError(err.message || "Failed to load application statuses from server.");
+// //     } finally {
+// //       setIsStatusLoading(false);
+// //     }
+// //   }, []);
+
+// //   useEffect(() => {
+// //     fetchApplicationStatuses();
+// //   }, [fetchApplicationStatuses]);
+
+// //   useEffect(() => {
+// //     const handleStatusSync = (e) => {
+// //       setAppliedJobIds(getStoredAppliedJobIds());
+// //       if (e?.detail?.applicationMap && e?.detail?.submittedJobIdSet) {
+// //         setApplicationMap(e.detail.applicationMap);
+// //         setSubmittedJobIdSet(e.detail.submittedJobIdSet);
+// //       } else {
+// //         fetchApplicationStatuses(true);
+// //       }
+// //     };
+// //     window.addEventListener("applicationStatusesUpdated", handleStatusSync);
+// //     window.addEventListener("appliedJobIdsUpdated", handleStatusSync);
+// //     window.addEventListener("storage", handleStatusSync);
+// //     return () => {
+// //       window.removeEventListener("applicationStatusesUpdated", handleStatusSync);
+// //       window.removeEventListener("appliedJobIdsUpdated", handleStatusSync);
+// //       window.removeEventListener("storage", handleStatusSync);
+// //     };
+// //   }, [fetchApplicationStatuses]);
+
+// //   // If currently selected job was submitted, clear selection to avoid stale application state
+// //   useEffect(() => {
+// //     if (selectedJobModal && isJobSubmitted(selectedJobModal, submittedJobIdSet, applicationMap)) {
+// //       setSelectedJobModal(null);
+// //     }
+// //   }, [selectedJobModal, submittedJobIdSet, applicationMap]);
+
+// //   useEffect(() => {
+// //     if (toast.show) {
+// //       const timer = setTimeout(() => {
+// //         setToast((prev) => ({ ...prev, show: false }));
+// //       }, 4000);
+// //       return () => clearTimeout(timer);
+// //     }
+// //   }, [toast.show]);
+
+// //   const showToast = useCallback((message, type = "success") => {
+// //     setToast({ show: true, message, type });
+// //   }, []);
+
+// //   /**
+// //    * Helper to retrieve active or primary numeric resume ID
+// //    */
+// //   const getAppResumeId = useCallback(async () => {
+// //     let targetResume = selectedResumeRef.current;
+// //     let numericId = extractNumericResumeId(targetResume);
+
+// //     if (!numericId && userResumes.length > 0) {
+// //       targetResume = userResumes.find((r) => r.isPrimary) || userResumes[0];
+// //       numericId = extractNumericResumeId(targetResume);
+// //     }
+
+// //     if (!numericId) {
+// //       try {
+// //         const fetched = await getResumes();
+// //         if (Array.isArray(fetched) && fetched.length > 0) {
+// //           setUserResumes(fetched);
+// //           targetResume = fetched.find((r) => r.isPrimary) || fetched[0];
+// //           numericId = extractNumericResumeId(targetResume);
+// //         }
+// //       } catch {
+// //         // ignore
+// //       }
+// //     }
+
+// //     if (!numericId && activeResumeIdRef.current) {
+// //       numericId = extractNumericResumeId(activeResumeIdRef.current);
+// //     }
+
+// //     return { numericId, resume: targetResume };
+// //   }, [userResumes]);
+
+// //   /**
+// //    * Apply Now handler for single job card
+// //    */
+// //   const handleApplyToCardJob = async (job, e) => {
+// //     if (e) e.stopPropagation();
+// //     if (!job) return;
+
+// //     if (isJobSubmitted(job, submittedJobIdSet, applicationMap)) {
+// //       showToast("This job has already been submitted.", "warning");
+// //       return;
+// //     }
+
+// //     const numericJobId = extractNumericJobId(job);
+// //     const cardKey = job.id || job.jobId || numericJobId || `job-${Math.random()}`;
+
+// //     if (!numericJobId) {
+// //       showToast("Selected job is missing a valid numeric backend Job ID.", "error");
+// //       return;
+// //     }
+
+// //     if (applyingCardIds[cardKey]) return; // prevent duplicate clicks
+
+// //     const { numericId: numericResumeId } = await getAppResumeId();
+// //     if (!numericResumeId) {
+// //       showToast("No resume selected. Go to Profile to upload/select a resume.", "error");
+// //       return;
+// //     }
+
+// //     setApplyingCardIds((prev) => ({ ...prev, [cardKey]: true }));
+
+// //     try {
+// //       const res = await applyToJobs({ resumeId: numericResumeId, jobIds: [numericJobId] });
+// //       const queuedCount = res.queued?.length || 0;
+// //       const skippedArr = res.skipped || [];
+
+// //       if (queuedCount > 0) {
+// //         showToast(`Application queued successfully! (${queuedCount} queued)`, "success");
+// //       } else if (skippedArr.length > 0) {
+// //         const reason = skippedArr[0]?.reason || "ALREADY_SUBMITTED";
+// //         showToast(`Skipped (${reason})`, "warning");
+// //       } else {
+// //         showToast("Application skipped (No new jobs queued).", "warning");
+// //       }
+
+// //       await fetchApplicationStatuses(true);
+
+// //       getBillingStatus()
+// //         .then((status) => {
+// //           if (status) window.dispatchEvent(new CustomEvent("billingStatusUpdated", { detail: status }));
+// //         })
+// //         .catch(() => { });
+// //     } catch (err) {
+// //       console.error("[BrowseJobs] Single card apply error:", err);
+// //       showToast(err.message || "Failed to submit application.", "error");
+// //     } finally {
+// //       setApplyingCardIds((prev) => {
+// //         const copy = { ...prev };
+// //         delete copy[cardKey];
+// //         return copy;
+// //       });
+// //     }
+// //   };
+
+// //   /**
+// //    * Apply Now handler for Job Details side panel
+// //    */
+// //   const handleApplyToPanelJob = async () => {
+// //     if (!selectedJobModal) return;
+
+// //     if (isJobSubmitted(selectedJobModal, submittedJobIdSet, applicationMap)) {
+// //       setPanelApplyStatus({
+// //         type: "error",
+// //         message: "This job has already been submitted.",
+// //       });
+// //       showToast("This job has already been submitted.", "warning");
+// //       return;
+// //     }
+
+// //     const numericJobId = extractNumericJobId(selectedJobModal);
+// //     if (!numericJobId) {
+// //       setPanelApplyStatus({
+// //         type: "error",
+// //         message: "Displayed job is missing a valid numeric backend Job ID.",
+// //       });
+// //       showToast("Displayed job is missing a valid numeric backend Job ID.", "error");
+// //       return;
+// //     }
+
+// //     if (isApplyingPanelJob) return;
+
+// //     const { numericId: numericResumeId } = await getAppResumeId();
+// //     if (!numericResumeId) {
+// //       setPanelApplyStatus({
+// //         type: "error",
+// //         message: "No resume selected. Please go to Profile to select or upload a resume.",
+// //       });
+// //       showToast("No resume selected. Please go to Profile to select or upload a resume.", "error");
+// //       return;
+// //     }
+
+// //     setIsApplyingPanelJob(true);
+// //     setPanelApplyStatus(null);
+
+// //     try {
+// //       const res = await applyToJobs({ resumeId: numericResumeId, jobIds: [numericJobId] });
+// //       const queuedCount = res.queued?.length || 0;
+// //       const skippedArr = res.skipped || [];
+
+// //       await fetchApplicationStatuses(true);
+
+// //       if (queuedCount > 0) {
+// //         const msg = `Application queued! Redirecting to Applications...`;
+// //         setPanelApplyStatus({ type: "success", message: msg });
+// //         showToast(msg, "success");
+
+// //         getBillingStatus()
+// //           .then((status) => {
+// //             if (status) window.dispatchEvent(new CustomEvent("billingStatusUpdated", { detail: status }));
+// //           })
+// //           .catch(() => { });
+
+// //         setTimeout(() => {
+// //           setSelectedJobModal(null);
+// //           setPanelApplyStatus(null);
+// //           navigate("/auto-apply", { state: { tab: "in-progress" } });
+// //         }, 1200);
+// //       } else if (skippedArr.length > 0) {
+// //         const reason = skippedArr[0]?.reason || "ALREADY_SUBMITTED";
+// //         const msg = `Application skipped: ${reason}`;
+// //         setPanelApplyStatus({ type: "skipped", message: msg });
+// //         showToast(msg, "warning");
+// //       } else {
+// //         const msg = "Application skipped (No new jobs queued).";
+// //         setPanelApplyStatus({ type: "skipped", message: msg });
+// //         showToast(msg, "warning");
+// //       }
+// //     } catch (err) {
+// //       console.error("[BrowseJobs] Panel apply error:", err);
+// //       const msg = err.message || "Failed to submit application.";
+// //       setPanelApplyStatus({ type: "error", message: msg });
+// //       showToast(msg, "error");
+// //     } finally {
+// //       setIsApplyingPanelJob(false);
+// //     }
+// //   };
+
+// //   /**
+// //    * Auto Apply All handler
+// //    */
+// //   const handleAutoApplyAll = async () => {
+// //     if (isAutoApplyingAll) return;
+
+// //     setIsAutoApplyingAll(true);
+
+// //     try {
+// //       const billing = await getBillingStatus().catch(() => null);
+// //       const remaining =
+// //         typeof billing?.remainingApplications === "number"
+// //           ? billing.remainingApplications
+// //           : typeof billing?.remaining === "number"
+// //             ? billing.remaining
+// //             : 100;
+
+// //       if (remaining <= 0) {
+// //         showToast("Insufficient application credits. Please upgrade your plan in Subscriptions.", "error");
+// //         setIsAutoApplyingAll(false);
+// //         return;
+// //       }
+
+// //       const { numericId: numericResumeId } = await getAppResumeId();
+// //       if (!numericResumeId) {
+// //         showToast("No resume selected. Please go to Profile to upload/select a resume.", "error");
+// //         setIsAutoApplyingAll(false);
+// //         return;
+// //       }
+
+// //       const currentJobsList = displayedJobs || [];
+// //       const eligibleJobs = currentJobsList.filter(
+// //         (j) => !isApplyNowHiddenForJob(j, applicationMap, submittedJobIdSet) && !isJobSubmitted(j, submittedJobIdSet, applicationMap)
+// //       );
+
+// //       const validJobs = eligibleJobs
+// //         .map((j) => ({ job: j, numericId: extractNumericJobId(j) }))
+// //         .filter((item) => item.numericId !== null);
+
+// //       if (validJobs.length === 0) {
+// //         showToast("No unapplied or retryable jobs found on this page.", "warning");
+// //         setIsAutoApplyingAll(false);
+// //         return;
+// //       }
+
+// //       const jobIdsToApply = validJobs.map((item) => item.numericId).slice(0, remaining);
+
+// //       const batchResult = await applyToJobsInBatches({
+// //         resumeId: numericResumeId,
+// //         jobIds: jobIdsToApply,
+// //         batchSize: 50,
+// //       });
+
+// //       const queuedCount = batchResult.queued.length;
+// //       const skippedCount = batchResult.skipped.length;
+
+// //       await fetchApplicationStatuses(true);
+
+// //       showToast(
+// //         `Batch Auto Apply: ${queuedCount} Queued, ${skippedCount} Skipped across ${batchResult.totalProcessed} jobs.`,
+// //         queuedCount > 0 ? "success" : "warning"
+// //       );
+
+// //       getBillingStatus()
+// //         .then((status) => {
+// //           if (status) window.dispatchEvent(new CustomEvent("billingStatusUpdated", { detail: status }));
+// //         })
+// //         .catch(() => { });
+// //     } catch (err) {
+// //       console.error("[BrowseJobs] Auto Apply All error:", err);
+// //       showToast(err.message || "Failed to submit bulk applications.", "error");
+// //     } finally {
+// //       setIsAutoApplyingAll(false);
+// //     }
+// //   };
+
+// //   // Filter States
+// //   const [selectedDate, setSelectedDate] = useState("All time");
+// //   const [selectedLocations, setSelectedLocations] = useState([]);
+// //   const [locationSearch, setLocationSearch] = useState("");
+// //   const [selectedWorkplace, setSelectedWorkplace] = useState([]);
+// //   const [selectedCompanies, setSelectedCompanies] = useState([]);
+// //   const [companySearch, setCompanySearch] = useState("");
+// //   const [selectedExperience, setSelectedExperience] = useState("");
+// //   const [selectedRoles, setSelectedRoles] = useState([]);
+// //   const [selectedJobTypes, setSelectedJobTypes] = useState([]);
+// //   const [sponsorsVisa, setSponsorsVisa] = useState(false);
+
+// //   const dropdownRef = useRef(null);
+
+// //   /**
+// //    * Main function to load jobs for a specific page with Page-based Cache.
+// //    * If the page is already cached (and not forcing refresh), returns cached data without API call.
+// //    */
+// //   const loadPage = useCallback(
+// //     async (pageNumber, { forceRefresh = false, customQuery = null, customSort = null, overrideFilters = null, customResumeId = null } = {}) => {
+// //       // 1. Check cache first (unless forceRefresh is requested)
+// //       if (!forceRefresh && jobsCacheRef.current[pageNumber] && jobsCacheRef.current[pageNumber].length > 0) {
+// //         console.log(`[BrowseJobs] Page ${pageNumber} found in cache. Using cached data (NO API CALL).`);
+// //         setActivePage(pageNumber);
+// //         return jobsCacheRef.current[pageNumber];
+// //       }
+
+// //       // 2. Prevent duplicate concurrent requests for the same page
+// //       if (fetchingPagesRef.current.has(pageNumber)) {
+// //         console.log(`[BrowseJobs] Request for page ${pageNumber} is already in flight. Skipping duplicate call.`);
+// //         return;
+// //       }
+
+// //       fetchingPagesRef.current.add(pageNumber);
+// //       if (pageNumber === 1 && (forceRefresh || Object.keys(jobsCacheRef.current).length === 0)) {
+// //         setIsLoadingJobs(true);
+// //       } else {
+// //         setIsLoadingPage(true);
+// //       }
+// //       setLoadMoreError(null);
+// //       setFetchError(null);
+
+// //       // Extract target resumeId for GET /api/jobs?resumeId=...
+// //       let resumeIdVal = customResumeId;
+// //       if (resumeIdVal === null || resumeIdVal === undefined) {
+// //         const curResume = selectedResumeRef.current;
+// //         resumeIdVal = curResume
+// //           ? (curResume.id ?? curResume.resumeId ?? curResume._id ?? curResume.fileId ?? curResume.uuid ?? curResume.resume_id)
+// //           : activeResumeIdRef.current;
+// //       }
+// //       if (!resumeIdVal) {
+// //         resumeIdVal =
+// //           localStorage.getItem("selected_resume_id") ||
+// //           localStorage.getItem("resume_id") ||
+// //           localStorage.getItem("resumeId") ||
+// //           sessionStorage.getItem("selected_resume_id") ||
+// //           sessionStorage.getItem("resume_id") ||
+// //           sessionStorage.getItem("resumeId");
+// //       }
+// //       if (!resumeIdVal) {
+// //         try {
+// //           resumeIdVal = await getPrimaryResumeId();
+// //         } catch {
+// //           // fallback
+// //         }
+// //       }
+// //       const onboardingState = getOnboardingState();
+// //       if (!resumeIdVal && onboardingState?.resumeId) {
+// //         resumeIdVal = String(onboardingState.resumeId);
+// //       }
+// //       if (!resumeIdVal) {
+// //         resumeIdVal = getStoredResumeId();
+// //       }
+// //       const userHasResume =
+// //         Boolean(resumeIdVal) || (await checkUserHasResume().catch(() => false));
+// //       setHasResume(userHasResume);
+// //       if (resumeIdVal) {
+// //         setActiveResumeId(String(resumeIdVal));
+// //       }
+
+// //       try {
+// //         const q = customQuery !== null ? customQuery : searchQuery;
+// //         const sort = customSort !== null ? customSort : sortOption;
+
+// //         const activeLocs = overrideFilters?.locations ?? selectedLocations;
+// //         const activeRoles = overrideFilters?.roles ?? selectedRoles;
+// //         const activeWorkplaces = overrideFilters?.workplace ?? selectedWorkplace;
+// //         const activeJobTypes = overrideFilters?.jobTypes ?? selectedJobTypes;
+// //         const activeDate = overrideFilters?.date ?? selectedDate;
+// //         const activeCompanies = overrideFilters?.companies ?? selectedCompanies;
+// //         const apiPage = Math.max(0, pageNumber - 1); // 0-indexed for GET /api/jobs
+
+// //         const params = buildJobQueryParams({
+// //           resumeId: resumeIdVal,
+// //           searchQuery: q,
+// //           selectedLocations: activeLocs,
+// //           selectedRoles: activeRoles,
+// //           selectedWorkplace: activeWorkplaces,
+// //           selectedJobTypes: activeJobTypes,
+// //           selectedCompanies: activeCompanies,
+// //           selectedDate: activeDate,
+// //           sortOption: sort || "best_match",
+// //           page: apiPage,
+// //           pageSize: pageSize || 20,
+// //         });
+
+// //         console.log(`[BrowseJobs] Fetching Page ${pageNumber} (apiPage ${apiPage}) via GET /api/jobs with params:`, params);
+// //         const res = await getJobs(params);
+
+// //         const items = res?.items || [];
+// //         const transformed = items.map((m, idx) => transformMatchToJob(m, apiPage * pageSize + idx)).filter(Boolean);
+
+// //         const resTotalItems =
+// //           typeof res?.totalItems === "number" && res.totalItems >= 0
+// //             ? res.totalItems
+// //             : (items.length >= pageSize ? (apiPage + 2) * pageSize : (apiPage * pageSize + items.length));
+
+// //         const resTotalPages =
+// //           typeof res?.totalPages === "number" && res.totalPages > 0
+// //             ? res.totalPages
+// //             : Math.max(1, Math.ceil(resTotalItems / (pageSize || 20)));
+
+// //         const hasMore = (apiPage + 1) < resTotalPages && items.length >= pageSize;
+// //         setHasMoreJobs(hasMore);
+// //         setTotalItems(resTotalItems);
+// //         setTotalPages(resTotalPages);
+
+// //         if (transformed.length === 0) {
+// //           if (pageNumber === 1 && (forceRefresh || Object.keys(jobsCacheRef.current).length === 0)) {
+// //             const stored = getStoredJobMatches();
+// //             if (Array.isArray(stored) && stored.length > 0) {
+// //               const fallback = stored.map((m, idx) => transformMatchToJob(m, idx)).filter(Boolean);
+// //               if (fallback.length > pageSize) {
+// //                 const chunked = {};
+// //                 const chunkPages = Math.ceil(fallback.length / pageSize);
+// //                 for (let p = 1; p <= chunkPages; p++) {
+// //                   chunked[p] = fallback.slice((p - 1) * pageSize, p * pageSize);
+// //                 }
+// //                 jobsCacheRef.current = chunked;
+// //                 setJobsCache(chunked);
+// //                 setTotalPages(chunkPages);
+// //               } else {
+// //                 jobsCacheRef.current[1] = fallback;
+// //                 setJobsCache({ 1: fallback });
+// //                 setTotalPages(1);
+// //               }
+// //               setActivePage(1);
+// //               setTotalItems(fallback.length);
+// //               setHasMoreJobs(false);
+// //               return fallback;
+// //             }
+// //           } else if (pageNumber > 1) {
+// //             // Server has no more jobs for this page; stay on current page and mark no more jobs
+// //             setHasMoreJobs(false);
+// //             setTotalPages((prev) => Math.min(prev, pageNumber - 1));
+// //             return [];
+// //           }
+// //         }
+
+// //         // If page 1 returned all jobs in one response (> pageSize), chunk into pages
+// //         if (pageNumber === 1 && transformed.length > pageSize) {
+// //           const chunked = {};
+// //           const chunkPages = Math.ceil(transformed.length / pageSize);
+// //           for (let p = 1; p <= chunkPages; p++) {
+// //             chunked[p] = transformed.slice((p - 1) * pageSize, p * pageSize);
+// //           }
+// //           jobsCacheRef.current = chunked;
+// //           setJobsCache(chunked);
+// //           setActivePage(1);
+// //           setTotalItems(transformed.length);
+// //           setTotalPages(chunkPages);
+// //           setHasMoreJobs(false);
+// //           return transformed;
+// //         }
+
+// //         // Cache page data
+// //         jobsCacheRef.current[pageNumber] = transformed;
+// //         setJobsCache((prev) => ({
+// //           ...(forceRefresh ? {} : prev),
+// //           [pageNumber]: transformed,
+// //         }));
+// //         setActivePage(pageNumber);
+
+// //         return transformed;
+// //       } catch (err) {
+// //         console.error(`[BrowseJobs] Error fetching Page ${pageNumber} from GET /api/jobs:`, err);
+// //         const msg = err?.response?.data?.message || err?.message || "Unable to load jobs. Please try again.";
+// //         setFetchError(msg);
+// //         setLoadMoreError(msg);
+
+// //         if (pageNumber === 1 && Object.keys(jobsCacheRef.current).length === 0) {
+// //           const stored = getStoredJobMatches();
+// //           if (Array.isArray(stored) && stored.length > 0) {
+// //             const fallback = stored.map((m, idx) => transformMatchToJob(m, idx)).filter(Boolean);
+// //             if (fallback.length > pageSize) {
+// //               const chunked = {};
+// //               const chunkPages = Math.ceil(fallback.length / pageSize);
+// //               for (let p = 1; p <= chunkPages; p++) {
+// //                 chunked[p] = fallback.slice((p - 1) * pageSize, p * pageSize);
+// //               }
+// //               jobsCacheRef.current = chunked;
+// //               setJobsCache(chunked);
+// //               setTotalPages(chunkPages);
+// //             } else {
+// //               jobsCacheRef.current[1] = fallback;
+// //               setJobsCache({ 1: fallback });
+// //               setTotalPages(1);
+// //             }
+// //             setActivePage(1);
+// //             setTotalItems(fallback.length);
+// //             setHasMoreJobs(false);
+// //           }
+// //         } else if (pageNumber > 1) {
+// //           setHasMoreJobs(false);
+// //         }
+// //       } finally {
+// //         fetchingPagesRef.current.delete(pageNumber);
+// //         setIsLoadingJobs(false);
+// //         setIsLoadingPage(false);
+// //       }
+// //     },
+// //     [
+// //       searchQuery,
+// //       sortOption,
+// //       selectedLocations,
+// //       selectedRoles,
+// //       selectedWorkplace,
+// //       selectedJobTypes,
+// //       selectedDate,
+// //       pageSize,
+// //     ]
+// //   );
+
+// //   const loadPageRef = useRef(loadPage);
+// //   useEffect(() => {
+// //     loadPageRef.current = loadPage;
+// //   }, [loadPage]);
+
+// //   // Helper to persist selected resume ID and resume object across refreshes
+// //   const saveResumeSelection = (resume, resumeId) => {
+// //     if (!resumeId) return;
+// //     const strId = String(resumeId);
+// //     try {
+// //       localStorage.setItem("selected_resume_id", strId);
+// //       localStorage.setItem("resume_id", strId);
+// //       localStorage.setItem("resumeId", strId);
+// //       sessionStorage.setItem("selected_resume_id", strId);
+// //       sessionStorage.setItem("resume_id", strId);
+// //       sessionStorage.setItem("resumeId", strId);
+// //       if (resume) {
+// //         localStorage.setItem("selected_resume_data", JSON.stringify(resume));
+// //         sessionStorage.setItem("selected_resume_data", JSON.stringify(resume));
+// //       }
+// //       if (typeof window !== "undefined") {
+// //         window.dispatchEvent(
+// //           new CustomEvent("resumeSelectionUpdated", {
+// //             detail: { resume, resumeId: strId },
+// //           })
+// //         );
+// //       }
+// //     } catch (e) {
+// //       console.error("[BrowseJobs] Error saving resume selection to storage:", e);
+// //     }
+// //   };
+
+// //   // Fetch user resumes from GET /api/resumes
+// //   const fetchUserResumes = useCallback(async () => {
+// //     try {
+// //       setIsLoadingResumes(true);
+// //       const data = await getResumes();
+// //       let list = [];
+// //       if (Array.isArray(data)) {
+// //         list = data;
+// //       } else if (data && Array.isArray(data.resumes)) {
+// //         list = data.resumes;
+// //       } else if (data && Array.isArray(data.data)) {
+// //         list = data.data;
+// //       } else if (data && (data.id !== undefined || data.fileName || data.name)) {
+// //         list = [data];
+// //       }
+
+// //       setUserResumes(list);
+// //       let targetResume = null;
+// //       let targetResumeId = null;
+
+// //       // Retrieve stored resume ID & data from localStorage / sessionStorage if user previously selected one
+// //       const storedResumeId =
+// //         localStorage.getItem("selected_resume_id") ||
+// //         localStorage.getItem("resume_id") ||
+// //         localStorage.getItem("resumeId") ||
+// //         sessionStorage.getItem("selected_resume_id") ||
+// //         sessionStorage.getItem("resume_id") ||
+// //         sessionStorage.getItem("resumeId");
+
+// //       let storedResumeData = null;
+// //       try {
+// //         const rawData =
+// //           localStorage.getItem("selected_resume_data") ||
+// //           sessionStorage.getItem("selected_resume_data");
+// //         if (rawData) storedResumeData = JSON.parse(rawData);
+// //       } catch {
+// //         // ignore parse error
+// //       }
+
+// //       if (list.length > 0) {
+// //         setHasResume(true);
+
+// //         // 1. Try matching by ID
+// //         if (storedResumeId) {
+// //           targetResume = list.find((r) => {
+// //             const id = r.id ?? r.resumeId ?? r._id ?? r.fileId ?? r.uuid ?? r.resume_id;
+// //             return String(id) === String(storedResumeId);
+// //           });
+// //         }
+
+// //         // 2. Try matching by stored resume file name if ID match fails
+// //         if (!targetResume && storedResumeData) {
+// //           const storedName = storedResumeData.fileName || storedResumeData.name || storedResumeData.originalName;
+// //           if (storedName) {
+// //             targetResume = list.find((r) => {
+// //               const rName = r.fileName || r.name || r.originalName;
+// //               return rName && rName === storedName;
+// //             });
+// //           }
+// //         }
+
+// //         // 3. Fallback to primary resume or first resume in list
+// //         if (!targetResume) {
+// //           targetResume = list.find((r) => r.isPrimary === true) || list[0];
+// //         }
+
+// //         setSelectedResume(targetResume);
+// //         targetResumeId = targetResume?.id ?? targetResume?.resumeId ?? targetResume?._id ?? targetResume?.fileId ?? targetResume?.uuid ?? targetResume?.resume_id;
+
+// //         if (targetResumeId !== undefined && targetResumeId !== null) {
+// //           const strId = String(targetResumeId);
+// //           setActiveResumeId(strId);
+// //           saveResumeSelection(targetResume, strId);
+// //         }
+// //       }
+// //       jobsCacheRef.current = {};
+// //       setJobsCache({});
+// //       if (loadPageRef.current) {
+// //         loadPageRef.current(1, { forceRefresh: true, customResumeId: targetResumeId });
+// //       }
+// //     } catch (err) {
+// //       console.error("[BrowseJobs] Error fetching resumes list:", err);
+// //       jobsCacheRef.current = {};
+// //       setJobsCache({});
+// //       if (loadPageRef.current) {
+// //         loadPageRef.current(1, { forceRefresh: true });
+// //       }
+// //     } finally {
+// //       setIsLoadingResumes(false);
+// //     }
+// //   }, []);
+
+// //   // Handle selecting a resume from the dropdown (fetches GET /api/jobs?resumeId=...)
+// //   const handleSelectResume = (resume) => {
+// //     if (!resume) return;
+// //     setSelectedResume(resume);
+// //     setIsResumeDropdownOpen(false);
+// //     const resumeId = resume.id ?? resume.resumeId ?? resume._id ?? resume.fileId ?? resume.uuid ?? resume.resume_id;
+
+// //     if (resumeId !== undefined && resumeId !== null) {
+// //       const strId = String(resumeId);
+// //       setActiveResumeId(strId);
+// //       saveResumeSelection(resume, strId);
+// //       jobsCacheRef.current = {};
+// //       setJobsCache({});
+// //       loadPage(1, { forceRefresh: true, customResumeId: resumeId });
+// //     }
+// //   };
+
+// //   // Trigger initial Page 1 fetch immediately when component mounts
+// //   useEffect(() => {
+// //     let isMounted = true;
+// //     fetchUserResumes();
+
+// //     const handleJobMatchesUpdated = () => {
+// //       if (isMounted && loadPageRef.current) {
+// //         jobsCacheRef.current = {};
+// //         setJobsCache({});
+// //         loadPageRef.current(1, { forceRefresh: true });
+// //       }
+// //     };
+
+// //     window.addEventListener("jobMatchesUpdated", handleJobMatchesUpdated);
+// //     window.addEventListener("storage", handleJobMatchesUpdated);
+// //     return () => {
+// //       isMounted = false;
+// //       window.removeEventListener("jobMatchesUpdated", handleJobMatchesUpdated);
+// //       window.removeEventListener("storage", handleJobMatchesUpdated);
+// //     };
+// //   }, [fetchUserResumes]);
+
+// //   // Click outside listener to close resume dropdown
+// //   useEffect(() => {
+// //     const handleClickOutside = (event) => {
+// //       if (
+// //         resumeDropdownRef.current &&
+// //         !resumeDropdownRef.current.contains(event.target)
+// //       ) {
+// //         setIsResumeDropdownOpen(false);
+// //       }
+// //     };
+// //     document.addEventListener("mousedown", handleClickOutside);
+// //     return () => {
+// //       document.removeEventListener("mousedown", handleClickOutside);
+// //     };
+// //   }, []);
+
+
+// //   // Enhance Resume Action Handler (POST /api/jobs/{jobId}/enhance -> GET /api/jobs/{jobId}/enhance)
+// //   const handleEnhanceResume = async () => {
+// //     if (isEnhancing || !selectedJobModal) return;
+// //     setEnhanceError(null);
+// //     setEnhanceSuccess(null);
+
+// //     const selectedJobId = getJobId(selectedJobModal);
+
+// //     console.log("[BrowseJobs] Triggering Enhance Resume for Job ID:", selectedJobId);
+
+// //     if (!selectedJobId) {
+// //       setEnhanceError("Job ID is missing. Please select a valid job to enhance.");
+// //       return;
+// //     }
+
+// //     try {
+// //       setIsEnhancing(true);
+
+// //       const result = await getEnhancedResume(selectedJobId);
+// //       console.log("[BrowseJobs] Enhance Resume API Result:", result);
+
+// //       if (result?.status === "NO_BRIDGEABLE_GAPS") {
+// //         setEnhanceSuccess(
+// //           result?.message || "No bridgeable skill gaps identified for this role."
+// //         );
+// //       } else if (result?.status === "NOT_NEEDED") {
+// //         setEnhanceSuccess(
+// //           result?.message || "Resume enhancement is not needed for this role."
+// //         );
+// //       } else {
+// //         setEnhancedResultsMap((prev) => ({
+// //           ...prev,
+// //           [selectedJobId]: result,
+// //         }));
+// //         setEnhanceSuccess(
+// //           result?.message || "Resume successfully enhanced for this role!"
+// //         );
+// //       }
+// //     } catch (err) {
+// //       console.error("[BrowseJobs] Enhance Resume Error:", err);
+// //       const errMsg =
+// //         err?.response?.data?.message ||
+// //         err?.response?.data?.detail ||
+// //         err?.response?.data?.error ||
+// //         err?.message ||
+// //         "Unable to enhance resume. Please try again.";
+// //       setEnhanceError(errMsg);
+// //     } finally {
+// //       setIsEnhancing(false);
+// //     }
+// //   };
+
+// //   const handleCopyEnhancedResume = (text) => {
+// //     if (!text) return;
+// //     navigator.clipboard.writeText(text);
+// //     setCopiedResume(true);
+// //     setTimeout(() => setCopiedResume(false), 2500);
+// //   };
+
+// //   const handleDownloadEnhancedResume = async (text, job) => {
+// //     const targetJob = job || selectedJobModal;
+// //     const jobId = getJobId(targetJob);
+// //     const jobTitle = (targetJob?.title || "Enhanced_Resume").replace(/[^a-zA-Z0-9_-]/g, "_");
+// //     const fallbackFilename = `${jobTitle}_Resume.docx`;
+
+// //     if (jobId) {
+// //       try {
+// //         setIsDownloadingResume(true);
+// //         await downloadEnhancedResume(jobId, fallbackFilename);
+// //         setIsDownloadingResume(false);
+// //         return;
+// //       } catch (err) {
+// //         console.warn("[BrowseJobs] API download enhanced resume failed, fallback to text blob:", err);
+// //         setIsDownloadingResume(false);
+// //       }
+// //     }
+
+// //     if (!text) return;
+// //     const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+// //     const url = URL.createObjectURL(blob);
+// //     const link = document.createElement("a");
+// //     link.href = url;
+// //     link.download = `${jobTitle}_Resume.txt`;
+// //     document.body.appendChild(link);
+// //     link.click();
+// //     document.body.removeChild(link);
+// //     URL.revokeObjectURL(url);
+// //   };
+
+
+
+// //   useEffect(() => {
+// //     const handleClickOutside = (event) => {
+// //       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+// //         setActiveDropdown(null);
+// //       }
+// //     };
+
+// //     const handleKeyDown = (event) => {
+// //       if (event.key === "Escape") {
+// //         setSelectedJobModal(null);
+// //         setActiveDropdown(null);
+// //       }
+// //     };
+
+// //     document.addEventListener("mousedown", handleClickOutside);
+// //     window.addEventListener("keydown", handleKeyDown);
+// //     return () => {
+// //       document.removeEventListener("mousedown", handleClickOutside);
+// //       window.removeEventListener("keydown", handleKeyDown);
+// //     };
+// //   }, []);
+
+// //   const handleClear = () => {
+// //     setSearchQuery("");
+// //     setSelectedDate("All time");
+// //     setSelectedLocations([]);
+// //     setLocationSearch("");
+// //     setSelectedWorkplace([]);
+// //     setSelectedCompanies([]);
+// //     setCompanySearch("");
+// //     setSelectedExperience("");
+// //     setSelectedRoles([]);
+// //     setSelectedJobTypes([]);
+// //     setSponsorsVisa(false);
+// //     setSortOption("best_match");
+// //     setActiveDropdown(null);
+// //     jobsCacheRef.current = {};
+// //     setJobsCache({});
+// //     setActivePage(1);
+// //     loadPage(1, {
+// //       forceRefresh: true,
+// //       customQuery: "",
+// //       customSort: "best_match",
+// //       overrideFilters: {
+// //         locations: [],
+// //         roles: [],
+// //         workplace: [],
+// //         jobTypes: [],
+// //         date: "All time",
+// //       },
+// //     });
+// //   };
+
+// //   const toggleDropdown = (name) => {
+// //     setActiveDropdown((prev) => (prev === name ? null : name));
+// //   };
+
+// //   const toggleCheckbox = (list, setList, item) => {
+// //     if (list.includes(item)) {
+// //       setList(list.filter((i) => i !== item));
+// //     } else {
+// //       setList([...list, item]);
+// //     }
+// //   };
+
+// //   // Flatten all cached jobs across pages for options extraction
+// //   const allCachedJobs = useMemo(() => {
+// //     return Object.values(jobsCache).flat();
+// //   }, [jobsCache]);
+
+// //   // Dynamically extract filter options from cached jobs
+// //   const dynamicCompanyOptions = useMemo(() => {
+// //     const set = new Set();
+// //     allCachedJobs.forEach((j) => {
+// //       if (j.company && j.company !== "Hiring Organization") {
+// //         set.add(j.company);
+// //       }
+// //     });
+// //     return Array.from(set);
+// //   }, [allCachedJobs]);
+
+// //   const dynamicRoleOptions = useMemo(() => {
+// //     const set = new Set();
+// //     allCachedJobs.forEach((j) => {
+// //       if (j.title && !j.title.startsWith("Position #")) {
+// //         set.add(j.title);
+// //       }
+// //     });
+// //     return Array.from(set);
+// //   }, [allCachedJobs]);
+
+// //   const dynamicLocationOptions = useMemo(() => {
+// //     const set = new Set();
+// //     allCachedJobs.forEach((j) => {
+// //       if (j.location && j.location !== "Remote / Flexible") {
+// //         set.add(j.location);
+// //       }
+// //     });
+// //     return Array.from(set);
+// //   }, [allCachedJobs]);
+
+// //   // Filter all cached jobs across all loaded pages
+// //   const allFilteredJobs = useMemo(() => {
+// //     return allCachedJobs.filter((job) => {
+// //       // Exclude already submitted jobs from Browse & Apply
+// //       if (isJobSubmitted(job, submittedJobIdSet, applicationMap)) {
+// //         return false;
+// //       }
+
+// //       if (searchQuery.trim()) {
+// //         const q = searchQuery.toLowerCase().trim();
+// //         const matchTitle = (job.title || "").toLowerCase().includes(q);
+// //         const matchComp = (job.company || "").toLowerCase().includes(q);
+// //         const matchLoc = (job.location || "").toLowerCase().includes(q);
+// //         const matchDesc = (job.description || "").toLowerCase().includes(q);
+// //         const matchSkills =
+// //           Array.isArray(job.requiredSkills) &&
+// //           job.requiredSkills.some((s) => s.toLowerCase().includes(q));
+// //         if (!matchTitle && !matchComp && !matchLoc && !matchDesc && !matchSkills) {
+// //           return false;
+// //         }
+// //       }
+// //       if (selectedDate && selectedDate !== "All time") {
+// //         if (job.createdAt || job.postedAt || job.date) {
+// //           const jobTime = new Date(job.createdAt || job.postedAt || job.date).getTime();
+// //           const now = Date.now();
+// //           if (!isNaN(jobTime)) {
+// //             let maxAgeMs = Infinity;
+// //             if (selectedDate === "Last 6 hours") maxAgeMs = 6 * 60 * 60 * 1000;
+// //             else if (selectedDate === "Last 24 hours") maxAgeMs = 24 * 60 * 60 * 1000;
+// //             else if (selectedDate === "Last 7 days") maxAgeMs = 7 * 24 * 60 * 60 * 1000;
+// //             else if (selectedDate === "Last 14 days") maxAgeMs = 14 * 24 * 60 * 60 * 1000;
+// //             else if (selectedDate === "Last 30 days") maxAgeMs = 30 * 24 * 60 * 60 * 1000;
+
+// //             if (now - jobTime > maxAgeMs) return false;
+// //           }
+// //         }
+// //       }
+// //       if (selectedLocations.length > 0) {
+// //         const jobLoc = (job.location || job.fullLocation || "").toLowerCase();
+// //         const matchesLoc = selectedLocations.some((loc) =>
+// //           jobLoc.includes(loc.toLowerCase().split(",")[0].trim())
+// //         );
+// //         if (!matchesLoc) return false;
+// //       }
+// //       if (selectedCompanies.length > 0) {
+// //         const jobComp = (job.company || "").toLowerCase();
+// //         const matchesComp = selectedCompanies.some((comp) =>
+// //           jobComp.includes(comp.toLowerCase().trim())
+// //         );
+// //         if (!matchesComp) return false;
+// //       }
+// //       if (selectedRoles.length > 0) {
+// //         const jobRole = (job.title || "").toLowerCase();
+// //         const matchesRole = selectedRoles.some((role) =>
+// //           jobRole.includes(role.toLowerCase().trim())
+// //         );
+// //         if (!matchesRole) return false;
+// //       }
+// //       if (selectedWorkplace.length > 0) {
+// //         const jobMode = (job.workMode || job.workplace || "").toLowerCase();
+// //         const matchesWorkMode = selectedWorkplace.some((m) =>
+// //           jobMode.includes(m.toLowerCase().trim())
+// //         );
+// //         if (!matchesWorkMode) return false;
+// //       }
+// //       if (selectedJobTypes.length > 0) {
+// //         const jobType = (job.type || job.employmentType || "").toLowerCase();
+// //         const matchesType = selectedJobTypes.some((t) =>
+// //           jobType.includes(t.toLowerCase().trim())
+// //         );
+// //         if (!matchesType) return false;
+// //       }
+// //       return true;
+// //     });
+// //   }, [
+// //     allCachedJobs,
+// //     submittedJobIdSet,
+// //     applicationMap,
+// //     searchQuery,
+// //     selectedDate,
+// //     selectedLocations,
+// //     selectedCompanies,
+// //     selectedRoles,
+// //     selectedWorkplace,
+// //     selectedJobTypes,
+// //   ]);
+
+// //   // Derived total pages for pagination controls
+// //   const totalFilteredPages = Math.max(1, Math.ceil(allFilteredJobs.length / pageSize));
+// //   const displayTotalPages =
+// //     totalPages > totalFilteredPages && hasMoreJobs
+// //       ? totalPages
+// //       : totalFilteredPages;
+
+// //   // Active slice of jobs for the current page (strictly derived from allFilteredJobs)
+// //   const displayedJobs = useMemo(() => {
+// //     const startIdx = (activePage - 1) * pageSize;
+// //     const endIdx = startIdx + pageSize;
+// //     return allFilteredJobs.slice(startIdx, endIdx);
+// //   }, [allFilteredJobs, activePage, pageSize]);
+
+// //   // Auto-fetch next page if filtering submitted jobs left the current page with empty slots
+// //   useEffect(() => {
+// //     const neededCount = activePage * pageSize;
+// //     if (!isLoadingJobs && !isLoadingPage && hasMoreJobs && allFilteredJobs.length < neededCount) {
+// //       const cachedPages = Object.keys(jobsCache).map(Number).filter((n) => !isNaN(n));
+// //       const maxCached = cachedPages.length > 0 ? Math.max(...cachedPages) : 0;
+// //       const nextPage = maxCached + 1;
+// //       if (nextPage <= totalPages && !fetchingPagesRef.current.has(nextPage)) {
+// //         if (loadPageRef.current) {
+// //           loadPageRef.current(nextPage);
+// //         }
+// //       }
+// //     }
+// //   }, [
+// //     allFilteredJobs.length,
+// //     activePage,
+// //     pageSize,
+// //     hasMoreJobs,
+// //     isLoadingJobs,
+// //     isLoadingPage,
+// //     totalPages,
+// //     jobsCache,
+// //   ]);
+
+// //   // Aliased for full compatibility with existing JSX
+// //   const filteredJobs = displayedJobs;
+
+// //   // Auto-reset activePage to 1 if activePage exceeds displayTotalPages
+// //   useEffect(() => {
+// //     if (activePage > displayTotalPages && displayTotalPages > 0) {
+// //       setActivePage(1);
+// //     }
+// //   }, [activePage, displayTotalPages]);
+
+// //   // Reset to page 1 and fetch backend filtered results whenever search query or filters change
+// //   useEffect(() => {
+// //     setActivePage(1);
+// //     jobsCacheRef.current = {};
+// //     setJobsCache({});
+// //     if (loadPageRef.current) {
+// //       loadPageRef.current(1, { forceRefresh: true });
+// //     }
+// //   }, [
+// //     searchQuery,
+// //     selectedLocations,
+// //     selectedCompanies,
+// //     selectedRoles,
+// //     selectedWorkplace,
+// //     selectedJobTypes,
+// //     selectedDate,
+// //   ]);
+
+// //   // Determine dynamic visible pages for pagination controls
+// //   const visiblePages = useMemo(() => {
+// //     const highestPage = Math.max(1, displayTotalPages);
+// //     if (highestPage <= 5) {
+// //       return Array.from({ length: highestPage }, (_, i) => i + 1);
+// //     }
+// //     let start = Math.max(1, activePage - 2);
+// //     let end = Math.min(highestPage, start + 4);
+// //     if (end - start < 4) {
+// //       start = Math.max(1, end - 4);
+// //     }
+// //     const pages = [];
+// //     for (let i = start; i <= end; i++) {
+// //       pages.push(i);
+// //     }
+// //     return pages;
+// //   }, [displayTotalPages, activePage]);
+
+// //   // Handle Page Change with Cache & In-Memory Checking
+// //   const handlePageChange = (targetPage) => {
+// //     if (targetPage < 1 || targetPage === activePage || targetPage > displayTotalPages) {
+// //       return;
+// //     }
+// //     const startIdx = (targetPage - 1) * pageSize;
+// //     // 1. If target page jobs are already loaded in allFilteredJobs:
+// //     if (startIdx < allFilteredJobs.length) {
+// //       setActivePage(targetPage);
+// //       return;
+// //     }
+// //     // 2. If target page jobs are cached in jobsCache directly:
+// //     if (jobsCacheRef.current[targetPage] && jobsCacheRef.current[targetPage].length > 0) {
+// //       setActivePage(targetPage);
+// //       return;
+// //     }
+// //     // 3. Otherwise fetch from server if more jobs might be available
+// //     if (hasMoreJobs) {
+// //       loadPage(targetPage);
+// //     }
+// //   };
+
+// //   return (
+// //     <div className="flex h-screen overflow-hidden bg-[#F8FAFC]">
+// //       {/* Left Sidebar */}
+// //       <Sidebar />
+
+// //       {/* Main Content Area (Scrollable) */}
+// //       <div className="flex min-w-0 flex-1 flex-col h-screen overflow-y-auto bg-[#F8FAFC]">
+// //         {/* Top Header */}
+// //         <Header />
+
+// //         {/* Browse Jobs Main Content */}
+// //         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-7 flex flex-col gap-6 w-full bg-[#F8FAFC]">
+// //           {/* Page Heading & Actions */}
+// //           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 w-full">
+// //             {/* Page Heading */}
+// //             <div className="flex flex-col gap-1 min-w-0">
+              
+// //               <h1 className="text-[20px] md:text-[22px] font-bold text-black tracking-tight">
+// //                Full Time Apply One At A Time
+// //               </h1>
+// //               <p className="text-[13px] text-[#64748B]">
+// //                 Discover and browse all job opportunities matched to your resume from our live matching engine.
+// //               </p>
+// //             </div>
+
+// //             {/* Select Resume Dropdown (Aligned Right - Prominent & Enlarged) */}
+// //             <div className="relative shrink-0 self-start sm:self-center" ref={resumeDropdownRef}>
+// //               <button
+// //                 type="button"
+// //                 onClick={() => setIsResumeDropdownOpen((prev) => !prev)}
+// //                 className="h-[50px] sm:h-[52px] px-4 sm:px-5 rounded-[14px] bg-white border border-[#CBD5E1] hover:border-[#4F46E5] hover:shadow-md transition-all flex items-center gap-3 text-[#0F172A] cursor-pointer"
+// //               >
+// //                 {/* Document / Resume Icon */}
+// //                 <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#EEF2FF] text-[#4F46E5] flex items-center justify-center shrink-0 shadow-2xs">
+// //                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
+// //                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+// //                     <polyline points="14 2 14 8 20 8" />
+// //                     <line x1="16" y1="13" x2="8" y2="13" />
+// //                     <line x1="16" y1="17" x2="8" y2="17" />
+// //                   </svg>
+// //                 </div>
+
+// //                 {/* Selected Resume Info */}
+// //                 <div className="flex flex-col text-left max-w-[200px] sm:max-w-[300px] leading-snug">
+// //                   <span className="text-[10.5px] sm:text-[11px] uppercase font-bold text-[#475569] tracking-wider">
+// //                     {isSettingPrimary ? "Updating..." : "Active Resume"}
+// //                   </span>
+// //                   <span className="text-[13.5px] sm:text-[14.5px] font-bold text-[#0F172A] truncate">
+// //                     {isLoadingResumes ? (
+// //                       "Loading resumes..."
+// //                     ) : selectedResume ? (
+// //                       selectedResume.fileName || selectedResume.name || selectedResume.originalName || "Selected Resume"
+// //                     ) : (
+// //                       "Select Resume"
+// //                     )}
+// //                   </span>
+// //                 </div>
+
+// //                 {/* Primary Tag if selected resume is primary */}
+// //                 {selectedResume?.isPrimary && !isSettingPrimary && (
+// //                   <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-[#EEF2FF] text-[#4F46E5] border border-indigo-200 shrink-0">
+// //                     <svg className="w-3 h-3 text-[#4F46E5]" fill="currentColor" viewBox="0 0 20 20">
+// //                       <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+// //                     </svg>
+// //                     Primary
+// //                   </span>
+// //                 )}
+
+// //                 {/* Chevron Icon */}
+// //                 <svg
+// //                   className={`w-5 h-5 text-[#64748B] transition-transform duration-200 shrink-0 ${isResumeDropdownOpen ? "rotate-180" : ""
+// //                     }`}
+// //                   fill="none"
+// //                   viewBox="0 0 24 24"
+// //                   stroke="currentColor"
+// //                   strokeWidth="2"
+// //                 >
+// //                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+// //                 </svg>
+// //               </button>
+
+// //               {/* Dropdown Menu Popup (Enlarged & Prominent) */}
+// //               {isResumeDropdownOpen && (
+// //                 <div className="absolute right-0 mt-2 w-80 sm:w-[380px] bg-white rounded-[18px] border border-[#CBD5E1] shadow-2xl z-50 overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-150">
+// //                   <div className="px-4 py-3 border-b border-[#F1F5F9] flex items-center justify-between bg-[#F8FAFC]">
+// //                     <span className="text-[12px] font-bold text-[#0F172A] uppercase tracking-wider">
+// //                       Select Resume
+// //                     </span>
+// //                     <span className="text-[12px] font-semibold text-[#475569] bg-white px-2.5 py-0.5 rounded-full border border-[#E2E8F0]">
+// //                       {userResumes.length} {userResumes.length === 1 ? "resume" : "resumes"}
+// //                     </span>
+// //                   </div>
+
+// //                   <div className="max-h-[300px] overflow-y-auto p-2 space-y-1.5">
+// //                     {isLoadingResumes ? (
+// //                       <div className="p-5 text-center text-sm font-medium text-[#64748B]">
+// //                         Loading resumes...
+// //                       </div>
+// //                     ) : userResumes.length === 0 ? (
+// //                       <div className="p-5 text-center">
+// //                         <p className="text-sm text-[#64748B] mb-2.5">No uploaded resumes found</p>
+// //                         <button
+// //                           type="button"
+// //                           onClick={() => {
+// //                             setIsResumeDropdownOpen(false);
+// //                             navigate("/profile");
+// //                           }}
+// //                           className="px-4 py-2 bg-[#4F46E5] text-white text-xs font-bold rounded-xl hover:bg-[#4338CA] transition-colors cursor-pointer"
+// //                         >
+// //                           Upload in Profile
+// //                         </button>
+// //                       </div>
+// //                     ) : (
+// //                       userResumes.map((resume, idx) => {
+// //                         const resumeId = resume.id ?? resume.resumeId ?? resume._id ?? resume.fileId ?? resume.uuid ?? resume.resume_id;
+// //                         const selectedId = selectedResume?.id ?? selectedResume?.resumeId ?? selectedResume?._id ?? selectedResume?.fileId ?? selectedResume?.uuid ?? selectedResume?.resume_id;
+// //                         const isSelected = String(resumeId) === String(selectedId);
+// //                         const resumeName = resume.fileName || resume.name || resume.originalName || `Resume ${idx + 1}`;
+// //                         const isPrimary = Boolean(resume.isPrimary === true);
+
+// //                         return (
+// //                           <button
+// //                             key={resumeId || idx}
+// //                             type="button"
+// //                             onClick={() => handleSelectResume(resume)}
+// //                             className={`w-full p-3 rounded-[12px] text-left transition-all flex items-center justify-between gap-3 cursor-pointer ${isSelected
+// //                               ? "bg-[#EEF2FF] border border-indigo-200 shadow-2xs"
+// //                               : "hover:bg-[#F8FAFC] border border-transparent"
+// //                               }`}
+// //                           >
+// //                             <div className="flex items-center gap-3 min-w-0 flex-1">
+// //                               <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${isSelected ? "bg-[#4F46E5] text-white shadow-2xs" : "bg-slate-100 text-slate-500"
+// //                                 }`}>
+// //                                 <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+// //                                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+// //                                   <polyline points="14 2 14 8 20 8" />
+// //                                 </svg>
+// //                               </div>
+// //                               <div className="flex flex-col min-w-0">
+// //                                 <span className={`text-[13.5px] sm:text-[14px] font-bold truncate ${isSelected ? "text-[#4F46E5]" : "text-[#0F172A]"
+// //                                   }`}>
+// //                                   {resumeName}
+// //                                 </span>
+// //                                 {resume.createdAt && (
+// //                                   <span className="text-[11px] text-[#64748B]">
+// //                                     Uploaded {new Date(resume.createdAt).toLocaleDateString()}
+// //                                   </span>
+// //                                 )}
+// //                               </div>
+// //                             </div>
+
+// //                             <div className="flex items-center gap-2 shrink-0">
+// //                               {isPrimary && (
+// //                                 <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#EEF2FF] text-[#4F46E5] border border-indigo-200">
+// //                                   Primary
+// //                                 </span>
+// //                               )}
+// //                               {isSelected && (
+// //                                 <svg className="w-5 h-5 text-[#4F46E5]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+// //                                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+// //                                 </svg>
+// //                               )}
+// //                             </div>
+// //                           </button>
+// //                         );
+// //                       })
+// //                     )}
+// //                   </div>
+
+// //                   <div className="p-3 border-t border-[#F1F5F9] bg-[#F8FAFC] flex items-center justify-between">
+// //                     <button
+// //                       type="button"
+// //                       onClick={() => {
+// //                         setIsResumeDropdownOpen(false);
+// //                         navigate("/profile");
+// //                       }}
+// //                       className="w-full py-2 px-3 text-center text-[12.5px] font-bold text-[#4F46E5] hover:text-[#4338CA] hover:bg-white rounded-xl transition-all border border-transparent hover:border-[#E2E8F0] cursor-pointer"
+// //                     >
+// //                       + Manage / Upload Resumes in Profile
+// //                     </button>
+// //                   </div>
+// //                 </div>
+// //               )}
+// //             </div>
+// //           </div>
+
+// //           {/* Search & Filter Container */}
+// //           <div
+// //             ref={dropdownRef}
+// //             className="bg-white rounded-[20px] border border-[#E2E8F0] p-4.5 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col gap-3.5 relative z-10"
+// //           >
+// //             {/* First Row: Search Input + Clear */}
+// //             <div className="flex items-center gap-3 w-full">
+// //               <div className="flex-1 flex items-center gap-2.5 px-3.5 h-[42px] rounded-[10px] border border-[#E2E8F0] bg-white focus-within:border-slate-400 focus-within:ring-2 focus-within:ring-slate-100 transition-all">
+// //                 <svg
+// //                   className="w-4 h-4 text-[#94A3B8] shrink-0"
+// //                   fill="none"
+// //                   viewBox="0 0 24 24"
+// //                   stroke="currentColor"
+// //                   strokeWidth="2"
+// //                 >
+// //                   <circle cx="11" cy="11" r="7" />
+// //                   <path d="m20 20-3.5-3.5" />
+// //                 </svg>
+// //                 <input
+// //                   type="text"
+// //                   value={searchQuery}
+// //                   onChange={(e) => setSearchQuery(e.target.value)}
+// //                   onKeyDown={(e) => {
+// //                     if (e.key === "Enter") {
+// //                       jobsCacheRef.current = {};
+// //                       setJobsCache({});
+// //                       loadPage(1, { forceRefresh: true });
+// //                     }
+// //                   }}
+// //                   placeholder="Search by title, keyword, company or skills..."
+// //                   className="w-full bg-transparent border-none text-[13.5px] text-[#0F172A] placeholder:text-[#94A3B8] outline-none"
+// //                 />
+// //               </div>
+
+// //               <button
+// //                 type="button"
+// //                 onClick={handleClear}
+// //                 className="h-[42px] px-3 flex items-center gap-1 text-[13.5px] font-medium text-[#64748B] hover:text-[#0F172A] transition-colors cursor-pointer"
+// //               >
+// //                 <span className="text-base leading-none">✕</span>
+// //                 <span>Clear</span>
+// //               </button>
+// //             </div>
+
+// //             {/* Second Row: Filter Buttons */}
+// //             <div className="flex items-center gap-2 flex-wrap pt-0.5 relative">
+// //               {/* Date Dropdown */}
+// //               <div className="relative">
+// //                 <button
+// //                   type="button"
+// //                   onClick={() => toggleDropdown("date")}
+// //                   className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "date" || (selectedDate && selectedDate !== "All time")
+// //                     ? "border-[#4F46E5] bg-[#EEF2FF] text-[#4F46E5] font-semibold"
+// //                     : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+// //                     }`}
+// //                 >
+// //                   <span>{selectedDate && selectedDate !== "All time" ? `Date: ${selectedDate}` : "Date"}</span>
+// //                   <svg
+// //                     className={`w-3 h-3 transition-transform ${selectedDate && selectedDate !== "All time" ? "text-[#4F46E5]" : "text-[#94A3B8]"} ${activeDropdown === "date" ? "rotate-180" : ""}`}
+// //                     viewBox="0 0 24 24"
+// //                     fill="none"
+// //                     stroke="currentColor"
+// //                     strokeWidth="2.5"
+// //                   >
+// //                     <path d="m6 9 6 6 6-6" />
+// //                   </svg>
+// //                 </button>
+
+// //                 {activeDropdown === "date" && (
+// //                   <div className="absolute top-full left-0 mt-2 w-[180px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2 z-50 flex flex-col gap-0.5">
+// //                     {dateOptions.map((opt) => {
+// //                       const isSelected = selectedDate === opt;
+// //                       return (
+// //                         <div
+// //                           key={opt}
+// //                           onClick={() => {
+// //                             setSelectedDate(opt);
+// //                             setActiveDropdown(null);
+// //                           }}
+// //                           className={`flex items-center gap-2.5 px-3 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] ${isSelected
+// //                             ? "font-semibold text-[#0F172A] bg-slate-50"
+// //                             : "text-slate-700"
+// //                             }`}
+// //                         >
+// //                           <div
+// //                             className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${isSelected
+// //                               ? "border-[#0F4C3A] bg-[#0F4C3A] text-white"
+// //                               : "border-slate-300"
+// //                               }`}
+// //                           >
+// //                             {isSelected && (
+// //                               <svg
+// //                                 className="w-2 h-2"
+// //                                 viewBox="0 0 24 24"
+// //                                 fill="none"
+// //                                 stroke="currentColor"
+// //                                 strokeWidth="4"
+// //                               >
+// //                                 <polyline points="20 6 9 17 4 12" />
+// //                               </svg>
+// //                             )}
+// //                           </div>
+// //                           <span>{opt}</span>
+// //                         </div>
+// //                       );
+// //                     })}
+// //                   </div>
+// //                 )}
+// //               </div>
+
+// //               {/* Location Dropdown */}
+// //               <div className="relative">
+// //                 <button
+// //                   type="button"
+// //                   onClick={() => toggleDropdown("location")}
+// //                   className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "location" || selectedLocations.length > 0
+// //                     ? "border-[#4F46E5] bg-[#EEF2FF] text-[#4F46E5] font-semibold"
+// //                     : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+// //                     }`}
+// //                 >
+// //                   <span>{selectedLocations.length > 0 ? `Location (${selectedLocations.length})` : "Location"}</span>
+// //                   <svg
+// //                     className={`w-3 h-3 transition-transform ${selectedLocations.length > 0 ? "text-[#4F46E5]" : "text-[#94A3B8]"} ${activeDropdown === "location" ? "rotate-180" : ""}`}
+// //                     viewBox="0 0 24 24"
+// //                     fill="none"
+// //                     stroke="currentColor"
+// //                     strokeWidth="2.5"
+// //                   >
+// //                     <path d="m6 9 6 6 6-6" />
+// //                   </svg>
+// //                 </button>
+
+// //                 {activeDropdown === "location" && (
+// //                   <div className="absolute top-full left-0 mt-2 w-[240px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-3 z-50 flex flex-col gap-2">
+// //                     <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-[8px] border border-slate-200 bg-white">
+// //                       <svg
+// //                         className="w-3.5 h-3.5 text-slate-400 shrink-0"
+// //                         fill="none"
+// //                         viewBox="0 0 24 24"
+// //                         stroke="currentColor"
+// //                         strokeWidth="2"
+// //                       >
+// //                         <circle cx="11" cy="11" r="7" />
+// //                         <path d="m20 20-3.5-3.5" />
+// //                       </svg>
+// //                       <input
+// //                         type="text"
+// //                         placeholder="Search locations..."
+// //                         value={locationSearch}
+// //                         onChange={(e) => setLocationSearch(e.target.value)}
+// //                         className="w-full text-[12px] bg-transparent outline-none placeholder:text-slate-400 text-slate-700"
+// //                       />
+// //                     </div>
+
+// //                     <div className="flex flex-col gap-1 max-h-[220px] overflow-y-auto">
+// //                       {dynamicLocationOptions.length === 0 ? (
+// //                         <div className="text-xs text-slate-400 px-2 py-1">
+// //                           No locations available yet
+// //                         </div>
+// //                       ) : (
+// //                         dynamicLocationOptions
+// //                           .filter((loc) =>
+// //                             loc.toLowerCase().includes(locationSearch.toLowerCase())
+// //                           )
+// //                           .map((loc) => {
+// //                             const isChecked = selectedLocations.includes(loc);
+// //                             return (
+// //                               <div
+// //                                 key={loc}
+// //                                 onClick={() =>
+// //                                   toggleCheckbox(
+// //                                     selectedLocations,
+// //                                     setSelectedLocations,
+// //                                     loc
+// //                                   )
+// //                                 }
+// //                                 className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
+// //                               >
+// //                                 <div
+// //                                   className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
+// //                                     ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
+// //                                     : "border-slate-300 bg-white"
+// //                                     }`}
+// //                                 >
+// //                                   {isChecked && (
+// //                                     <svg
+// //                                       className="w-2.5 h-2.5"
+// //                                       viewBox="0 0 24 24"
+// //                                       fill="none"
+// //                                       stroke="currentColor"
+// //                                       strokeWidth="3.5"
+// //                                     >
+// //                                       <polyline points="20 6 9 17 4 12" />
+// //                                     </svg>
+// //                                   )}
+// //                                 </div>
+// //                                 <span>{loc}</span>
+// //                               </div>
+// //                             );
+// //                           })
+// //                       )}
+// //                     </div>
+// //                   </div>
+// //                 )}
+// //               </div>
+
+// //               {/* Role Dropdown */}
+// //               <div className="relative">
+// //                 <button
+// //                   type="button"
+// //                   onClick={() => toggleDropdown("role")}
+// //                   className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "role" || selectedRoles.length > 0
+// //                     ? "border-[#4F46E5] bg-[#EEF2FF] text-[#4F46E5] font-semibold"
+// //                     : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+// //                     }`}
+// //                 >
+// //                   <span>{selectedRoles.length > 0 ? `Role (${selectedRoles.length})` : "Role"}</span>
+// //                   <svg
+// //                     className={`w-3 h-3 transition-transform ${selectedRoles.length > 0 ? "text-[#4F46E5]" : "text-[#94A3B8]"} ${activeDropdown === "role" ? "rotate-180" : ""}`}
+// //                     viewBox="0 0 24 24"
+// //                     fill="none"
+// //                     stroke="currentColor"
+// //                     strokeWidth="2.5"
+// //                   >
+// //                     <path d="m6 9 6 6 6-6" />
+// //                   </svg>
+// //                 </button>
+
+// //                 {activeDropdown === "role" && (
+// //                   <div className="absolute top-full left-0 mt-2 w-[220px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2.5 z-50 flex flex-col gap-1 max-h-[220px] overflow-y-auto">
+// //                     {dynamicRoleOptions.length === 0 ? (
+// //                       <div className="text-xs text-slate-400 px-2 py-1">
+// //                         No roles available yet
+// //                       </div>
+// //                     ) : (
+// //                       dynamicRoleOptions.map((role) => {
+// //                         const isChecked = selectedRoles.includes(role);
+// //                         return (
+// //                           <div
+// //                             key={role}
+// //                             onClick={() =>
+// //                               toggleCheckbox(selectedRoles, setSelectedRoles, role)
+// //                             }
+// //                             className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
+// //                           >
+// //                             <div
+// //                               className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
+// //                                 ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
+// //                                 : "border-slate-300 bg-white"
+// //                                 }`}
+// //                             >
+// //                               {isChecked && (
+// //                                 <svg
+// //                                   className="w-2.5 h-2.5"
+// //                                   viewBox="0 0 24 24"
+// //                                   fill="none"
+// //                                   stroke="currentColor"
+// //                                   strokeWidth="3.5"
+// //                                 >
+// //                                   <polyline points="20 6 9 17 4 12" />
+// //                                 </svg>
+// //                               )}
+// //                             </div>
+// //                             <span className="truncate">{role}</span>
+// //                           </div>
+// //                         );
+// //                       })
+// //                     )}
+// //                   </div>
+// //                 )}
+// //               </div>
+
+// //               {/* Workplace Dropdown */}
+// //               <div className="relative">
+// //                 <button
+// //                   type="button"
+// //                   onClick={() => toggleDropdown("workplace")}
+// //                   className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "workplace" || selectedWorkplace.length > 0
+// //                     ? "border-[#4F46E5] bg-[#EEF2FF] text-[#4F46E5] font-semibold"
+// //                     : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+// //                     }`}
+// //                 >
+// //                   <span>{selectedWorkplace.length > 0 ? `Workplace (${selectedWorkplace.length})` : "Workplace"}</span>
+// //                   <svg
+// //                     className={`w-3 h-3 transition-transform ${selectedWorkplace.length > 0 ? "text-[#4F46E5]" : "text-[#94A3B8]"} ${activeDropdown === "workplace" ? "rotate-180" : ""}`}
+// //                     viewBox="0 0 24 24"
+// //                     fill="none"
+// //                     stroke="currentColor"
+// //                     strokeWidth="2.5"
+// //                   >
+// //                     <path d="m6 9 6 6 6-6" />
+// //                   </svg>
+// //                 </button>
+
+// //                 {activeDropdown === "workplace" && (
+// //                   <div className="absolute top-full left-0 mt-2 w-[180px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2.5 z-50 flex flex-col gap-1">
+// //                     {workplaceOptions.map((wp) => {
+// //                       const isChecked = selectedWorkplace.includes(wp);
+// //                       return (
+// //                         <div
+// //                           key={wp}
+// //                           onClick={() =>
+// //                             toggleCheckbox(selectedWorkplace, setSelectedWorkplace, wp)
+// //                           }
+// //                           className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
+// //                         >
+// //                           <div
+// //                             className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
+// //                               ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
+// //                               : "border-slate-300 bg-white"
+// //                               }`}
+// //                           >
+// //                             {isChecked && (
+// //                               <svg
+// //                                 className="w-2.5 h-2.5"
+// //                                 viewBox="0 0 24 24"
+// //                                 fill="none"
+// //                                 stroke="currentColor"
+// //                                 strokeWidth="3.5"
+// //                               >
+// //                                 <polyline points="20 6 9 17 4 12" />
+// //                               </svg>
+// //                             )}
+// //                           </div>
+// //                           <span>{wp}</span>
+// //                         </div>
+// //                       );
+// //                     })}
+// //                   </div>
+// //                 )}
+// //               </div>
+
+// //               {/* Companies Dropdown */}
+// //               <div className="relative">
+// //                 <button
+// //                   type="button"
+// //                   onClick={() => toggleDropdown("companies")}
+// //                   className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "companies" || selectedCompanies.length > 0
+// //                     ? "border-[#4F46E5] bg-[#EEF2FF] text-[#4F46E5] font-semibold"
+// //                     : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+// //                     }`}
+// //                 >
+// //                   <span>{selectedCompanies.length > 0 ? `Companies (${selectedCompanies.length})` : "Companies"}</span>
+// //                   <svg
+// //                     className={`w-3 h-3 transition-transform ${selectedCompanies.length > 0 ? "text-[#4F46E5]" : "text-[#94A3B8]"} ${activeDropdown === "companies" ? "rotate-180" : ""}`}
+// //                     viewBox="0 0 24 24"
+// //                     fill="none"
+// //                     stroke="currentColor"
+// //                     strokeWidth="2.5"
+// //                   >
+// //                     <path d="m6 9 6 6 6-6" />
+// //                   </svg>
+// //                 </button>
+
+// //                 {activeDropdown === "companies" && (
+// //                   <div className="absolute top-full left-0 mt-2 w-[240px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-3 z-50 flex flex-col gap-2">
+// //                     <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-[8px] border border-slate-200 bg-white">
+// //                       <svg
+// //                         className="w-3.5 h-3.5 text-slate-400 shrink-0"
+// //                         fill="none"
+// //                         viewBox="0 0 24 24"
+// //                         stroke="currentColor"
+// //                         strokeWidth="2"
+// //                       >
+// //                         <circle cx="11" cy="11" r="7" />
+// //                         <path d="m20 20-3.5-3.5" />
+// //                       </svg>
+// //                       <input
+// //                         type="text"
+// //                         placeholder="Search companies..."
+// //                         value={companySearch}
+// //                         onChange={(e) => setCompanySearch(e.target.value)}
+// //                         className="w-full text-[12px] bg-transparent outline-none placeholder:text-slate-400 text-slate-700"
+// //                       />
+// //                     </div>
+
+// //                     <div className="flex flex-col gap-1 max-h-[220px] overflow-y-auto">
+// //                       {dynamicCompanyOptions.length === 0 ? (
+// //                         <div className="text-xs text-slate-400 px-2 py-1">
+// //                           No companies available yet
+// //                         </div>
+// //                       ) : (
+// //                         dynamicCompanyOptions
+// //                           .filter((c) =>
+// //                             c.toLowerCase().includes(companySearch.toLowerCase())
+// //                           )
+// //                           .map((comp) => {
+// //                             const isChecked = selectedCompanies.includes(comp);
+// //                             return (
+// //                               <div
+// //                                 key={comp}
+// //                                 onClick={() =>
+// //                                   toggleCheckbox(
+// //                                     selectedCompanies,
+// //                                     setSelectedCompanies,
+// //                                     comp
+// //                                   )
+// //                                 }
+// //                                 className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
+// //                               >
+// //                                 <div
+// //                                   className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
+// //                                     ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
+// //                                     : "border-slate-300 bg-white"
+// //                                     }`}
+// //                                 >
+// //                                   {isChecked && (
+// //                                     <svg
+// //                                       className="w-2.5 h-2.5"
+// //                                       viewBox="0 0 24 24"
+// //                                       fill="none"
+// //                                       stroke="currentColor"
+// //                                       strokeWidth="3.5"
+// //                                     >
+// //                                       <polyline points="20 6 9 17 4 12" />
+// //                                     </svg>
+// //                                   )}
+// //                                 </div>
+// //                                 <span className="truncate">{comp}</span>
+// //                               </div>
+// //                             );
+// //                           })
+// //                       )}
+// //                     </div>
+// //                   </div>
+// //                 )}
+// //               </div>
+
+// //               {/* Sort & Auto Apply Actions */}
+// //               <div className="relative sm:ml-auto flex items-center gap-2.5 flex-wrap">
+// //                 {/* Sort Dropdown (Best Match vs Newest) */}
+// //                 <div className="relative">
+// //                   <button
+// //                     type="button"
+// //                     onClick={() => toggleDropdown("sort")}
+// //                     className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "sort" || sortOption !== "best_match"
+// //                       ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
+// //                       : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
+// //                       }`}
+// //                   >
+// //                     <span className="text-[#64748B]">Sort:</span>
+// //                     <span className="font-semibold text-[#0F172A]">
+// //                       {sortOption === "newest" ? "Newest First" : "Best ATS Match"}
+// //                     </span>
+// //                     <svg
+// //                       className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "sort" ? "rotate-180" : ""
+// //                         }`}
+// //                       viewBox="0 0 24 24"
+// //                       fill="none"
+// //                       stroke="currentColor"
+// //                       strokeWidth="2.5"
+// //                     >
+// //                       <path d="m6 9 6 6 6-6" />
+// //                     </svg>
+// //                   </button>
+
+// //                   {activeDropdown === "sort" && (
+// //                     <div className="absolute top-full right-0 mt-2 w-[190px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2 z-50 flex flex-col gap-0.5">
+// //                       <div
+// //                         onClick={() => {
+// //                           setSortOption("best_match");
+// //                           setActiveDropdown(null);
+// //                           jobsCacheRef.current = {};
+// //                           setJobsCache({});
+// //                           loadPage(1, { forceRefresh: true, customSort: "best_match" });
+// //                         }}
+// //                         className={`flex items-center justify-between px-3 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] ${sortOption === "best_match"
+// //                           ? "font-semibold text-[#0F172A] bg-slate-50"
+// //                           : "text-slate-700"
+// //                           }`}
+// //                       >
+// //                         <span>Best ATS Match</span>
+// //                         {sortOption === "best_match" && (
+// //                           <span className="text-[#4F46E5] text-xs font-bold">✓</span>
+// //                         )}
+// //                       </div>
+// //                       <div
+// //                         onClick={() => {
+// //                           setSortOption("newest");
+// //                           setActiveDropdown(null);
+// //                           jobsCacheRef.current = {};
+// //                           setJobsCache({});
+// //                           loadPage(1, { forceRefresh: true, customSort: "newest" });
+// //                         }}
+// //                         className={`flex items-center justify-between px-3 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] ${sortOption === "newest"
+// //                           ? "font-semibold text-[#0F172A] bg-slate-50"
+// //                           : "text-slate-700"
+// //                           }`}
+// //                       >
+// //                         <span>Newest First</span>
+// //                         {sortOption === "newest" && (
+// //                           <span className="text-[#4F46E5] text-xs font-bold">✓</span>
+// //                         )}
+// //                       </div>
+// //                     </div>
+// //                   )}
+// //                 </div>
+
+// //                 {/* Auto Apply All Button */}
+                
+// //               </div>
+// //             </div>
+// //           </div>
+
+
+
+// //           {/* Error Banner */}
+// //           {fetchError && (
+// //             <div className="p-4 rounded-[14px] bg-rose-50 border border-rose-200 text-rose-800 text-[13px] font-medium flex items-center justify-between gap-3 animate-in fade-in">
+// //               <div className="flex items-center gap-2">
+// //                 <span className="w-5 h-5 rounded-full bg-rose-600 text-white flex items-center justify-center text-[11px] font-bold shrink-0">!</span>
+// //                 <span>{fetchError}</span>
+// //               </div>
+// //               <button
+// //                 type="button"
+// //                 onClick={() => loadPage(activePage, { forceRefresh: true })}
+// //                 className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold cursor-pointer shrink-0 transition-colors"
+// //               >
+// //                 Retry
+// //               </button>
+// //             </div>
+// //           )}
+
+// //           {/* Application Status Error Banner */}
+// //           {statusError && (
+// //             <div className="p-4 rounded-[14px] bg-amber-50 border border-amber-200 text-amber-800 text-[13px] font-medium flex items-center justify-between gap-3 animate-in fade-in">
+// //               <div className="flex items-center gap-2">
+// //                 <span className="w-5 h-5 rounded-full bg-amber-600 text-white flex items-center justify-center text-[11px] font-bold shrink-0">!</span>
+// //                 <span>Application Status Error: {statusError}</span>
+// //               </div>
+// //               <button
+// //                 type="button"
+// //                 onClick={fetchApplicationStatuses}
+// //                 className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold cursor-pointer shrink-0 transition-colors"
+// //               >
+// //                 Retry Loading Statuses
+// //               </button>
+// //             </div>
+// //           )}
+
+// //           {/* Dynamic Job Cards Grid */}
+// //           {(() => {
+// //             return (
+// //               <>
+// //                 {isLoadingJobs ? (
+// //                   <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-16 text-center flex flex-col items-center justify-center gap-3">
+// //                     <svg className="animate-spin h-8 w-8 text-[#4F46E5]" fill="none" viewBox="0 0 24 24">
+// //                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+// //                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+// //                     </svg>
+// //                     <p className="text-[14px] font-medium text-slate-700">Loading stored job matches from server...</p>
+// //                   </div>
+// //                 ) : allCachedJobs.length === 0 ? (
+// //                   <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-12 text-center flex flex-col items-center justify-center gap-3">
+// //                     <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center text-[#4F46E5] mb-1">
+// //                       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+// //                         <circle cx="11" cy="11" r="7" />
+// //                         <path d="m20 20-3.5-3.5" />
+// //                       </svg>
+// //                     </div>
+// //                     <p className="text-[16px] font-bold text-slate-800">
+// //                       No stored job matches found
+// //                     </p>
+// //                     <p className="text-[13px] text-slate-500 max-w-md leading-relaxed">
+// //                       Upload or set a primary resume in your profile to enable automated ATS matching and job recommendations.
+// //                     </p>
+// //                     <div className="flex items-center gap-2.5 mt-2">
+// //                       <button
+// //                         type="button"
+// //                         onClick={() => navigate("/profile")}
+// //                         className="px-4 py-2 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-semibold rounded-xl transition-colors cursor-pointer shadow-xs"
+// //                       >
+// //                         Go to Profile & Resumes
+// //                       </button>
+// //                     </div>
+// //                   </div>
+// //                 ) : allFilteredJobs.length === 0 ? (
+// //                   <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-10 text-center flex flex-col items-center justify-center gap-3">
+// //                     <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+// //                       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+// //                         <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+// //                       </svg>
+// //                     </div>
+// //                     <p className="text-[15px] font-bold text-slate-800">No matching jobs found</p>
+// //                     <p className="text-[13px] text-slate-500 max-w-sm">
+// //                       No jobs match your current search or filter options. Try clearing or broadening your filters.
+// //                     </p>
+// //                     <button
+// //                       type="button"
+// //                       onClick={handleClear}
+// //                       className="mt-1 px-4 py-2 bg-[#EEF2FF] hover:bg-[#E0E7FF] text-[#4F46E5] text-xs font-semibold rounded-xl transition-colors cursor-pointer"
+// //                     >
+// //                       Clear Filters
+// //                     </button>
+// //                   </div>
+// //                 ) : (
+// //                   <>
+// //                     {statusError && (
+// //                       <div className="mb-4 p-4 rounded-[16px] bg-red-50 border border-red-200 text-red-700 text-[13.5px] flex items-center justify-between gap-4 shadow-xs">
+// //                         <div className="flex items-center gap-2.5">
+// //                           <svg className="w-5 h-5 text-red-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+// //                             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+// //                           </svg>
+// //                           <div>
+// //                             <span className="font-semibold">Application Status Error:</span> {statusError}
+// //                           </div>
+// //                         </div>
+// //                         <button
+// //                           type="button"
+// //                           onClick={fetchApplicationStatuses}
+// //                           className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer shrink-0"
+// //                         >
+// //                           Retry Status
+// //                         </button>
+// //                       </div>
+// //                     )}
+// //                     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4.5 w-full">
+// //                       {filteredJobs.map((job, idx) => (
+// //                         <div
+// //                           key={job.id || job.job_id || job.jobId || `job-${idx}`}
+// //                           onClick={() => handleOpenJobModal(job)}
+// //                           className="bg-white rounded-[20px] border border-[#E2E8F0] p-5 flex flex-col justify-between shadow-[0_1px_3px_rgba(15,23,42,0.02)] hover:shadow-md hover:border-slate-300 transition-all duration-200 min-h-[260px] cursor-pointer group"
+// //                         >
+// //                           <div>
+// //                             {/* Top Header: Logo + Match Badge */}
+// //                             <div className="flex items-center justify-between gap-2">
+// //                               {job.logo ? (
+// //                                 <div className="w-[40px] h-[40px] rounded-[10px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-1.5 overflow-hidden">
+// //                                   <img
+// //                                     src={job.logo}
+// //                                     alt={job.company || "Company Logo"}
+// //                                     className="w-full h-full object-contain"
+// //                                   />
+// //                                 </div>
+// //                               ) : (
+// //                                 <div className="w-[40px] h-[40px] rounded-[10px] bg-[#EEF2FF] border border-indigo-100/80 flex items-center justify-center shrink-0 text-[#4F46E5] shadow-2xs">
+// //                                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+// //                                     <path strokeLinecap="round" strokeLinejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+// //                                   </svg>
+// //                                 </div>
+// //                               )}
+// //                               {(() => {
+// //                                 const cardJobId = getJobId(job);
+// //                                 const cardEnh = cardJobId ? enhancedResultsMap[cardJobId] : null;
+// //                                 const cardScore = cardEnh?.enhancedScore ?? cardEnh?.enhanced_score ?? job.matchPercent;
+// //                                 const isCardEnhanced = !!(cardEnh?.enhancedScore ?? cardEnh?.enhanced_score);
+// //                                 return (
+// //                                   <span
+// //                                     className={`text-[12px] font-semibold px-2.5 py-0.5 rounded-full ${isCardEnhanced
+// //                                         ? "bg-[#EEF2FF] text-[#4F46E5] border border-[#C7D2FE]"
+// //                                         : (job.matchColor || "bg-[#EEF2FF] text-[#4F46E5]")
+// //                                       }`}
+// //                                   >
+// //                                     {cardScore !== null && cardScore !== undefined ? `${cardScore}% match` : (job.match || "ATS Match")}
+// //                                   </span>
+// //                                 );
+// //                               })()}
+// //                             </div>
+
+// //                             {/* Job Title & Company */}
+// //                             <div className="mt-3.5">
+// //                               <h3 className="text-[15px] font-bold text-[#0F172A] tracking-tight leading-snug group-hover:text-[#4F46E5] transition-colors line-clamp-2">
+// //                                 {job.title}
+// //                               </h3>
+// //                               <div className="flex items-center gap-1.5 text-[13px] text-[#64748B] font-normal mt-1 flex-wrap">
+// //                                 <span className="font-medium text-slate-700 truncate max-w-[140px]">{job.company}</span>
+// //                                 {job.companyDomain && (
+// //                                   <span className="text-[11px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded font-mono">
+// //                                     {job.companyDomain}
+// //                                   </span>
+// //                                 )}
+// //                                 <VerifiedTick />
+// //                               </div>
+// //                             </div>
+
+// //                             {/* Location, Workplace & Type Pills */}
+// //                             <div className="mt-3 flex flex-col gap-1.5">
+// //                               <div className="flex items-center gap-1.5 text-[12.5px] text-[#64748B]">
+// //                                 <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+// //                                   <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+// //                                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+// //                                 </svg>
+// //                                 <span className="truncate">{job.fullLocation || job.location}</span>
+// //                               </div>
+
+// //                               <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+// //                                 {job.workMode && (
+// //                                   <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 capitalize">
+// //                                     {job.workMode}
+// //                                   </span>
+// //                                 )}
+// //                                 {job.type && (
+// //                                   <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 capitalize">
+// //                                     {job.type}
+// //                                   </span>
+// //                                 )}
+// //                               </div>
+
+// //                               <div className="text-[11.5px] text-[#94A3B8] mt-0.5">
+// //                                 {job.posted}
+// //                               </div>
+// //                             </div>
+// //                           </div>
+
+// //                           {/* Action Buttons */}
+// //                           {(() => {
+// //                             const cardJobIdKey = job.id || job.jobId || extractNumericJobId(job);
+
+// //                             if (isStatusLoading) {
+// //                               return (
+// //                                 <div className="flex items-center gap-2.5 pt-4 mt-auto">
+// //                                   <button
+// //                                     type="button"
+// //                                     onClick={(e) => {
+// //                                       e.stopPropagation();
+// //                                       handleOpenJobModal(job);
+// //                                     }}
+// //                                     className="flex-1 h-[36px] font-medium rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#334155] hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-center"
+// //                                   >
+// //                                     View Details
+// //                                   </button>
+// //                                   <button
+// //                                     type="button"
+// //                                     disabled
+// //                                     className="flex-1 h-[36px] rounded-[10px] bg-slate-50 border border-slate-200/80 text-slate-400 text-[12px] font-medium flex items-center justify-center gap-1.5 cursor-not-allowed"
+// //                                   >
+// //                                     <svg className="animate-spin h-3.5 w-3.5 text-slate-400" fill="none" viewBox="0 0 24 24">
+// //                                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+// //                                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+// //                                     </svg>
+// //                                     <span>Checking...</span>
+// //                                   </button>
+// //                                 </div>
+// //                               );
+// //                             }
+
+// //                             const actualJobId = extractNumericJobId(job) || job.jobId || job.job_id || job.id;
+// //                             const record = getMatchingApplicationForJob(job, applicationMap);
+// //                             const hideApply = isApplyNowHiddenForJob(job, applicationMap, submittedJobIdSet);
+
+// //                             console.log("[BrowseJobs] Application status match", {
+// //                               cardJobId: actualJobId,
+// //                               matchedApplicationJobId: record ? (extractJobIdFromApplicationRecord(record) ?? null) : null,
+// //                               applicationId: record?.id ?? null,
+// //                               status: record?.status ?? record?.state ?? null,
+// //                               hideApplyNow: hideApply
+// //                             });
+
+// //                             if (hideApply) {
+// //                               const rawStatus = record?.status || record?.state || record?.applicationStatus;
+// //                               const norm = normalizeApplicationStatus(rawStatus);
+
+// //                               let displayLabel = "Applied";
+// //                               let badgeClass = "bg-slate-100 text-slate-600 border-slate-200";
+// //                               if (norm === "SUBMITTED") {
+// //                                 displayLabel = "Submitted";
+// //                                 badgeClass = "bg-emerald-50 text-emerald-700 border-emerald-200/80";
+// //                               } else if (norm === "QUEUED") {
+// //                                 displayLabel = "Queued";
+// //                                 badgeClass = "bg-indigo-50 text-indigo-700 border-indigo-200/80";
+// //                               } else if (norm === "IN_PROGRESS") {
+// //                                 displayLabel = "In Progress";
+// //                                 badgeClass = "bg-blue-50 text-blue-700 border-blue-200/80";
+// //                               } else if (norm === "NEEDS_ACTION") {
+// //                                 displayLabel = "Needs Action";
+// //                                 badgeClass = "bg-amber-50 text-amber-700 border-amber-200/80";
+// //                               } else if (norm === "PREPARING") {
+// //                                 displayLabel = "Preparing";
+// //                                 badgeClass = "bg-purple-50 text-purple-700 border-purple-200/80";
+// //                               }
+
+// //                               return (
+// //                                 <div className="flex items-center gap-2.5 pt-4 mt-auto">
+// //                                   <button
+// //                                     type="button"
+// //                                     onClick={(e) => {
+// //                                       e.stopPropagation();
+// //                                       handleOpenJobModal(job);
+// //                                     }}
+// //                                     className="flex-1 h-[36px] font-medium rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#334155] hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-center"
+// //                                   >
+// //                                     View Details
+// //                                   </button>
+// //                                   <span
+// //                                     className={`flex-1 h-[36px] rounded-[10px] border text-[12.5px] font-semibold flex items-center justify-center ${badgeClass}`}
+// //                                   >
+// //                                     {displayLabel}
+// //                                   </span>
+// //                                 </div>
+// //                               );
+// //                             }
+
+// //                             return (
+// //                               <div className="flex items-center gap-2.5 pt-4 mt-auto">
+// //                                 <button
+// //                                   type="button"
+// //                                   onClick={(e) => {
+// //                                     e.stopPropagation();
+// //                                     handleOpenJobModal(job);
+// //                                   }}
+// //                                   className="flex-1 h-[36px] font-medium rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#334155] hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-center"
+// //                                 >
+// //                                   View Details
+// //                                 </button>
+// //                                 <button
+// //                                   type="button"
+// //                                   onClick={(e) => handleApplyToCardJob(job, e)}
+// //                                   disabled={Boolean(applyingCardIds[cardJobIdKey])}
+// //                                   className="flex-1 h-[36px] rounded-[10px] bg-[#EEF2FF] hover:bg-[#E0E7FF] disabled:opacity-60 text-[#4F46E5] border border-[#C7D2FE]/80 text-[13px] font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed flex items-center justify-center active:scale-[0.99]"
+// //                                 >
+// //                                   {applyingCardIds[cardJobIdKey] ? (
+// //                                     <span className="flex items-center gap-1.5">
+// //                                       <svg className="animate-spin h-3.5 w-3.5 text-[#4F46E5]" fill="none" viewBox="0 0 24 24">
+// //                                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+// //                                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+// //                                       </svg>
+// //                                       <span>Applying...</span>
+// //                                     </span>
+// //                                   ) : (
+// //                                     "Apply Now"
+// //                                   )}
+// //                                 </button>
+// //                               </div>
+// //                             );
+// //                           })()}
+// //                         </div>
+// //                       ))}
+// //                     </div>
+
+// //                     {/* Bottom Pagination Card (Image 2 Design) */}
+// //                     <div className="bg-white rounded-[16px] border border-[#E2E8F0] px-5 py-3.5 flex items-center justify-between flex-wrap gap-4 shadow-[0_1px_3px_rgba(15,23,42,0.02)] mt-2 mb-8">
+// //                       {/* Left Side: Dynamic Loaded Jobs Count Text */}
+// //                       <span className="text-[13px] sm:text-[13.5px] font-medium text-[#475569]">
+// //                         {(() => {
+// //                           const currentCount = displayedJobs.length;
+// //                           const startIdx = allFilteredJobs.length > 0 ? (activePage - 1) * pageSize + 1 : 0;
+// //                           const endIdx = allFilteredJobs.length > 0 ? (activePage - 1) * pageSize + currentCount : 0;
+// //                           const displayTotal = totalItems > allFilteredJobs.length ? totalItems : allFilteredJobs.length;
+
+// //                           return `Showing ${startIdx}–${endIdx} of ${displayTotal} jobs (Page ${activePage} of ${displayTotalPages})`;
+// //                         })()}
+// //                       </span>
+
+// //                       {/* Right Side: Pagination Controls (< 1 2 3 >) */}
+// //                       <div className="flex items-center gap-1.5">
+// //                         {/* Previous Button */}
+// //                         <button
+// //                           type="button"
+// //                           onClick={() => handlePageChange(activePage - 1)}
+// //                           disabled={activePage <= 1 || isLoadingPage}
+// //                           className="w-8 h-8 rounded-lg border border-[#E2E8F0] bg-white hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed text-slate-700 text-sm flex items-center justify-center transition-colors cursor-pointer"
+// //                           aria-label="Previous Page"
+// //                         >
+// //                           <svg
+// //                             className="w-4 h-4 text-slate-600"
+// //                             fill="none"
+// //                             viewBox="0 0 24 24"
+// //                             stroke="currentColor"
+// //                             strokeWidth="2.5"
+// //                           >
+// //                             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+// //                           </svg>
+// //                         </button>
+
+// //                         {/* Page Numbers */}
+// //                         {visiblePages.map((pg) => {
+// //                           const isActive = activePage === pg;
+// //                           return (
+// //                             <button
+// //                               key={pg}
+// //                               type="button"
+// //                               onClick={() => handlePageChange(pg)}
+// //                               disabled={isLoadingPage && isActive}
+// //                               className={`w-8 h-8 rounded-lg text-sm font-semibold flex items-center justify-center transition-colors cursor-pointer ${isActive
+// //                                 ? "bg-[#4F46E5] text-white shadow-xs"
+// //                                 : "border border-[#E2E8F0] bg-white text-slate-700 hover:bg-slate-50"
+// //                                 }`}
+// //                             >
+// //                               {pg}
+// //                             </button>
+// //                           );
+// //                         })}
+
+// //                         {/* Next Button */}
+// //                         <button
+// //                           type="button"
+// //                           onClick={() => handlePageChange(activePage + 1)}
+// //                           disabled={activePage >= displayTotalPages || isLoadingPage}
+// //                           className="w-8 h-8 rounded-lg border border-[#E2E8F0] bg-white hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed text-slate-700 text-sm flex items-center justify-center transition-colors cursor-pointer"
+// //                           aria-label="Next Page"
+// //                         >
+// //                           <svg
+// //                             className="w-4 h-4 text-slate-600"
+// //                             fill="none"
+// //                             viewBox="0 0 24 24"
+// //                             stroke="currentColor"
+// //                             strokeWidth="2.5"
+// //                           >
+// //                             <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+// //                           </svg>
+// //                         </button>
+// //                       </div>
+// //                     </div>
+// //                   </>
+// //                 )
+// //                 }
+// //               </>
+// //             );
+// //           })()}
+// //         </main>
+// //       </div>
+
+// //       {/* Job Details Modal Drawer (Right side slide-over) */}
+// //       {
+// //         selectedJobModal && (() => {
+// //           const selectedJobId = getJobId(selectedJobModal);
+// //           const enhResult = selectedJobId ? enhancedResultsMap[selectedJobId] : null;
+// //           const hasEnhanced = !!enhResult;
+
+// //           // Old / Original ATS score (from enhance endpoint or initial job match)
+// //           const rawOldScore =
+// //             enhResult?.originalScore ??
+// //             enhResult?.original_score ??
+// //             (selectedJobModal.rawScore !== null && selectedJobModal.rawScore !== undefined && !isNaN(Number(selectedJobModal.rawScore))
+// //               ? Number(selectedJobModal.rawScore)
+// //               : selectedJobModal.matchPercent);
+
+// //           const oldAtsScore =
+// //             rawOldScore !== null && rawOldScore !== undefined && !isNaN(Number(rawOldScore))
+// //               ? Number(rawOldScore)
+// //               : null;
+
+// //           // New / Enhanced ATS score (from enhance endpoint)
+// //           const rawNewScore =
+// //             enhResult?.enhancedScore ??
+// //             enhResult?.enhanced_score ??
+// //             null;
+
+// //           const newAtsScore =
+// //             rawNewScore !== null && rawNewScore !== undefined && !isNaN(Number(rawNewScore))
+// //               ? Number(rawNewScore)
+// //               : null;
+
+// //           const activeAtsScore = (hasEnhanced && newAtsScore !== null) ? newAtsScore : oldAtsScore;
+
+// //           const matchCategory =
+// //             activeAtsScore !== null
+// //               ? (activeAtsScore >= 80 ? "Strong match" : activeAtsScore >= 60 ? "Moderate match" : "Lower match")
+// //               : null;
+
+// //           const activeScoreData =
+// //             enhResult?.score_data ||
+// //             selectedJobModal.scoreData ||
+// //             selectedJobModal.rawMatch?.score_data ||
+// //             null;
+
+// //           const missingRequiredSkills =
+// //             activeScoreData?.missing_required_skills ||
+// //             selectedJobModal.rawMatch?.missing_required_skills ||
+// //             [];
+// //           const missingPreferredSkills =
+// //             activeScoreData?.missing_preferred_skills ||
+// //             selectedJobModal.rawMatch?.missing_preferred_skills ||
+// //             [];
+// //           const missingKeywords =
+// //             activeScoreData?.missing_keywords ||
+// //             selectedJobModal.rawMatch?.missing_keywords ||
+// //             [];
+
+// //           return (
+// //             <div
+// //               className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[2px]"
+// //               onClick={() => {
+// //                 setSelectedJobModal(null);
+// //                 setEnhanceError(null);
+// //                 setEnhanceSuccess(null);
+// //               }}
+// //             >
+// //               <div
+// //                 className="absolute top-0 right-0 h-full w-full sm:w-[520px] lg:w-[440px] bg-white shadow-2xl overflow-hidden flex flex-col min-h-0 animate-in slide-in-from-right duration-300"
+// //                 onClick={(e) => e.stopPropagation()}
+// //               >
+// //                 {/* Modal Header */}
+// //                 <div className="p-5 sm:p-6 pb-4 border-b border-slate-100 flex items-start justify-between gap-4 shrink-0">
+// //                   <div className="flex items-start gap-3.5 flex-1 min-w-0 pr-2">
+// //                     {selectedJobModal.logo ? (
+// //                       <div className="w-[44px] h-[44px] rounded-[12px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2 mt-0.5">
+// //                         <img
+// //                           src={selectedJobModal.logo}
+// //                           alt={selectedJobModal.company || "Company Logo"}
+// //                           className="w-full h-full object-contain"
+// //                         />
+// //                       </div>
+// //                     ) : null}
+
+// //                     <div className="flex flex-col flex-1 min-w-0">
+// //                       <h2 className="text-[17px] font-bold text-[#0F172A] tracking-tight leading-snug break-words">
+// //                         {typeof selectedJobModal.title === "string"
+// //                           ? selectedJobModal.title
+// //                             .replace(/<[^>]*>/g, " ")
+// //                             .replace(/\s+/g, " ")
+// //                             .trim()
+// //                           : selectedJobModal.title}
+// //                       </h2>
+
+// //                       <div className="flex items-center gap-1.5 text-[13.5px] text-[#475569] font-medium mt-1">
+// //                         <span className="truncate">{selectedJobModal.company}</span>
+// //                         <VerifiedTick />
+// //                       </div>
+
+// //                       <div className="flex items-center gap-2.5 text-[12px] text-[#64748B] mt-2 flex-wrap">
+// //                         <span>
+// //                           {selectedJobModal.fullLocation ||
+// //                             selectedJobModal.location}
+// //                         </span>
+// //                         <span className="text-slate-300">•</span>
+// //                         <span>{selectedJobModal.type || "Full-time"}</span>
+// //                         <span className="text-slate-300">•</span>
+// //                         <span>{selectedJobModal.workMode || "On-Site"}</span>
+// //                       </div>
+// //                       <div className="text-[12px] text-[#64748B] mt-1">
+// //                         {selectedJobModal.department || "Engineering"}
+// //                       </div>
+// //                     </div>
+// //                   </div>
+
+// //                   {/* Right Actions (Close & Enhance Resume) */}
+// //                   <div className="flex flex-col items-end gap-2 shrink-0">
+// //                     <button
+// //                       type="button"
+// //                       onClick={() => {
+// //                         setSelectedJobModal(null);
+// //                         setEnhanceError(null);
+// //                         setEnhanceSuccess(null);
+// //                       }}
+// //                       className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
+// //                     >
+// //                       <svg
+// //                         className="w-5 h-5"
+// //                         fill="none"
+// //                         viewBox="0 0 24 24"
+// //                         stroke="currentColor"
+// //                         strokeWidth="2"
+// //                       >
+// //                         <path
+// //                           strokeLinecap="round"
+// //                           strokeLinejoin="round"
+// //                           d="M6 18L18 6M6 6l12 12"
+// //                         />
+// //                       </svg>
+// //                     </button>
+
+// //                     {!enhancedResultsMap[selectedJobId] && (
+// //                       <div className="flex items-center gap-1.5 mt-0.5">
+// //                         <button
+// //                           type="button"
+// //                           onClick={handleEnhanceResume}
+// //                           disabled={isEnhancing}
+// //                           className="bg-[#4F46E5] hover:bg-[#4338CA] disabled:bg-[#818CF8] text-white text-[12.5px] font-semibold px-3.5 py-1.5 rounded-lg transition-colors cursor-pointer shadow-xs whitespace-nowrap flex items-center gap-1.5 active:scale-[0.98] disabled:cursor-not-allowed"
+// //                         >
+// //                           {isEnhancing ? (
+// //                             <>
+// //                               <svg
+// //                                 className="animate-spin w-3.5 h-3.5 text-white"
+// //                                 fill="none"
+// //                                 viewBox="0 0 24 24"
+// //                               >
+// //                                 <circle
+// //                                   className="opacity-25"
+// //                                   cx="12"
+// //                                   cy="12"
+// //                                   r="10"
+// //                                   stroke="currentColor"
+// //                                   strokeWidth="4"
+// //                                 />
+// //                                 <path
+// //                                   className="opacity-75"
+// //                                   fill="currentColor"
+// //                                   d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+// //                                 />
+// //                               </svg>
+// //                               <span>Enhancing...</span>
+// //                             </>
+// //                           ) : (
+// //                             "Enhance Resume"
+// //                           )}
+// //                         </button>
+// //                       </div>
+// //                     )}
+// //                   </div>
+// //                 </div>
+
+// //                 {/* Modal Scrollable Body */}
+// //                 <div className="flex-1 min-h-0 overflow-y-auto p-5 sm:p-6 space-y-5">
+// //                   {/* Feedback Alerts */}
+// //                   {enhanceSuccess && (
+// //                     <div className="bg-[#EEF2FF] border border-[#C7D2FE] text-[#312E81] text-xs px-3.5 py-2.5 rounded-xl flex items-center justify-between shadow-2xs">
+// //                       <div className="flex items-center gap-2">
+// //                         <span className="w-4 h-4 rounded-full bg-[#4F46E5] text-white flex items-center justify-center text-[10px] font-bold">
+// //                           ✓
+// //                         </span>
+// //                         <span className="font-semibold">{enhanceSuccess}</span>
+// //                       </div>
+// //                       <button
+// //                         type="button"
+// //                         onClick={() => setShowEnhancedModal(true)}
+// //                         className="underline font-bold text-[#4F46E5] hover:text-[#3730A3] cursor-pointer ml-2"
+// //                       >
+// //                         View
+// //                       </button>
+// //                     </div>
+// //                   )}
+
+// //                   {enhanceError && (
+// //                     <div className="bg-rose-50 border border-rose-200 text-rose-800 text-xs px-3.5 py-2.5 rounded-xl flex items-center justify-between shadow-2xs">
+// //                       <div className="flex items-center gap-2">
+// //                         <span className="w-4 h-4 rounded-full bg-rose-600 text-white flex items-center justify-center text-[10px] font-bold">
+// //                           !
+// //                         </span>
+// //                         <span className="font-medium">{enhanceError}</span>
+// //                       </div>
+// //                       <button
+// //                         type="button"
+// //                         onClick={() => setEnhanceError(null)}
+// //                         className="text-rose-500 hover:text-rose-700 font-bold ml-2 cursor-pointer"
+// //                       >
+// //                         ✕
+// //                       </button>
+// //                     </div>
+// //                   )}
+
+// //                   {/* ATS Match Box */}
+// //                   {(() => {
+// //                     const isEnhanced = hasEnhanced && newAtsScore !== null;
+// //                     const activeScore = isEnhanced ? newAtsScore : oldAtsScore;
+
+// //                     return (
+// //                       <div className="rounded-[18px] border border-slate-200/90 bg-white p-4.5 sm:p-5 shadow-xs">
+// //                         {/* Header Row: Title */}
+// //                         <div className="flex items-center justify-between mb-3.5">
+// //                           <h3 className="text-[15px] font-bold text-[#0F172A] tracking-tight">
+// //                             ATS Match
+// //                           </h3>
+// //                         </div>
+
+// //                         {/* Body: Single Centered Ring */}
+// //                         <div className="flex flex-col items-center justify-center text-center py-1">
+// //                           <div className="relative w-[76px] h-[76px] flex items-center justify-center">
+// //                             <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+// //                               <path
+// //                                 className="text-slate-100"
+// //                                 strokeWidth="3.2"
+// //                                 stroke="currentColor"
+// //                                 fill="none"
+// //                                 d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+// //                               />
+// //                               <path
+// //                                 className={isEnhanced ? "text-[#4F46E5]" : "text-slate-400"}
+// //                                 strokeDasharray={`${Number(activeScore) || 0}, 100`}
+// //                                 strokeWidth="3.2"
+// //                                 strokeLinecap="round"
+// //                                 stroke="currentColor"
+// //                                 fill="none"
+// //                                 d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+// //                               />
+// //                             </svg>
+// //                             <div className="absolute inset-0 flex flex-col items-center justify-center">
+// //                               <span className="text-[16px] font-bold text-[#0F172A] leading-none">
+// //                                 {activeScore !== null ? `${activeScore}%` : "N/A"}
+// //                               </span>
+// //                               <span className="text-[9px] text-[#64748B] font-medium leading-none mt-0.5">
+// //                                 Match
+// //                               </span>
+// //                             </div>
+// //                           </div>
+// //                           <span
+// //                             className={`mt-2.5 text-[11px] font-semibold px-2.5 py-0.5 rounded-full inline-block ${isEnhanced
+// //                                 ? "bg-[#EEF2FF] text-[#4F46E5] border border-[#C7D2FE]"
+// //                                 : "bg-slate-100 text-slate-600 border border-slate-200"
+// //                               }`}
+// //                           >
+// //                             {isEnhanced ? "Enhanced ATS" : "Original ATS"}
+// //                           </span>
+// //                         </div>
+
+// //                         {/* Footer Description */}
+
+// //                       </div>
+// //                     );
+// //                   })()}
+
+// //                   {/* ATS Identified Gaps & Missing Skills */}
+// //                   {(missingRequiredSkills.length > 0 ||
+// //                     missingPreferredSkills.length > 0 ||
+// //                     missingKeywords.length > 0) && (
+// //                       <div className="rounded-[16px] border border-amber-200/80 bg-gradient-to-br from-amber-50/60 to-orange-50/30 p-4 space-y-3 shadow-2xs">
+// //                         <div className="flex items-center justify-between">
+// //                           <div className="flex items-center gap-2">
+// //                             <span className="w-5 h-5 rounded-md bg-amber-100 text-amber-800 text-[11px] font-bold flex items-center justify-center">
+// //                               !
+// //                             </span>
+// //                             <h4 className="text-[13px] font-bold text-amber-950">
+// //                               ATS Identified Gaps
+// //                             </h4>
+// //                           </div>
+// //                           <span className="text-[10.5px] font-semibold text-amber-800 bg-amber-100/80 border border-amber-200 px-2 py-0.5 rounded-full">
+// //                             {missingRequiredSkills.length +
+// //                               missingPreferredSkills.length +
+// //                               missingKeywords.length}{" "}
+// //                             Gaps
+// //                           </span>
+// //                         </div>
+
+// //                         {missingRequiredSkills.length > 0 && (
+// //                           <div>
+// //                             <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">
+// //                               Missing Required Skills:
+// //                             </span>
+// //                             <div className="flex flex-wrap gap-1.5">
+// //                               {missingRequiredSkills.map((skill, i) => (
+// //                                 <span
+// //                                   key={i}
+// //                                   className="bg-white border border-amber-200 text-amber-900 text-[11.5px] font-medium px-2.5 py-0.5 rounded-md shadow-2xs"
+// //                                 >
+// //                                   • {skill}
+// //                                 </span>
+// //                               ))}
+// //                             </div>
+// //                           </div>
+// //                         )}
+
+// //                         {missingPreferredSkills.length > 0 && (
+// //                           <div>
+// //                             <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">
+// //                               Missing Preferred Skills:
+// //                             </span>
+// //                             <div className="flex flex-wrap gap-1.5">
+// //                               {missingPreferredSkills.map((skill, i) => (
+// //                                 <span
+// //                                   key={i}
+// //                                   className="bg-white border border-amber-200 text-amber-900 text-[11.5px] font-medium px-2.5 py-0.5 rounded-md shadow-2xs"
+// //                                 >
+// //                                   • {skill}
+// //                                 </span>
+// //                               ))}
+// //                             </div>
+// //                           </div>
+// //                         )}
+
+// //                         {missingKeywords.length > 0 && (
+// //                           <div>
+// //                             <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">
+// //                               Missing Keywords:
+// //                             </span>
+// //                             <div className="flex flex-wrap gap-1.5">
+// //                               {missingKeywords.map((kw, i) => (
+// //                                 <span
+// //                                   key={i}
+// //                                   className="bg-white border border-amber-200 text-slate-700 text-[11px] font-normal px-2 py-0.5 rounded-md"
+// //                                 >
+// //                                   {kw}
+// //                                 </span>
+// //                               ))}
+// //                             </div>
+// //                           </div>
+// //                         )}
+// //                       </div>
+// //                     )}
+
+// //                   {/* Job Description */}
+// //                   <div>
+// //                     <h3 className="text-[14px] font-bold text-[#0F172A]">
+// //                       Job description
+// //                     </h3>
+// //                     <p className="text-[12.5px] text-[#475569] leading-relaxed mt-1.5">
+// //                       {cleanHtmlText(
+// //                         selectedJobModal.description ||
+// //                         selectedJobModal.fullJdText ||
+// //                         selectedJobModal.preview
+// //                       )}
+// //                     </p>
+// //                   </div>
+
+// //                   {/* Key Responsibilities */}
+// //                   {Array.isArray(selectedJobModal.responsibilities) &&
+// //                     selectedJobModal.responsibilities.length > 0 && (
+// //                       <div>
+// //                         <h3 className="text-[14px] font-bold text-[#0F172A]">
+// //                           Key responsibilities:
+// //                         </h3>
+// //                         <ul className="space-y-2 mt-2">
+// //                           {selectedJobModal.responsibilities.map((resp, idx) => (
+// //                             <li
+// //                               key={idx}
+// //                               className="text-[12.5px] text-[#475569] flex items-start gap-2 leading-snug"
+// //                             >
+// //                               <span className="text-[#94A3B8] shrink-0">•</span>
+// //                               <span>{resp}</span>
+// //                             </li>
+// //                           ))}
+// //                         </ul>
+// //                       </div>
+// //                     )}
+
+// //                   {/* Required Skills */}
+// //                   {Array.isArray(selectedJobModal.requiredSkills) &&
+// //                     selectedJobModal.requiredSkills.length > 0 && (
+// //                       <div>
+// //                         <h3 className="text-[14px] font-bold text-[#0F172A]">
+// //                           Required skills
+// //                         </h3>
+// //                         <div className="flex flex-wrap gap-2 mt-2">
+// //                           {selectedJobModal.requiredSkills.map((skill) => (
+// //                             <span
+// //                               key={skill}
+// //                               className="bg-[#F1F5F9] text-[#334155] rounded-[8px] px-3 py-1.5 text-[12px] font-medium"
+// //                             >
+// //                               {skill}
+// //                             </span>
+// //                           ))}
+// //                         </div>
+// //                       </div>
+// //                     )}
+
+// //                   {/* Preferred Skills */}
+// //                   {Array.isArray(selectedJobModal.preferredSkills) &&
+// //                     selectedJobModal.preferredSkills.length > 0 && (
+// //                       <div>
+// //                         <h3 className="text-[14px] font-bold text-[#0F172A]">
+// //                           Preferred skills
+// //                         </h3>
+// //                         <div className="flex flex-wrap gap-2 mt-2">
+// //                           {selectedJobModal.preferredSkills.map((skill) => (
+// //                             <span
+// //                               key={skill}
+// //                               className="bg-[#F1F5F9] text-[#334155] rounded-[8px] px-3 py-1.5 text-[12px] font-medium"
+// //                             >
+// //                               {skill}
+// //                             </span>
+// //                           ))}
+// //                         </div>
+// //                       </div>
+// //                     )}
+
+// //                   {/* Job Details */}
+// //                   <div>
+// //                     <h3 className="text-[14px] font-bold text-[#0F172A] mb-2.5">
+// //                       Job details
+// //                     </h3>
+// //                     <div className="grid grid-cols-2 gap-y-2.5 gap-x-4">
+// //                       <div className="flex items-center gap-2 text-[12.5px]">
+// //                         <span className="text-[#64748B]">Experience</span>
+// //                         <span className="font-semibold text-[#0F172A]">
+// //                           {selectedJobModal.experience || "Not specified"}
+// //                         </span>
+// //                       </div>
+// //                       <div className="flex items-center gap-2 text-[12.5px]">
+// //                         <span className="text-[#64748B]">Work mode</span>
+// //                         <span className="font-semibold text-[#0F172A]">
+// //                           {selectedJobModal.workMode || "On-site"}
+// //                         </span>
+// //                       </div>
+// //                       <div className="flex items-center gap-2 text-[12.5px]">
+// //                         <span className="text-[#64748B]">Employment type</span>
+// //                         <span className="font-semibold text-[#0F172A]">
+// //                           {selectedJobModal.type || "Full-time"}
+// //                         </span>
+// //                       </div>
+// //                       <div className="flex items-center gap-2 text-[12.5px]">
+// //                         <span className="text-[#64748B]">Location</span>
+// //                         <span className="font-semibold text-[#0F172A]">
+// //                           {selectedJobModal.fullLocation ||
+// //                             selectedJobModal.location || "Remote / Flexible"}
+// //                         </span>
+// //                       </div>
+// //                     </div>
+// //                   </div>
+// //                 </div>
+
+// //                 {/* Modal Footer */}
+// //                 <div className="p-4 sm:p-5 border-t border-slate-100 bg-white shrink-0 flex flex-col gap-2.5">
+// //                   {panelApplyStatus && (
+// //                     <div
+// //                       className={`p-3 rounded-xl border text-[12.5px] font-medium flex items-center justify-between gap-2 ${panelApplyStatus.type === "success"
+// //                         ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+// //                         : panelApplyStatus.type === "skipped"
+// //                           ? "bg-amber-50 border-amber-200 text-amber-800"
+// //                           : "bg-rose-50 border-rose-200 text-rose-800"
+// //                         }`}
+// //                     >
+// //                       <span>{panelApplyStatus.message}</span>
+// //                       <button
+// //                         type="button"
+// //                         onClick={() => setPanelApplyStatus(null)}
+// //                         className="text-xs font-bold text-slate-400 hover:text-slate-600 shrink-0"
+// //                       >
+// //                         ✕
+// //                       </button>
+// //                     </div>
+// //                   )}
+// //                   {(() => {
+// //                     if (isStatusLoading) {
+// //                       return (
+// //                         <button
+// //                           type="button"
+// //                           disabled
+// //                           className="w-full h-[44px] rounded-[12px] bg-slate-100 border border-slate-200 text-slate-400 text-[13.5px] font-medium flex items-center justify-center gap-2 cursor-not-allowed"
+// //                         >
+// //                           <svg className="animate-spin h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24">
+// //                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+// //                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+// //                           </svg>
+// //                           <span>Checking status...</span>
+// //                         </button>
+// //                       );
+// //                     }
+
+// //                     const isHidden = isApplyNowHiddenForJob(selectedJobModal, applicationMap, submittedJobIdSet);
+
+// //                     if (isHidden) {
+// //                       const numericId = extractNumericJobId(selectedJobModal);
+// //                       const stringId = getJobId(selectedJobModal);
+// //                       const record = (numericId !== null && applicationMap.get(numericId)) || (stringId && applicationMap.get(stringId));
+// //                       const rawStatus = record?.status || record?.state || record?.applicationStatus;
+// //                       const norm = normalizeApplicationStatus(rawStatus);
+
+// //                       let displayLabel = 'Already Applied';
+// //                       if (norm === 'SUBMITTED') displayLabel = 'Submitted';
+// //                       else if (norm === 'QUEUED') displayLabel = 'Queued';
+// //                       else if (norm === 'IN_PROGRESS') displayLabel = 'In Progress';
+// //                       else if (norm === 'NEEDS_ACTION') displayLabel = 'Needs Action';
+// //                       else if (norm === 'PREPARING') displayLabel = 'Preparing';
+
+// //                       return (
+// //                         <button
+// //                           type="button"
+// //                           disabled
+// //                           className="w-full h-[44px] rounded-[12px] bg-slate-100 border border-slate-200 text-slate-500 text-[13.5px] font-semibold flex items-center justify-center cursor-not-allowed"
+// //                         >
+// //                           {displayLabel}
+// //                         </button>
+// //                       );
+// //                     }
+
+// //                     return (
+// //                       <button
+// //                         type="button"
+// //                         onClick={handleApplyToPanelJob}
+// //                         disabled={isApplyingPanelJob}
+// //                         className="w-full h-[44px] rounded-[12px] bg-[#2563EB] hover:bg-[#1D4ED8] disabled:opacity-60 text-white text-[13.5px] font-medium flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.99] transition-all cursor-pointer disabled:cursor-not-allowed"
+// //                       >
+// //                         {isApplyingPanelJob ? (
+// //                           <span className="flex items-center gap-2">
+// //                             <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+// //                               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+// //                               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+// //                             </svg>
+// //                             <span>Submitting application...</span>
+// //                           </span>
+// //                         ) : (
+// //                           <>
+// //                             <span>Apply now</span>
+// //                             <span>→</span>
+// //                           </>
+// //                         )}
+// //                       </button>
+// //                     );
+// //                   })()}
+
+// //                   <p className="text-[11.5px] text-[#94A3B8] text-center">
+// //                     Your application quota will be reserved before submission.
+// //                   </p>
+// //                 </div>
+// //               </div>
+// //             </div>
+// //           );
+// //         })()
+// //       }
+
+// //       {/* Full Enhanced Resume Modal View */}
+// //       {
+// //         showEnhancedModal &&
+// //         selectedJobModal &&
+// //         enhancedResultsMap[getJobId(selectedJobModal)] && (
+// //           <div className="fixed inset-0 z-[60] overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+// //             <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+// //               {/* Modal Header */}
+// //               <div className="p-6 pb-4 border-b border-slate-100 flex items-center justify-between">
+// //                 <div className="flex items-center gap-3">
+// //                   <div className="w-9 h-9 rounded-xl bg-[#EEF2FF] border border-[#C7D2FE] flex items-center justify-center text-[#4F46E5] font-bold text-sm">
+// //                     AI
+// //                   </div>
+// //                   <div>
+// //                     <h3 className="text-lg font-bold text-[#0F172A]">
+// //                       AI Enhanced Resume
+// //                     </h3>
+// //                     <p className="text-xs text-[#64748B] mt-0.5">
+// //                       Tailored specifically for {selectedJobModal.title} at{" "}
+// //                       {selectedJobModal.company}
+// //                     </p>
+// //                   </div>
+// //                 </div>
+
+// //                 <div className="flex items-center gap-2">
+// //                   <button
+// //                     type="button"
+// //                     onClick={() =>
+// //                       handleDownloadEnhancedResume(
+// //                         enhancedResultsMap[getJobId(selectedJobModal)]
+// //                           ?.EnhResume ||
+// //                         enhancedResultsMap[getJobId(selectedJobModal)]
+// //                           ?.enhResume ||
+// //                         enhancedResultsMap[getJobId(selectedJobModal)]
+// //                           ?.enhanced_resume ||
+// //                         enhancedResultsMap[getJobId(selectedJobModal)]
+// //                           ?.enhancedResume,
+// //                         selectedJobModal
+// //                       )
+// //                     }
+// //                     disabled={isDownloadingResume}
+// //                     className="px-3.5 py-1.5 bg-[#EEF2FF] hover:bg-[#E0E7FF] disabled:bg-slate-100 text-[#4F46E5] disabled:text-slate-400 text-xs font-semibold rounded-lg transition-colors cursor-pointer disabled:cursor-not-allowed flex items-center gap-1.5"
+// //                   >
+// //                     {isDownloadingResume ? (
+// //                       <>
+// //                         <svg className="animate-spin w-3.5 h-3.5 text-[#4F46E5]" fill="none" viewBox="0 0 24 24">
+// //                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+// //                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+// //                         </svg>
+// //                         <span>Downloading...</span>
+// //                       </>
+// //                     ) : (
+// //                       <>
+// //                         <svg
+// //                           className="w-4 h-4"
+// //                           fill="none"
+// //                           viewBox="0 0 24 24"
+// //                           stroke="currentColor"
+// //                           strokeWidth="2"
+// //                         >
+// //                           <path
+// //                             strokeLinecap="round"
+// //                             strokeLinejoin="round"
+// //                             d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+// //                           />
+// //                         </svg>
+// //                         <span>Download</span>
+// //                       </>
+// //                     )}
+// //                   </button>
+
+// //                   <button
+// //                     type="button"
+// //                     onClick={() => setShowEnhancedModal(false)}
+// //                     className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+// //                   >
+// //                     <svg
+// //                       className="w-5 h-5"
+// //                       fill="none"
+// //                       viewBox="0 0 24 24"
+// //                       stroke="currentColor"
+// //                       strokeWidth="2"
+// //                     >
+// //                       <path
+// //                         strokeLinecap="round"
+// //                         strokeLinejoin="round"
+// //                         d="M6 18L18 6M6 6l12 12"
+// //                       />
+// //                     </svg>
+// //                   </button>
+// //                 </div>
+// //               </div>
+
+// //               {/* Modal Body */}
+// //               <div className="p-6 overflow-y-auto space-y-4 flex-1">
+// //                 {/* Bridged Gaps Summary */}
+// //                 {enhancedResultsMap[getJobId(selectedJobModal)]
+// //                   ?.bridgeable_gaps && (
+// //                     <div className="bg-[#EEF2FF]/70 border border-[#C7D2FE] rounded-xl p-4.5 space-y-3">
+// //                       <div className="flex items-center justify-between">
+// //                         <h4 className="text-xs font-bold text-[#312E81] uppercase tracking-wide">
+// //                           Bridged Skills & Qualifications
+// //                         </h4>
+// //                         {Array.isArray(
+// //                           enhancedResultsMap[getJobId(selectedJobModal)]
+// //                             .bridgeable_gaps
+// //                         ) && (
+// //                             <span className="text-[11px] font-semibold text-[#4F46E5] bg-white border border-[#C7D2FE] px-2 py-0.5 rounded-full">
+// //                               {
+// //                                 enhancedResultsMap[getJobId(selectedJobModal)]
+// //                                   .bridgeable_gaps.length
+// //                               }{" "}
+// //                               Tailored Improvements
+// //                             </span>
+// //                           )}
+// //                       </div>
+// //                       <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
+// //                         {Array.isArray(
+// //                           enhancedResultsMap[getJobId(selectedJobModal)]
+// //                             .bridgeable_gaps
+// //                         ) ? (
+// //                           enhancedResultsMap[
+// //                             getJobId(selectedJobModal)
+// //                           ].bridgeable_gaps.map((gap, i) => {
+// //                             if (typeof gap === "string") {
+// //                               return (
+// //                                 <div
+// //                                   key={i}
+// //                                   className="flex items-center gap-2 bg-white text-slate-800 border border-[#E0E7FF] rounded-lg p-2.5 shadow-2xs"
+// //                                 >
+// //                                   <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">
+// //                                     ✓
+// //                                   </span>
+// //                                   <span className="text-xs font-semibold text-slate-900">
+// //                                     {gap}
+// //                                   </span>
+// //                                 </div>
+// //                               );
+// //                             }
+
+// //                             const skill =
+// //                               gap?.skill || gap?.name || gap?.title || "";
+// //                             const severity =
+// //                               gap?.severity ||
+// //                               (gap?.source ? String(gap.source).toUpperCase() : "");
+// //                             const rationale =
+// //                               gap?.rationale ||
+// //                               gap?.description ||
+// //                               gap?.reason ||
+// //                               "";
+
+// //                             return (
+// //                               <div
+// //                                 key={i}
+// //                                 className="bg-white text-slate-800 border border-[#E0E7FF] rounded-xl p-3 shadow-2xs space-y-1.5"
+// //                               >
+// //                                 <div className="flex items-center justify-between gap-2">
+// //                                   <div className="flex items-center gap-2">
+// //                                     <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">
+// //                                       ✓
+// //                                     </span>
+// //                                     <span className="text-xs font-bold text-slate-900">
+// //                                       {skill || "Optimized Skill"}
+// //                                     </span>
+// //                                   </div>
+// //                                   {severity && (
+// //                                     <span
+// //                                       className={`text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${severity === "CRITICAL"
+// //                                         ? "bg-amber-50 text-amber-700 border-amber-200"
+// //                                         : severity === "PREFERRED"
+// //                                           ? "bg-blue-50 text-blue-700 border-blue-200"
+// //                                           : "bg-indigo-50 text-[#4F46E5] border-indigo-200"
+// //                                         }`}
+// //                                     >
+// //                                       {severity}
+// //                                     </span>
+// //                                   )}
+// //                                 </div>
+// //                                 {rationale && (
+// //                                   <p className="text-xs text-slate-600 leading-relaxed pl-6 font-normal">
+// //                                     {rationale}
+// //                                   </p>
+// //                                 )}
+// //                               </div>
+// //                             );
+// //                           })
+// //                         ) : typeof enhancedResultsMap[getJobId(selectedJobModal)]
+// //                           .bridgeable_gaps === "object" ? (
+// //                           Object.entries(
+// //                             enhancedResultsMap[getJobId(selectedJobModal)]
+// //                               .bridgeable_gaps
+// //                           ).map(([k, v], i) => (
+// //                             <div
+// //                               key={i}
+// //                               className="bg-white text-slate-800 border border-[#E0E7FF] rounded-xl p-3 shadow-2xs space-y-1"
+// //                             >
+// //                               <div className="flex items-center gap-2">
+// //                                 <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">
+// //                                   ✓
+// //                                 </span>
+// //                                 <span className="text-xs font-bold text-slate-900">
+// //                                   {k}
+// //                                 </span>
+// //                               </div>
+// //                               <p className="text-xs text-slate-600 leading-relaxed pl-6 font-normal">
+// //                                 {String(v)}
+// //                               </p>
+// //                             </div>
+// //                           ))
+// //                         ) : (
+// //                           <p className="text-xs text-[#4F46E5]">
+// //                             {String(
+// //                               enhancedResultsMap[getJobId(selectedJobModal)]
+// //                                 .bridgeable_gaps
+// //                             )}
+// //                           </p>
+// //                         )}
+// //                       </div>
+// //                     </div>
+// //                   )}
+
+// //                 {/* Professional Enhanced Resume Content */}
+// //                 <div>
+// //                   <div className="flex items-center justify-between mb-3">
+// //                     <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+// //                       Professional Formatted Resume
+// //                     </h4>
+// //                     <span className="text-[11px] text-[#4F46E5] font-semibold bg-[#EEF2FF] border border-[#C7D2FE] px-2.5 py-0.5 rounded-full">
+// //                       Dynamically Formatted
+// //                     </span>
+// //                   </div>
+// //                   <EnhancedResumeViewer
+// //                     resumeText={
+// //                       enhancedResultsMap[getJobId(selectedJobModal)]?.EnhResume ||
+// //                       enhancedResultsMap[getJobId(selectedJobModal)]?.enhResume ||
+// //                       enhancedResultsMap[getJobId(selectedJobModal)]?.enhanced_resume ||
+// //                       enhancedResultsMap[getJobId(selectedJobModal)]?.enhancedResume
+// //                     }
+// //                     compact={false}
+// //                   />
+// //                 </div>
+// //               </div>
+
+// //               {/* Modal Footer */}
+// //               <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-end gap-3">
+// //                 <button
+// //                   type="button"
+// //                   onClick={() => setShowEnhancedModal(false)}
+// //                   className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+// //                 >
+// //                   Close
+// //                 </button>
+// //               </div>
+// //             </div>
+// //           </div>
+// //         )
+// //       }
+
+// //       {/* Floating Toast Notification */}
+// //       {
+// //         toast.show && (
+// //           <div className="fixed top-20 right-6 md:right-8 z-[100] animate-in fade-in slide-in-from-top-3 duration-300">
+// //             <div
+// //               className={`flex items-center gap-3 px-4 py-3 rounded-xl border shadow-[0_4px_20px_-2px_rgba(0,0,0,0.15)] ${toast.type === "error"
+// //                 ? "bg-rose-50 border-rose-200 text-rose-800"
+// //                 : toast.type === "skipped" || toast.type === "warning"
+// //                   ? "bg-amber-50 border-amber-200 text-amber-900"
+// //                   : "bg-[#EEF2FF] border-[#C7D2FE] text-[#4338CA]"
+// //                 }`}
+// //             >
+// //               <div
+// //                 className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${toast.type === "error"
+// //                   ? "bg-rose-100 text-rose-600"
+// //                   : toast.type === "skipped" || toast.type === "warning"
+// //                     ? "bg-amber-100 text-amber-700"
+// //                     : "bg-[#E0E7FF] text-[#4F46E5]"
+// //                   }`}
+// //               >
+// //                 {toast.type === "error" ? (
+// //                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+// //                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+// //                   </svg>
+// //                 ) : toast.type === "skipped" || toast.type === "warning" ? (
+// //                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+// //                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+// //                   </svg>
+// //                 ) : (
+// //                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+// //                     <polyline points="20 6 9 17 4 12" />
+// //                   </svg>
+// //                 )}
+// //               </div>
+// //               <p className="text-[13px] font-semibold tracking-wide">{toast.message}</p>
+// //               <button
+// //                 type="button"
+// //                 onClick={() => setToast((prev) => ({ ...prev, show: false }))}
+// //                 className="ml-2 text-slate-400 hover:text-slate-600 cursor-pointer transition-colors"
+// //               >
+// //                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+// //                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+// //                 </svg>
+// //               </button>
+// //             </div>
+// //           </div>
+// //         )
+// //       }
+// //     </div >
+// //   );
+// // };
+
+// // export default BrowseJobs;
+
+
+
+// import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+// import { useNavigate } from "react-router-dom";
+// import Sidebar from "../components/Sidebar";
+// import Header from "../components/Header";
+// import EnhancedResumeViewer from "../components/EnhancedResumeViewer";
+// import JobFilterBar from "../components/JobFilterBar";
+// import {
+//   getJobs,
+//   getPrimaryResumeId,
+//   getOnboardingState,
+//   getStoredResumeId,
+//   getStoredJobMatches,
+//   getEnhancedResume,
+//   downloadEnhancedResume,
+//   getJobId,
+//   getJobById,
+//   checkUserHasResume,
+//   applyToJobs,
+//   applyToJobsInBatches,
+//   extractNumericJobId,
+//   extractNumericResumeId,
+//   getBillingStatus,
+//   getStoredAppliedJobIds,
+//   isJobAlreadyApplied,
+//   getApplicationStatuses,
+//   isJobSubmitted,
+//   isApplicationActiveStatus,
+//   isApplyNowHiddenForJob,
+//   getMatchingApplicationForJob,
+//   extractJobIdFromApplicationRecord,
+//   normalizeApplicationStatus,
+// } from "../services/api";
+// import {
+//   getResumes,
+//   setPrimaryResume,
+//   refreshResumeMatches,
+// } from "../services/resumeService";
+// // Verified tick icon
+// const VerifiedTick = () => (
+//   <svg className="w-3.5 h-3.5 text-[#4F46E5] inline-block shrink-0" fill="currentColor" viewBox="0 0 20 20">
+//     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+//   </svg>
+// );
+
+// import {
+//   cleanHtmlText,
+//   formatPostedDate,
+//   extractCleanJobTitle,
+//   extractCleanCompany,
+//   transformMatchToJob,
+//   buildJobQueryParams,
+//   buildBaseJobFilterKey,
+//   shouldFallbackToClientWorkplaceFilter,
+//   recordUnsupportedWorkplaces,
+//   hasUnsupportedWorkplaceTarget,
+//   hasAnyJobMatchingWorkplaces,
+//   extractDynamicJobFilterOptions,
+//   filterJobMatches,
+//   normalizeWorkplaceValue,
+//   sortWorkplaceOptions,
+// } from "../utils/jobHelpers";
+
+// const experienceOptions = [
+//   "Entry Level (0-1 yrs)",
+//   "Junior (1-3 yrs)",
+//   "Mid-Level (3-5 yrs)",
+//   "Senior (5-8 yrs)",
+//   "Lead / Principal (8+ yrs)",
+// ];
+
+// const BrowseJobs = () => {
+//   const navigate = useNavigate();
+//   const [searchQuery, setSearchQuery] = useState("");
+//   const [activeDropdown, setActiveDropdown] = useState(null);
+//   const [selectedJobModal, setSelectedJobModal] = useState(null);
+//   const [isLoadingJobDetails, setIsLoadingJobDetails] = useState(false);
+//   const [isJobSaved, setIsJobSaved] = useState(false);
+
+//   // Helper to open job modal and fetch full job details from GET /api/jobs/{originalJobId}
+//   const handleOpenJobModal = async (job) => {
+//     if (!job) return;
+//     setSelectedJobModal(job);
+
+//     const originalJobId = getJobId(job);
+//     console.log("[BrowseJobs] Opening job modal. Original Job ID:", originalJobId);
+
+//     if (originalJobId) {
+//       try {
+//         setIsLoadingJobDetails(true);
+//         console.log(`[BrowseJobs] Fetching job details from GET /api/jobs/${originalJobId}...`);
+//         const details = await getJobById(originalJobId);
+//         console.log(`[BrowseJobs] GET /api/jobs/${originalJobId} details response:`, details);
+
+//         if (details && typeof details === "object") {
+//           setSelectedJobModal((prevModal) => {
+//             if (!prevModal) return prevModal;
+//             const currentModalId = getJobId(prevModal);
+//             if (currentModalId === originalJobId) {
+//               return {
+//                 ...prevModal,
+//                 ...details,
+//                 title: details.title || details.jobTitle || prevModal.title,
+//                 company: details.companyName || details.company || prevModal.company,
+//                 companyDomain: details.companyDomain || prevModal.companyDomain,
+//                 location: details.location || prevModal.location,
+//                 fullLocation: details.location || details.fullLocation || prevModal.fullLocation,
+//                 description: details.description || details.jobDescription || prevModal.description,
+//                 preview: details.preview || details.description || details.jobDescription || prevModal.preview,
+//                 responsibilities: Array.isArray(details.responsibilities) && details.responsibilities.length > 0
+//                   ? details.responsibilities
+//                   : prevModal.responsibilities,
+//                 requiredSkills: Array.isArray(details.requiredSkills) && details.requiredSkills.length > 0
+//                   ? details.requiredSkills
+//                   : (Array.isArray(details.skills) ? details.skills : prevModal.requiredSkills),
+//                 preferredSkills: Array.isArray(details.preferredSkills) && details.preferredSkills.length > 0
+//                   ? details.preferredSkills
+//                   : prevModal.preferredSkills,
+//                 experience: details.experience || details.requiredExperience || prevModal.experience,
+//                 workMode:
+//                   normalizeWorkplaceValue(
+//                     details.workplace ||
+//                       details.workMode ||
+//                       details.work_mode ||
+//                       details.workplaceType ||
+//                       details.workplace_type ||
+//                       details.workLocationType ||
+//                       details.work_location_type ||
+//                       details.remoteType ||
+//                       details.remote_type
+//                   ) || prevModal.workMode,
+//                 workplace:
+//                   normalizeWorkplaceValue(
+//                     details.workplace ||
+//                       details.workMode ||
+//                       details.work_mode ||
+//                       details.workplaceType ||
+//                       details.workplace_type ||
+//                       details.workLocationType ||
+//                       details.work_location_type ||
+//                       details.remoteType ||
+//                       details.remote_type
+//                   ) || prevModal.workplace,
+//                 type: details.employmentType || details.type || prevModal.type,
+//                 salary: details.salary || details.salaryRange || prevModal.salary,
+//                 applyUrl: details.applyUrl || details.jobUrl || details.url || prevModal.applyUrl,
+//               };
+//             }
+//             return prevModal;
+//           });
+//         }
+//       } catch (err) {
+//         console.warn(`[BrowseJobs] GET /api/jobs/${originalJobId} fetch warning:`, err?.message);
+//       } finally {
+//         setIsLoadingJobDetails(false);
+//       }
+//     }
+//   };
+
+//   // Dynamic Jobs State with Page-based Cache { [pageNumber]: [jobs] }
+//   const [jobsCache, setJobsCache] = useState({});
+//   const jobsCacheRef = useRef({});
+//   const [activePage, setActivePage] = useState(1);
+//   const [pageSize] = useState(20);
+//   const [totalItems, setTotalItems] = useState(0);
+//   const [totalPages, setTotalPages] = useState(1);
+//   const [sortOption, setSortOption] = useState("best_match"); // 'best_match' or 'newest'
+
+//   const [isLoadingJobs, setIsLoadingJobs] = useState(true);
+//   const [isLoadingPage, setIsLoadingPage] = useState(false);
+//   const [loadMoreError, setLoadMoreError] = useState(null);
+//   const [fetchError, setFetchError] = useState(null);
+//   const [hasMoreJobs, setHasMoreJobs] = useState(true);
+//   const [hasResume, setHasResume] = useState(false);
+//   const [activeResumeId, setActiveResumeId] = useState(() => {
+//     try {
+//       return (
+//         localStorage.getItem("selected_resume_id") ||
+//         localStorage.getItem("resume_id") ||
+//         localStorage.getItem("resumeId") ||
+//         sessionStorage.getItem("selected_resume_id") ||
+//         sessionStorage.getItem("resume_id") ||
+//         sessionStorage.getItem("resumeId") ||
+//         null
+//       );
+//     } catch {
+//       return null;
+//     }
+//   });
+//   const fetchingPagesRef = useRef(new Set());
+//   const queryVersionRef = useRef(0);
+//   const baseJobsCacheRef = useRef(null);
+//   const serverUnsupportedWorkplacesRef = useRef(new Set());
+//   const prevFilterDepsRef = useRef(null);
+//   const [isClientWorkplaceFilterActive, setIsClientWorkplaceFilterActive] = useState(false);
+//   const resumeDropdownRef = useRef(null);
+
+//   // Resume Selector States & Logic
+//   const [userResumes, setUserResumes] = useState([]);
+//   const [isLoadingResumes, setIsLoadingResumes] = useState(false);
+//   const [selectedResume, setSelectedResume] = useState(() => {
+//     try {
+//       const storedData =
+//         localStorage.getItem("selected_resume_data") ||
+//         sessionStorage.getItem("selected_resume_data");
+//       return storedData ? JSON.parse(storedData) : null;
+//     } catch {
+//       return null;
+//     }
+//   });
+//   const [isResumeDropdownOpen, setIsResumeDropdownOpen] = useState(false);
+//   const [isSettingPrimary, setIsSettingPrimary] = useState(false);
+
+//   const selectedResumeRef = useRef(selectedResume);
+//   selectedResumeRef.current = selectedResume;
+//   const activeResumeIdRef = useRef(activeResumeId);
+//   activeResumeIdRef.current = activeResumeId;
+//   // Dynamic ATS Resume Matches Status & Refresh
+//   const [matchStatus, setMatchStatus] = useState({
+//     hasPrimaryResume: null,
+//     refreshing: false,
+//     matchCount: 0,
+//     lastComputedAt: null,
+//     progress: null,
+//     lastResult: null,
+//   });
+//   const [isLoadingMatchStatus, setIsLoadingMatchStatus] = useState(true);
+//   const [isRequestingRefresh, setIsRequestingRefresh] = useState(false);
+//   const [refreshSuccessMessage, setRefreshSuccessMessage] = useState(null);
+//   const prevRefreshingRef = useRef(false);
+//   const pollingTimeoutRef = useRef(null);
+//   const hasAutoRefreshedRef = useRef(false);
+
+//   // Enhance Resume States
+//   const [isEnhancing, setIsEnhancing] = useState(false);
+//   const [isDownloadingResume, setIsDownloadingResume] = useState(false);
+//   const [enhanceError, setEnhanceError] = useState(null);
+//   const [enhanceSuccess, setEnhanceSuccess] = useState(null);
+//   const [enhancedResultsMap, setEnhancedResultsMap] = useState({});
+//   const [showEnhancedModal, setShowEnhancedModal] = useState(false);
+//   const [copiedResume, setCopiedResume] = useState(false);
+
+//   // Application Service States & Toast Notifications
+//   const [appliedJobIds, setAppliedJobIds] = useState(() => getStoredAppliedJobIds());
+//   const [applicationMap, setApplicationMap] = useState(() => new Map());
+//   const [submittedJobIdSet, setSubmittedJobIdSet] = useState(() => new Set());
+//   const [isStatusLoading, setIsStatusLoading] = useState(true);
+//   const [statusError, setStatusError] = useState(null);
+//   const [applyingCardIds, setApplyingCardIds] = useState({});
+//   const [isApplyingPanelJob, setIsApplyingPanelJob] = useState(false);
+//   const [panelApplyStatus, setPanelApplyStatus] = useState(null);
+//   const [isAutoApplyingAll, setIsAutoApplyingAll] = useState(false);
+//   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
+
+//   const fetchApplicationStatuses = useCallback(async (forceRefresh = false) => {
+//     setIsStatusLoading(true);
+//     setStatusError(null);
+//     try {
+//       const res = await getApplicationStatuses({ forceRefresh });
+//       setApplicationMap(res.applicationMap || new Map());
+//       setSubmittedJobIdSet(res.submittedJobIdSet || new Set());
+//     } catch (err) {
+//       console.error("[BrowseJobs] Failed to fetch application statuses:", err);
+//       setStatusError(err.message || "Failed to load application statuses from server.");
+//     } finally {
+//       setIsStatusLoading(false);
+//     }
+//   }, []);
+
+//   useEffect(() => {
+//     fetchApplicationStatuses();
+//   }, [fetchApplicationStatuses]);
+
+//   useEffect(() => {
+//     const handleStatusSync = (e) => {
+//       setAppliedJobIds(getStoredAppliedJobIds());
+//       if (e?.detail?.applicationMap && e?.detail?.submittedJobIdSet) {
+//         setApplicationMap(e.detail.applicationMap);
+//         setSubmittedJobIdSet(e.detail.submittedJobIdSet);
+//       } else {
+//         fetchApplicationStatuses(true);
+//       }
+//     };
+//     window.addEventListener("applicationStatusesUpdated", handleStatusSync);
+//     window.addEventListener("appliedJobIdsUpdated", handleStatusSync);
+//     window.addEventListener("storage", handleStatusSync);
+//     return () => {
+//       window.removeEventListener("applicationStatusesUpdated", handleStatusSync);
+//       window.removeEventListener("appliedJobIdsUpdated", handleStatusSync);
+//       window.removeEventListener("storage", handleStatusSync);
+//     };
+//   }, [fetchApplicationStatuses]);
+
+//   // If currently selected job was submitted, clear selection to avoid stale application state
+//   useEffect(() => {
+//     if (selectedJobModal && isJobSubmitted(selectedJobModal, submittedJobIdSet, applicationMap)) {
+//       setSelectedJobModal(null);
+//     }
+//   }, [selectedJobModal, submittedJobIdSet, applicationMap]);
+
+//   useEffect(() => {
+//     if (toast.show) {
+//       const timer = setTimeout(() => {
+//         setToast((prev) => ({ ...prev, show: false }));
+//       }, 4000);
+//       return () => clearTimeout(timer);
+//     }
+//   }, [toast.show]);
+
+//   const showToast = useCallback((message, type = "success") => {
+//     setToast({ show: true, message, type });
+//   }, []);
+
+//   /**
+//    * Helper to retrieve active or primary numeric resume ID
+//    */
+//   const getAppResumeId = useCallback(async () => {
+//     let targetResume = selectedResumeRef.current;
+//     let numericId = extractNumericResumeId(targetResume);
+
+//     if (!numericId && userResumes.length > 0) {
+//       targetResume = userResumes.find((r) => r.isPrimary) || userResumes[0];
+//       numericId = extractNumericResumeId(targetResume);
+//     }
+
+//     if (!numericId) {
+//       try {
+//         const fetched = await getResumes();
+//         if (Array.isArray(fetched) && fetched.length > 0) {
+//           setUserResumes(fetched);
+//           targetResume = fetched.find((r) => r.isPrimary) || fetched[0];
+//           numericId = extractNumericResumeId(targetResume);
+//         }
+//       } catch {
+//         // ignore
+//       }
+//     }
+
+//     if (!numericId && activeResumeIdRef.current) {
+//       numericId = extractNumericResumeId(activeResumeIdRef.current);
+//     }
+
+//     return { numericId, resume: targetResume };
+//   }, [userResumes]);
+
+//   /**
+//    * Apply Now handler for single job card
+//    */
+//   const handleApplyToCardJob = async (job, e) => {
+//     if (e) e.stopPropagation();
+//     if (!job) return;
+
+//     if (isJobSubmitted(job, submittedJobIdSet, applicationMap)) {
+//       showToast("This job has already been submitted.", "warning");
+//       return;
+//     }
+
+//     const numericJobId = extractNumericJobId(job);
+//     const cardKey = job.id || job.jobId || numericJobId || `job-${Math.random()}`;
+
+//     if (!numericJobId) {
+//       showToast("Selected job is missing a valid numeric backend Job ID.", "error");
+//       return;
+//     }
+
+//     if (applyingCardIds[cardKey]) return; // prevent duplicate clicks
+
+//     const { numericId: numericResumeId } = await getAppResumeId();
+//     if (!numericResumeId) {
+//       showToast("No resume selected. Go to Profile to upload/select a resume.", "error");
+//       return;
+//     }
+
+//     setApplyingCardIds((prev) => ({ ...prev, [cardKey]: true }));
+
+//     try {
+//       const res = await applyToJobs({ resumeId: numericResumeId, jobIds: [numericJobId] });
+//       const queuedCount = res.queued?.length || 0;
+//       const skippedArr = res.skipped || [];
+
+//       if (queuedCount > 0) {
+//         showToast(`Application queued successfully! (${queuedCount} queued)`, "success");
+//       } else if (skippedArr.length > 0) {
+//         const reason = skippedArr[0]?.reason || "ALREADY_SUBMITTED";
+//         showToast(`Skipped (${reason})`, "warning");
+//       } else {
+//         showToast("Application skipped (No new jobs queued).", "warning");
+//       }
+
+//       await fetchApplicationStatuses(true);
+
+//       getBillingStatus()
+//         .then((status) => {
+//           if (status) window.dispatchEvent(new CustomEvent("billingStatusUpdated", { detail: status }));
+//         })
+//         .catch(() => { });
+//     } catch (err) {
+//       console.error("[BrowseJobs] Single card apply error:", err);
+//       showToast(err.message || "Failed to submit application.", "error");
+//     } finally {
+//       setApplyingCardIds((prev) => {
+//         const copy = { ...prev };
+//         delete copy[cardKey];
+//         return copy;
+//       });
+//     }
+//   };
+
+//   /**
+//    * Apply Now handler for Job Details side panel
+//    */
+//   const handleApplyToPanelJob = async () => {
+//     if (!selectedJobModal) return;
+
+//     if (isJobSubmitted(selectedJobModal, submittedJobIdSet, applicationMap)) {
+//       setPanelApplyStatus({
+//         type: "error",
+//         message: "This job has already been submitted.",
+//       });
+//       showToast("This job has already been submitted.", "warning");
+//       return;
+//     }
+
+//     const numericJobId = extractNumericJobId(selectedJobModal);
+//     if (!numericJobId) {
+//       setPanelApplyStatus({
+//         type: "error",
+//         message: "Displayed job is missing a valid numeric backend Job ID.",
+//       });
+//       showToast("Displayed job is missing a valid numeric backend Job ID.", "error");
+//       return;
+//     }
+
+//     if (isApplyingPanelJob) return;
+
+//     const { numericId: numericResumeId } = await getAppResumeId();
+//     if (!numericResumeId) {
+//       setPanelApplyStatus({
+//         type: "error",
+//         message: "No resume selected. Please go to Profile to select or upload a resume.",
+//       });
+//       showToast("No resume selected. Please go to Profile to select or upload a resume.", "error");
+//       return;
+//     }
+
+//     setIsApplyingPanelJob(true);
+//     setPanelApplyStatus(null);
+
+//     try {
+//       const res = await applyToJobs({ resumeId: numericResumeId, jobIds: [numericJobId] });
+//       const queuedCount = res.queued?.length || 0;
+//       const skippedArr = res.skipped || [];
+
+//       await fetchApplicationStatuses(true);
+
+//       if (queuedCount > 0) {
+//         const msg = `Application queued! Redirecting to Applications...`;
+//         setPanelApplyStatus({ type: "success", message: msg });
+//         showToast(msg, "success");
+
+//         getBillingStatus()
+//           .then((status) => {
+//             if (status) window.dispatchEvent(new CustomEvent("billingStatusUpdated", { detail: status }));
+//           })
+//           .catch(() => { });
+
+//         setTimeout(() => {
+//           setSelectedJobModal(null);
+//           setPanelApplyStatus(null);
+//           navigate("/auto-apply", { state: { tab: "in-progress" } });
+//         }, 1200);
+//       } else if (skippedArr.length > 0) {
+//         const reason = skippedArr[0]?.reason || "ALREADY_SUBMITTED";
+//         const msg = `Application skipped: ${reason}`;
+//         setPanelApplyStatus({ type: "skipped", message: msg });
+//         showToast(msg, "warning");
+//       } else {
+//         const msg = "Application skipped (No new jobs queued).";
+//         setPanelApplyStatus({ type: "skipped", message: msg });
+//         showToast(msg, "warning");
+//       }
+//     } catch (err) {
+//       console.error("[BrowseJobs] Panel apply error:", err);
+//       const msg = err.message || "Failed to submit application.";
+//       setPanelApplyStatus({ type: "error", message: msg });
+//       showToast(msg, "error");
+//     } finally {
+//       setIsApplyingPanelJob(false);
+//     }
+//   };
+
+//   /**
+//    * Auto Apply All handler
+//    */
+//   const handleAutoApplyAll = async () => {
+//     if (isAutoApplyingAll) return;
+
+//     setIsAutoApplyingAll(true);
+
+//     try {
+//       const billing = await getBillingStatus().catch(() => null);
+//       const remaining =
+//         typeof billing?.remainingApplications === "number"
+//           ? billing.remainingApplications
+//           : typeof billing?.remaining === "number"
+//             ? billing.remaining
+//             : 100;
+
+//       if (remaining <= 0) {
+//         showToast("Insufficient application credits. Please upgrade your plan in Subscriptions.", "error");
+//         setIsAutoApplyingAll(false);
+//         return;
+//       }
+
+//       const { numericId: numericResumeId } = await getAppResumeId();
+//       if (!numericResumeId) {
+//         showToast("No resume selected. Please go to Profile to upload/select a resume.", "error");
+//         setIsAutoApplyingAll(false);
+//         return;
+//       }
+
+//       const currentJobsList = displayedJobs || [];
+//       const eligibleJobs = currentJobsList.filter(
+//         (j) => !isApplyNowHiddenForJob(j, applicationMap, submittedJobIdSet) && !isJobSubmitted(j, submittedJobIdSet, applicationMap)
+//       );
+
+//       const validJobs = eligibleJobs
+//         .map((j) => ({ job: j, numericId: extractNumericJobId(j) }))
+//         .filter((item) => item.numericId !== null);
+
+//       if (validJobs.length === 0) {
+//         showToast("No unapplied or retryable jobs found on this page.", "warning");
+//         setIsAutoApplyingAll(false);
+//         return;
+//       }
+
+//       const jobIdsToApply = validJobs.map((item) => item.numericId).slice(0, remaining);
+
+//       const batchResult = await applyToJobsInBatches({
+//         resumeId: numericResumeId,
+//         jobIds: jobIdsToApply,
+//         batchSize: 50,
+//       });
+
+//       const queuedCount = batchResult.queued.length;
+//       const skippedCount = batchResult.skipped.length;
+
+//       await fetchApplicationStatuses(true);
+
+//       showToast(
+//         `Batch Auto Apply: ${queuedCount} Queued, ${skippedCount} Skipped across ${batchResult.totalProcessed} jobs.`,
+//         queuedCount > 0 ? "success" : "warning"
+//       );
+
+//       getBillingStatus()
+//         .then((status) => {
+//           if (status) window.dispatchEvent(new CustomEvent("billingStatusUpdated", { detail: status }));
+//         })
+//         .catch(() => { });
+//     } catch (err) {
+//       console.error("[BrowseJobs] Auto Apply All error:", err);
+//       showToast(err.message || "Failed to submit bulk applications.", "error");
+//     } finally {
+//       setIsAutoApplyingAll(false);
+//     }
+//   };
+
+//   // Filter States
+//   const [selectedDate, setSelectedDate] = useState("All time");
+//   const [selectedLocations, setSelectedLocations] = useState([]);
+//   const [locationSearch, setLocationSearch] = useState("");
+//   const [selectedWorkplace, setSelectedWorkplace] = useState([]);
+//   const [knownWorkplaceOptions, setKnownWorkplaceOptions] = useState([]);
+//   const [selectedCompanies, setSelectedCompanies] = useState([]);
+//   const [companySearch, setCompanySearch] = useState("");
+//   const [selectedExperience, setSelectedExperience] = useState("");
+//   const [selectedRoles, setSelectedRoles] = useState([]);
+//   const [sponsorsVisa, setSponsorsVisa] = useState(false);
+
+//   const dropdownRef = useRef(null);
+
+//   /**
+//    * Main function to load jobs for a specific page with Page-based Cache.
+//    * If the page is already cached (and not forcing refresh), returns cached data without API call.
+//    */
+//   const loadPage = useCallback(
+//     async (
+//       pageNumber,
+//       {
+//         forceRefresh = false,
+//         customQuery = null,
+//         customSort = null,
+//         overrideFilters = null,
+//         customResumeId = null,
+//         restoreFromBaseIfAvailable = false,
+//       } = {}
+//     ) => {
+//       // 1. Check cache first (unless forceRefresh is requested)
+//       if (!forceRefresh && jobsCacheRef.current[pageNumber] && jobsCacheRef.current[pageNumber].length > 0) {
+//         console.log(`[BrowseJobs] Page ${pageNumber} found in cache. Using cached data (NO API CALL).`);
+//         setActivePage(pageNumber);
+//         return jobsCacheRef.current[pageNumber];
+//       }
+
+//       // 2. Track active query version so force-refreshes supersede in-flight stale queries cleanly
+//       const requestVersion = forceRefresh ? ++queryVersionRef.current : queryVersionRef.current;
+//       const fetchKey = `${requestVersion}:${pageNumber}`;
+
+//       // Prevent duplicate concurrent requests for the same query version + page
+//       if (fetchingPagesRef.current.has(fetchKey)) {
+//         console.log(`[BrowseJobs] Request for page ${pageNumber} is already in flight. Skipping duplicate call.`);
+//         return;
+//       }
+
+//       const activeWorkplaces = overrideFilters?.workplace ?? selectedWorkplace;
+//       const activeLocs = overrideFilters?.locations ?? selectedLocations;
+//       const activeRoles = overrideFilters?.roles ?? selectedRoles;
+//       const activeDate = overrideFilters?.date ?? selectedDate;
+//       const activeCompanies = overrideFilters?.companies ?? selectedCompanies;
+//       const q = customQuery !== null ? customQuery : searchQuery;
+//       const sort = customSort !== null ? customSort : sortOption;
+//       const apiPage = Math.max(0, pageNumber - 1); // 0-indexed for GET /api/jobs
+
+//       // Extract target resumeId for GET /api/jobs?resumeId=...
+//       let resumeIdVal = customResumeId;
+//       if (resumeIdVal === null || resumeIdVal === undefined) {
+//         const curResume = selectedResumeRef.current;
+//         resumeIdVal = curResume
+//           ? (curResume.id ?? curResume.resumeId ?? curResume._id ?? curResume.fileId ?? curResume.uuid ?? curResume.resume_id)
+//           : activeResumeIdRef.current;
+//       }
+//       if (!resumeIdVal) {
+//         resumeIdVal =
+//           localStorage.getItem("selected_resume_id") ||
+//           localStorage.getItem("resume_id") ||
+//           localStorage.getItem("resumeId") ||
+//           sessionStorage.getItem("selected_resume_id") ||
+//           sessionStorage.getItem("resume_id") ||
+//           sessionStorage.getItem("resumeId");
+//       }
+
+//       const preCheckBaseKey = buildBaseJobFilterKey({
+//         resumeId: resumeIdVal,
+//         searchQuery: q,
+//         selectedLocations: activeLocs,
+//         selectedRoles: activeRoles,
+//         selectedCompanies: activeCompanies,
+//         selectedDate: activeDate,
+//         sortOption: sort || "best_match",
+//         pageSize: pageSize || 20,
+//       });
+
+//       const applyBaseCacheEntry = (entry, clientFiltered) => {
+//         const nextPages = { ...(entry?.pages || {}) };
+//         jobsCacheRef.current = nextPages;
+//         setJobsCache(nextPages);
+//         const allBaseJobs = Object.values(nextPages).flat();
+//         setKnownWorkplaceOptions(extractDynamicJobFilterOptions(allBaseJobs).workplaceOptions);
+//         setTotalItems(entry?.totalItems ?? allBaseJobs.length);
+//         setTotalPages(entry?.totalPages ?? 1);
+//         setHasMoreJobs(Boolean(entry?.hasMore));
+//         setIsClientWorkplaceFilterActive(Boolean(clientFiltered));
+//         setActivePage(pageNumber <= (entry?.totalPages || 1) ? pageNumber : 1);
+//         return nextPages[pageNumber] || allBaseJobs;
+//       };
+
+//       const preBaseEntry =
+//         baseJobsCacheRef.current?.key === preCheckBaseKey ? baseJobsCacheRef.current : null;
+//       const isKnownUnsupportedPre = hasUnsupportedWorkplaceTarget({
+//         unsupportedSet: serverUnsupportedWorkplacesRef.current,
+//         activeWorkplaces,
+//       });
+
+//       // Fast path: restore from unfiltered base cache without network call when possible
+//       if (preBaseEntry?.pages?.[pageNumber]) {
+//         if (
+//           (activeWorkplaces.length === 0 && restoreFromBaseIfAvailable) ||
+//           (activeWorkplaces.length > 0 &&
+//             (isKnownUnsupportedPre || (restoreFromBaseIfAvailable && !preBaseEntry.hasMore)))
+//         ) {
+//           setLoadMoreError(null);
+//           setFetchError(null);
+//           setIsLoadingJobs(false);
+//           setIsLoadingPage(false);
+//           return applyBaseCacheEntry(preBaseEntry, activeWorkplaces.length > 0);
+//         }
+//       }
+
+//       fetchingPagesRef.current.add(fetchKey);
+//       if (forceRefresh && pageNumber === 1) {
+//         jobsCacheRef.current = {};
+//         setJobsCache({});
+//       }
+//       if (pageNumber === 1 && (forceRefresh || Object.keys(jobsCacheRef.current).length === 0)) {
+//         setIsLoadingJobs(true);
+//       } else {
+//         setIsLoadingPage(true);
+//       }
+//       setLoadMoreError(null);
+//       setFetchError(null);
+
+//       if (!resumeIdVal) {
+//         try {
+//           resumeIdVal = await getPrimaryResumeId();
+//         } catch {
+//           // fallback
+//         }
+//       }
+//       const onboardingState = getOnboardingState();
+//       if (!resumeIdVal && onboardingState?.resumeId) {
+//         resumeIdVal = String(onboardingState.resumeId);
+//       }
+//       if (!resumeIdVal) {
+//         resumeIdVal = getStoredResumeId();
+//       }
+//       const userHasResume =
+//         Boolean(resumeIdVal) || (await checkUserHasResume().catch(() => false));
+//       if (requestVersion !== queryVersionRef.current) {
+//         fetchingPagesRef.current.delete(fetchKey);
+//         return [];
+//       }
+//       setHasResume(userHasResume);
+//       if (resumeIdVal) {
+//         setActiveResumeId(String(resumeIdVal));
+//       }
+
+//       const baseQueryKey = buildBaseJobFilterKey({
+//         resumeId: resumeIdVal,
+//         searchQuery: q,
+//         selectedLocations: activeLocs,
+//         selectedRoles: activeRoles,
+//         selectedCompanies: activeCompanies,
+//         selectedDate: activeDate,
+//         sortOption: sort || "best_match",
+//         pageSize: pageSize || 20,
+//       });
+//       const matchingBaseEntry =
+//         baseJobsCacheRef.current?.key === baseQueryKey ? baseJobsCacheRef.current : null;
+//       const baseJobsForRef = matchingBaseEntry
+//         ? Object.values(matchingBaseEntry.pages || {}).flat()
+//         : Object.values(jobsCacheRef.current || {}).flat();
+
+//       const shouldSendWorkplace =
+//         activeWorkplaces.length > 0 &&
+//         !hasUnsupportedWorkplaceTarget({
+//           unsupportedSet: serverUnsupportedWorkplacesRef.current,
+//           activeWorkplaces,
+//         });
+
+//       const buildUnfilteredParams = () =>
+//         buildJobQueryParams({
+//           resumeId: resumeIdVal,
+//           searchQuery: q,
+//           selectedLocations: activeLocs,
+//           selectedRoles: activeRoles,
+//           selectedWorkplace: [],
+//           selectedCompanies: activeCompanies,
+//           selectedDate: activeDate,
+//           sortOption: sort || "best_match",
+//           page: apiPage,
+//           pageSize: pageSize || 20,
+//         });
+
+//       const parsePagedResult = (resObj) => {
+//         const rawItems = resObj?.items || [];
+//         const mapped = rawItems
+//           .map((m, idx) => transformMatchToJob(m, apiPage * pageSize + idx))
+//           .filter(Boolean);
+//         const calcTotalItems =
+//           typeof resObj?.totalItems === "number" && resObj.totalItems >= 0
+//             ? resObj.totalItems
+//             : rawItems.length >= pageSize
+//               ? (apiPage + 2) * pageSize
+//               : apiPage * pageSize + rawItems.length;
+//         const calcTotalPages =
+//           typeof resObj?.totalPages === "number" && resObj.totalPages > 0
+//             ? resObj.totalPages
+//             : Math.max(1, Math.ceil(calcTotalItems / (pageSize || 20)));
+//         const calcHasMore = apiPage + 1 < calcTotalPages && rawItems.length >= pageSize;
+//         return {
+//           items: rawItems,
+//           transformed: mapped,
+//           resTotalItems: calcTotalItems,
+//           resTotalPages: calcTotalPages,
+//           hasMore: calcHasMore,
+//         };
+//       };
+
+//       try {
+//         const params = buildJobQueryParams({
+//           resumeId: resumeIdVal,
+//           searchQuery: q,
+//           selectedLocations: activeLocs,
+//           selectedRoles: activeRoles,
+//           selectedWorkplace: shouldSendWorkplace ? activeWorkplaces : [],
+//           selectedCompanies: activeCompanies,
+//           selectedDate: activeDate,
+//           sortOption: sort || "best_match",
+//           page: apiPage,
+//           pageSize: pageSize || 20,
+//           referenceJobs: baseJobsForRef,
+//         });
+
+//         console.log(`[BrowseJobs] Fetching Page ${pageNumber} (apiPage ${apiPage}) via GET /api/jobs with params:`, params);
+//         const res = await getJobs(params);
+//         if (requestVersion !== queryVersionRef.current) {
+//           return [];
+//         }
+
+//         const {
+//           transformed,
+//           resTotalItems,
+//           resTotalPages,
+//           hasMore,
+//         } = parsePagedResult(res);
+
+//         // If server workplace query returned empty or omitted expected workplaces, seamlessly fall back to base jobs + client filtering
+//         if (shouldSendWorkplace) {
+//           const needFallback = shouldFallbackToClientWorkplaceFilter({
+//             activeWorkplaces,
+//             pageNumber,
+//             transformed,
+//             hasMoreServer: hasMore,
+//             baseJobs: baseJobsForRef,
+//           });
+
+//           if (needFallback && matchingBaseEntry?.pages?.[1]) {
+//             recordUnsupportedWorkplaces({
+//               unsupportedSet: serverUnsupportedWorkplacesRef.current,
+//               activeWorkplaces,
+//               transformed,
+//             });
+//             return applyBaseCacheEntry(matchingBaseEntry, true);
+//           }
+
+//           if (transformed.length === 0 && pageNumber === 1 && !matchingBaseEntry) {
+//             const unfilteredParams = buildUnfilteredParams();
+//             const unfilteredRes = await getJobs(unfilteredParams);
+//             if (requestVersion !== queryVersionRef.current) {
+//               return [];
+//             }
+//             const parsedUnfiltered = parsePagedResult(unfilteredRes);
+//             if (parsedUnfiltered.transformed.length > 0) {
+//               let unfilteredPages;
+//               let finalTotalItems = parsedUnfiltered.resTotalItems;
+//               let finalTotalPages = parsedUnfiltered.resTotalPages;
+//               let finalHasMore = parsedUnfiltered.hasMore;
+//               if (parsedUnfiltered.transformed.length > pageSize) {
+//                 unfilteredPages = {};
+//                 finalTotalPages = Math.ceil(parsedUnfiltered.transformed.length / pageSize);
+//                 for (let p = 1; p <= finalTotalPages; p++) {
+//                   unfilteredPages[p] = parsedUnfiltered.transformed.slice((p - 1) * pageSize, p * pageSize);
+//                 }
+//                 finalTotalItems = parsedUnfiltered.transformed.length;
+//                 finalHasMore = false;
+//               } else {
+//                 unfilteredPages = { 1: parsedUnfiltered.transformed };
+//               }
+//               const newBaseEntry = {
+//                 key: baseQueryKey,
+//                 pages: unfilteredPages,
+//                 totalItems: finalTotalItems,
+//                 totalPages: finalTotalPages,
+//                 hasMore: finalHasMore,
+//               };
+//               baseJobsCacheRef.current = newBaseEntry;
+//               if (hasAnyJobMatchingWorkplaces(parsedUnfiltered.transformed, activeWorkplaces)) {
+//                 recordUnsupportedWorkplaces({
+//                   unsupportedSet: serverUnsupportedWorkplacesRef.current,
+//                   activeWorkplaces,
+//                   transformed,
+//                 });
+//               }
+//               return applyBaseCacheEntry(newBaseEntry, true);
+//             }
+//           }
+//         }
+
+//         setHasMoreJobs(hasMore);
+//         setTotalItems(resTotalItems);
+//         setTotalPages(resTotalPages);
+
+//         if (transformed.length === 0) {
+//           if (pageNumber === 1 && (forceRefresh || Object.keys(jobsCacheRef.current).length === 0)) {
+//             const hasAnyNonWorkplaceFilters =
+//               Boolean(typeof q === "string" && q.trim()) ||
+//               activeLocs.length > 0 ||
+//               activeRoles.length > 0 ||
+//               activeCompanies.length > 0 ||
+//               (activeDate && activeDate !== "All time") ||
+//               activeWorkplaces.length > 0;
+//             const stored = !hasAnyNonWorkplaceFilters ? getStoredJobMatches() : null;
+//             if (Array.isArray(stored) && stored.length > 0) {
+//               const fallback = stored.map((m, idx) => transformMatchToJob(m, idx)).filter(Boolean);
+//               let nextFallbackCache;
+//               let fallbackTotalPages = 1;
+//               if (fallback.length > pageSize) {
+//                 const chunked = {};
+//                 fallbackTotalPages = Math.ceil(fallback.length / pageSize);
+//                 for (let p = 1; p <= fallbackTotalPages; p++) {
+//                   chunked[p] = fallback.slice((p - 1) * pageSize, p * pageSize);
+//                 }
+//                 nextFallbackCache = chunked;
+//               } else {
+//                 nextFallbackCache = { 1: fallback };
+//               }
+//               jobsCacheRef.current = nextFallbackCache;
+//               setJobsCache(nextFallbackCache);
+//               setTotalPages(fallbackTotalPages);
+//               setKnownWorkplaceOptions(
+//                 extractDynamicJobFilterOptions(Object.values(nextFallbackCache).flat()).workplaceOptions
+//               );
+//               baseJobsCacheRef.current = {
+//                 key: baseQueryKey,
+//                 pages: nextFallbackCache,
+//                 totalItems: fallback.length,
+//                 totalPages: fallbackTotalPages,
+//                 hasMore: false,
+//               };
+//               setIsClientWorkplaceFilterActive(false);
+//               setActivePage(1);
+//               setTotalItems(fallback.length);
+//               setHasMoreJobs(false);
+//               return fallback;
+//             }
+//             jobsCacheRef.current = {};
+//             setJobsCache({});
+//             setTotalItems(0);
+//             setTotalPages(1);
+//             setHasMoreJobs(false);
+//             setIsClientWorkplaceFilterActive(false);
+//             setActivePage(1);
+//             return [];
+//           } else if (pageNumber > 1) {
+//             setHasMoreJobs(false);
+//             setTotalPages((prev) => Math.min(prev, pageNumber - 1));
+//             return [];
+//           }
+//         }
+
+//         // If page 1 returned all jobs in one response (> pageSize), chunk into pages
+//         if (pageNumber === 1 && transformed.length > pageSize) {
+//           const chunked = {};
+//           const chunkPages = Math.ceil(transformed.length / pageSize);
+//           for (let p = 1; p <= chunkPages; p++) {
+//             chunked[p] = transformed.slice((p - 1) * pageSize, p * pageSize);
+//           }
+//           jobsCacheRef.current = chunked;
+//           setJobsCache(chunked);
+//           if (!shouldSendWorkplace) {
+//             baseJobsCacheRef.current = {
+//               key: baseQueryKey,
+//               pages: chunked,
+//               totalItems: transformed.length,
+//               totalPages: chunkPages,
+//               hasMore: false,
+//             };
+//             setKnownWorkplaceOptions(
+//               extractDynamicJobFilterOptions(Object.values(chunked).flat()).workplaceOptions
+//             );
+//             setIsClientWorkplaceFilterActive(activeWorkplaces.length > 0);
+//           } else {
+//             setIsClientWorkplaceFilterActive(false);
+//           }
+//           setActivePage(1);
+//           setTotalItems(transformed.length);
+//           setTotalPages(chunkPages);
+//           setHasMoreJobs(false);
+//           return transformed;
+//         }
+
+//         // Cache page data
+//         const nextCache = forceRefresh
+//           ? { [pageNumber]: transformed }
+//           : { ...jobsCacheRef.current, [pageNumber]: transformed };
+//         jobsCacheRef.current = nextCache;
+//         setJobsCache((prev) => ({
+//           ...(forceRefresh ? {} : prev),
+//           [pageNumber]: transformed,
+//         }));
+//         if (!shouldSendWorkplace) {
+//           const nextBasePages =
+//             pageNumber === 1 && forceRefresh && !matchingBaseEntry
+//               ? { [pageNumber]: transformed }
+//               : { ...(matchingBaseEntry?.pages || {}), [pageNumber]: transformed };
+//           baseJobsCacheRef.current = {
+//             key: baseQueryKey,
+//             pages: nextBasePages,
+//             totalItems: resTotalItems,
+//             totalPages: resTotalPages,
+//             hasMore,
+//           };
+//           setKnownWorkplaceOptions(
+//             extractDynamicJobFilterOptions(Object.values(nextBasePages).flat()).workplaceOptions
+//           );
+//           setIsClientWorkplaceFilterActive(activeWorkplaces.length > 0);
+//         } else {
+//           setIsClientWorkplaceFilterActive(false);
+//         }
+//         setActivePage(pageNumber);
+
+//         return transformed;
+//       } catch (err) {
+//         if (requestVersion !== queryVersionRef.current) {
+//           return [];
+//         }
+//         console.error(`[BrowseJobs] Error fetching Page ${pageNumber} from GET /api/jobs:`, err);
+
+//         // If server rejected the workplace query param (e.g. 400 on 'on-site'), recover cleanly via base jobs
+//         if (shouldSendWorkplace && pageNumber === 1) {
+//           if (matchingBaseEntry?.pages?.[1]) {
+//             recordUnsupportedWorkplaces({
+//               unsupportedSet: serverUnsupportedWorkplacesRef.current,
+//               activeWorkplaces,
+//               transformed: [],
+//             });
+//             setFetchError(null);
+//             setLoadMoreError(null);
+//             return applyBaseCacheEntry(matchingBaseEntry, true);
+//           }
+//           try {
+//             const unfilteredRes = await getJobs(buildUnfilteredParams());
+//             if (requestVersion !== queryVersionRef.current) {
+//               return [];
+//             }
+//             const parsedUnfiltered = parsePagedResult(unfilteredRes);
+//             const uPages =
+//               parsedUnfiltered.transformed.length > pageSize
+//                 ? (() => {
+//                     const chunked = {};
+//                     const cp = Math.ceil(parsedUnfiltered.transformed.length / pageSize);
+//                     for (let p = 1; p <= cp; p++) {
+//                       chunked[p] = parsedUnfiltered.transformed.slice((p - 1) * pageSize, p * pageSize);
+//                     }
+//                     return chunked;
+//                   })()
+//                 : { 1: parsedUnfiltered.transformed };
+//             const uTotalPages =
+//               parsedUnfiltered.transformed.length > pageSize
+//                 ? Object.keys(uPages).length
+//                 : parsedUnfiltered.resTotalPages;
+//             const uTotalItems =
+//               parsedUnfiltered.transformed.length > pageSize
+//                 ? parsedUnfiltered.transformed.length
+//                 : parsedUnfiltered.resTotalItems;
+//             const uHasMore =
+//               parsedUnfiltered.transformed.length > pageSize ? false : parsedUnfiltered.hasMore;
+//             const newBaseEntry = {
+//               key: baseQueryKey,
+//               pages: uPages,
+//               totalItems: uTotalItems,
+//               totalPages: uTotalPages,
+//               hasMore: uHasMore,
+//             };
+//             baseJobsCacheRef.current = newBaseEntry;
+//             recordUnsupportedWorkplaces({
+//               unsupportedSet: serverUnsupportedWorkplacesRef.current,
+//               activeWorkplaces,
+//               transformed: [],
+//             });
+//             setFetchError(null);
+//             setLoadMoreError(null);
+//             return applyBaseCacheEntry(newBaseEntry, true);
+//           } catch {
+//             // Fall through to error handling below
+//           }
+//         }
+
+//         const msg = err?.response?.data?.message || err?.message || "Unable to load jobs. Please try again.";
+//         setFetchError(msg);
+//         setLoadMoreError(msg);
+
+//         if (pageNumber === 1 && Object.keys(jobsCacheRef.current).length === 0) {
+//           const stored = activeWorkplaces.length === 0 ? getStoredJobMatches() : null;
+//           if (Array.isArray(stored) && stored.length > 0) {
+//             const fallback = stored.map((m, idx) => transformMatchToJob(m, idx)).filter(Boolean);
+//             let nextFallbackCache;
+//             let fallbackTotalPages = 1;
+//             if (fallback.length > pageSize) {
+//               const chunked = {};
+//               fallbackTotalPages = Math.ceil(fallback.length / pageSize);
+//               for (let p = 1; p <= fallbackTotalPages; p++) {
+//                 chunked[p] = fallback.slice((p - 1) * pageSize, p * pageSize);
+//               }
+//               nextFallbackCache = chunked;
+//             } else {
+//               nextFallbackCache = { 1: fallback };
+//             }
+//             jobsCacheRef.current = nextFallbackCache;
+//             setJobsCache(nextFallbackCache);
+//             setTotalPages(fallbackTotalPages);
+//             setKnownWorkplaceOptions(
+//               extractDynamicJobFilterOptions(Object.values(nextFallbackCache).flat()).workplaceOptions
+//             );
+//             setActivePage(1);
+//             setTotalItems(fallback.length);
+//             setHasMoreJobs(false);
+//           }
+//         } else if (pageNumber > 1) {
+//           setHasMoreJobs(false);
+//         }
+//       } finally {
+//         fetchingPagesRef.current.delete(fetchKey);
+//         if (requestVersion === queryVersionRef.current) {
+//           setIsLoadingJobs(false);
+//           setIsLoadingPage(false);
+//         }
+//       }
+//     },
+//     [
+//       searchQuery,
+//       sortOption,
+//       selectedLocations,
+//       selectedCompanies,
+//       selectedRoles,
+//       selectedWorkplace,
+//       selectedDate,
+//       pageSize,
+//     ]
+//   );
+
+//   const loadPageRef = useRef(loadPage);
+//   useEffect(() => {
+//     loadPageRef.current = loadPage;
+//   }, [loadPage]);
+
+//   // Helper to persist selected resume ID and resume object across refreshes
+//   const saveResumeSelection = (resume, resumeId) => {
+//     if (!resumeId) return;
+//     const strId = String(resumeId);
+//     try {
+//       localStorage.setItem("selected_resume_id", strId);
+//       localStorage.setItem("resume_id", strId);
+//       localStorage.setItem("resumeId", strId);
+//       sessionStorage.setItem("selected_resume_id", strId);
+//       sessionStorage.setItem("resume_id", strId);
+//       sessionStorage.setItem("resumeId", strId);
+//       if (resume) {
+//         localStorage.setItem("selected_resume_data", JSON.stringify(resume));
+//         sessionStorage.setItem("selected_resume_data", JSON.stringify(resume));
+//       }
+//       if (typeof window !== "undefined") {
+//         window.dispatchEvent(
+//           new CustomEvent("resumeSelectionUpdated", {
+//             detail: { resume, resumeId: strId },
+//           })
+//         );
+//       }
+//     } catch (e) {
+//       console.error("[BrowseJobs] Error saving resume selection to storage:", e);
+//     }
+//   };
+
+//   // Fetch user resumes from GET /api/resumes
+//   const fetchUserResumes = useCallback(async () => {
+//     try {
+//       setIsLoadingResumes(true);
+//       const data = await getResumes();
+//       let list = [];
+//       if (Array.isArray(data)) {
+//         list = data;
+//       } else if (data && Array.isArray(data.resumes)) {
+//         list = data.resumes;
+//       } else if (data && Array.isArray(data.data)) {
+//         list = data.data;
+//       } else if (data && (data.id !== undefined || data.fileName || data.name)) {
+//         list = [data];
+//       }
+
+//       setUserResumes(list);
+//       let targetResume = null;
+//       let targetResumeId = null;
+
+//       // Retrieve stored resume ID & data from localStorage / sessionStorage if user previously selected one
+//       const storedResumeId =
+//         localStorage.getItem("selected_resume_id") ||
+//         localStorage.getItem("resume_id") ||
+//         localStorage.getItem("resumeId") ||
+//         sessionStorage.getItem("selected_resume_id") ||
+//         sessionStorage.getItem("resume_id") ||
+//         sessionStorage.getItem("resumeId");
+
+//       let storedResumeData = null;
+//       try {
+//         const rawData =
+//           localStorage.getItem("selected_resume_data") ||
+//           sessionStorage.getItem("selected_resume_data");
+//         if (rawData) storedResumeData = JSON.parse(rawData);
+//       } catch {
+//         // ignore parse error
+//       }
+
+//       if (list.length > 0) {
+//         setHasResume(true);
+
+//         // 1. Try matching by ID
+//         if (storedResumeId) {
+//           targetResume = list.find((r) => {
+//             const id = r.id ?? r.resumeId ?? r._id ?? r.fileId ?? r.uuid ?? r.resume_id;
+//             return String(id) === String(storedResumeId);
+//           });
+//         }
+
+//         // 2. Try matching by stored resume file name if ID match fails
+//         if (!targetResume && storedResumeData) {
+//           const storedName = storedResumeData.fileName || storedResumeData.name || storedResumeData.originalName;
+//           if (storedName) {
+//             targetResume = list.find((r) => {
+//               const rName = r.fileName || r.name || r.originalName;
+//               return rName && rName === storedName;
+//             });
+//           }
+//         }
+
+//         // 3. Fallback to primary resume or first resume in list
+//         if (!targetResume) {
+//           targetResume = list.find((r) => r.isPrimary === true) || list[0];
+//         }
+
+//         setSelectedResume(targetResume);
+//         targetResumeId = targetResume?.id ?? targetResume?.resumeId ?? targetResume?._id ?? targetResume?.fileId ?? targetResume?.uuid ?? targetResume?.resume_id;
+
+//         if (targetResumeId !== undefined && targetResumeId !== null) {
+//           const strId = String(targetResumeId);
+//           setActiveResumeId(strId);
+//           saveResumeSelection(targetResume, strId);
+//         }
+//       }
+//       baseJobsCacheRef.current = null;
+//       serverUnsupportedWorkplacesRef.current.clear();
+//       setIsClientWorkplaceFilterActive(false);
+//       jobsCacheRef.current = {};
+//       setJobsCache({});
+//       setKnownWorkplaceOptions([]);
+//       if (loadPageRef.current) {
+//         loadPageRef.current(1, { forceRefresh: true, customResumeId: targetResumeId });
+//       }
+//     } catch (err) {
+//       console.error("[BrowseJobs] Error fetching resumes list:", err);
+//       baseJobsCacheRef.current = null;
+//       serverUnsupportedWorkplacesRef.current.clear();
+//       setIsClientWorkplaceFilterActive(false);
+//       jobsCacheRef.current = {};
+//       setJobsCache({});
+//       setKnownWorkplaceOptions([]);
+//       if (loadPageRef.current) {
+//         loadPageRef.current(1, { forceRefresh: true });
+//       }
+//     } finally {
+//       setIsLoadingResumes(false);
+//     }
+//   }, []);
+
+//   // Handle selecting a resume from the dropdown (fetches GET /api/jobs?resumeId=...)
+//   const handleSelectResume = (resume) => {
+//     if (!resume) return;
+//     setSelectedResume(resume);
+//     setIsResumeDropdownOpen(false);
+//     const resumeId = resume.id ?? resume.resumeId ?? resume._id ?? resume.fileId ?? resume.uuid ?? resume.resume_id;
+
+//     if (resumeId !== undefined && resumeId !== null) {
+//       const strId = String(resumeId);
+//       setActiveResumeId(strId);
+//       saveResumeSelection(resume, strId);
+//       baseJobsCacheRef.current = null;
+//       serverUnsupportedWorkplacesRef.current.clear();
+//       setIsClientWorkplaceFilterActive(false);
+//       jobsCacheRef.current = {};
+//       setJobsCache({});
+//       setKnownWorkplaceOptions([]);
+//       loadPage(1, { forceRefresh: true, customResumeId: resumeId });
+//     }
+//   };
+
+//   // Trigger initial Page 1 fetch immediately when component mounts
+//   useEffect(() => {
+//     let isMounted = true;
+//     fetchUserResumes();
+
+//     const handleJobMatchesUpdated = () => {
+//       if (isMounted && loadPageRef.current) {
+//         baseJobsCacheRef.current = null;
+//         serverUnsupportedWorkplacesRef.current.clear();
+//         setIsClientWorkplaceFilterActive(false);
+//         jobsCacheRef.current = {};
+//         setJobsCache({});
+//         setKnownWorkplaceOptions([]);
+//         loadPageRef.current(1, { forceRefresh: true });
+//       }
+//     };
+
+//     window.addEventListener("jobMatchesUpdated", handleJobMatchesUpdated);
+//     window.addEventListener("storage", handleJobMatchesUpdated);
+//     return () => {
+//       isMounted = false;
+//       window.removeEventListener("jobMatchesUpdated", handleJobMatchesUpdated);
+//       window.removeEventListener("storage", handleJobMatchesUpdated);
+//     };
+//   }, [fetchUserResumes]);
+
+//   // Click outside listener to close resume dropdown
+//   useEffect(() => {
+//     const handleClickOutside = (event) => {
+//       if (
+//         resumeDropdownRef.current &&
+//         !resumeDropdownRef.current.contains(event.target)
+//       ) {
+//         setIsResumeDropdownOpen(false);
+//       }
+//     };
+//     document.addEventListener("mousedown", handleClickOutside);
+//     return () => {
+//       document.removeEventListener("mousedown", handleClickOutside);
+//     };
+//   }, []);
+
+
+//   // Enhance Resume Action Handler (POST /api/jobs/{jobId}/enhance -> GET /api/jobs/{jobId}/enhance)
+//   const handleEnhanceResume = async () => {
+//     if (isEnhancing || !selectedJobModal) return;
+//     setEnhanceError(null);
+//     setEnhanceSuccess(null);
+
+//     const selectedJobId = getJobId(selectedJobModal);
+
+//     console.log("[BrowseJobs] Triggering Enhance Resume for Job ID:", selectedJobId);
+
+//     if (!selectedJobId) {
+//       setEnhanceError("Job ID is missing. Please select a valid job to enhance.");
+//       return;
+//     }
+
+//     try {
+//       setIsEnhancing(true);
+
+//       const result = await getEnhancedResume(selectedJobId);
+//       console.log("[BrowseJobs] Enhance Resume API Result:", result);
+
+//       if (result?.status === "NO_BRIDGEABLE_GAPS") {
+//         setEnhanceSuccess(
+//           result?.message || "No bridgeable skill gaps identified for this role."
+//         );
+//       } else if (result?.status === "NOT_NEEDED") {
+//         setEnhanceSuccess(
+//           result?.message || "Resume enhancement is not needed for this role."
+//         );
+//       } else {
+//         setEnhancedResultsMap((prev) => ({
+//           ...prev,
+//           [selectedJobId]: result,
+//         }));
+//         setEnhanceSuccess(
+//           result?.message || "Resume successfully enhanced for this role!"
+//         );
+//       }
+//     } catch (err) {
+//       console.error("[BrowseJobs] Enhance Resume Error:", err);
+//       const errMsg =
+//         err?.response?.data?.message ||
+//         err?.response?.data?.detail ||
+//         err?.response?.data?.error ||
+//         err?.message ||
+//         "Unable to enhance resume. Please try again.";
+//       setEnhanceError(errMsg);
+//     } finally {
+//       setIsEnhancing(false);
+//     }
+//   };
+
+//   const handleCopyEnhancedResume = (text) => {
+//     if (!text) return;
+//     navigator.clipboard.writeText(text);
+//     setCopiedResume(true);
+//     setTimeout(() => setCopiedResume(false), 2500);
+//   };
+
+//   const handleDownloadEnhancedResume = async (text, job) => {
+//     const targetJob = job || selectedJobModal;
+//     const jobId = getJobId(targetJob);
+//     const jobTitle = (targetJob?.title || "Enhanced_Resume").replace(/[^a-zA-Z0-9_-]/g, "_");
+//     const fallbackFilename = `${jobTitle}_Resume.docx`;
+
+//     if (jobId) {
+//       try {
+//         setIsDownloadingResume(true);
+//         await downloadEnhancedResume(jobId, fallbackFilename);
+//         setIsDownloadingResume(false);
+//         return;
+//       } catch (err) {
+//         console.warn("[BrowseJobs] API download enhanced resume failed, fallback to text blob:", err);
+//         setIsDownloadingResume(false);
+//       }
+//     }
+
+//     if (!text) return;
+//     const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+//     const url = URL.createObjectURL(blob);
+//     const link = document.createElement("a");
+//     link.href = url;
+//     link.download = `${jobTitle}_Resume.txt`;
+//     document.body.appendChild(link);
+//     link.click();
+//     document.body.removeChild(link);
+//     URL.revokeObjectURL(url);
+//   };
+
+
+
+//   useEffect(() => {
+//     const handleClickOutside = (event) => {
+//       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+//         setActiveDropdown(null);
+//       }
+//     };
+
+//     const handleKeyDown = (event) => {
+//       if (event.key === "Escape") {
+//         setSelectedJobModal(null);
+//         setActiveDropdown(null);
+//       }
+//     };
+
+//     document.addEventListener("mousedown", handleClickOutside);
+//     window.addEventListener("keydown", handleKeyDown);
+//     return () => {
+//       document.removeEventListener("mousedown", handleClickOutside);
+//       window.removeEventListener("keydown", handleKeyDown);
+//     };
+//   }, []);
+
+//   const handleClear = () => {
+//     const willTriggerFilterEffect =
+//       Boolean(searchQuery) ||
+//       selectedDate !== "All time" ||
+//       selectedLocations.length > 0 ||
+//       selectedWorkplace.length > 0 ||
+//       selectedCompanies.length > 0 ||
+//       selectedRoles.length > 0;
+
+//     setSearchQuery("");
+//     setSelectedDate("All time");
+//     setSelectedLocations([]);
+//     setLocationSearch("");
+//     setSelectedWorkplace([]);
+//     setSelectedCompanies([]);
+//     setCompanySearch("");
+//     setSelectedExperience("");
+//     setSelectedRoles([]);
+//     setSponsorsVisa(false);
+//     setSortOption("best_match");
+//     setActiveDropdown(null);
+//     baseJobsCacheRef.current = null;
+//     serverUnsupportedWorkplacesRef.current.clear();
+//     setIsClientWorkplaceFilterActive(false);
+//     setActivePage(1);
+
+//     if (!willTriggerFilterEffect) {
+//       jobsCacheRef.current = {};
+//       setJobsCache({});
+//       loadPage(1, {
+//         forceRefresh: true,
+//         customQuery: "",
+//         customSort: "best_match",
+//         overrideFilters: {
+//           locations: [],
+//           companies: [],
+//           roles: [],
+//           workplace: [],
+//           date: "All time",
+//         },
+//       });
+//     }
+//   };
+
+//   const hasActiveFilters = Boolean(
+//     searchQuery.trim() ||
+//       (selectedDate && selectedDate !== "All time") ||
+//       selectedLocations.length > 0 ||
+//       selectedRoles.length > 0 ||
+//       selectedWorkplace.length > 0 ||
+//       selectedCompanies.length > 0
+//   );
+
+//   const toggleDropdown = (name) => {
+//     setActiveDropdown((prev) => (prev === name ? null : name));
+//   };
+
+//   const toggleCheckbox = (list, setList, item) => {
+//     if (list.includes(item)) {
+//       setList(list.filter((i) => i !== item));
+//     } else {
+//       setList([...list, item]);
+//     }
+//   };
+
+//   // Flatten all cached jobs across pages for options extraction
+//   const allCachedJobs = useMemo(() => {
+//     return Object.values(jobsCache).flat();
+//   }, [jobsCache]);
+
+//   // Dynamically extract filter options from cached jobs (preserving selected values)
+//   const {
+//     companyOptions: dynamicCompanyOptions,
+//     roleOptions: dynamicRoleOptions,
+//     locationOptions: dynamicLocationOptions,
+//     workplaceOptions: extractedWorkplaceOptions,
+//   } = useMemo(() => {
+//     return extractDynamicJobFilterOptions(allCachedJobs, {
+//       selectedLocations,
+//       selectedCompanies,
+//       selectedRoles,
+//       selectedWorkplace,
+//     });
+//   }, [
+//     allCachedJobs,
+//     selectedLocations,
+//     selectedCompanies,
+//     selectedRoles,
+//     selectedWorkplace,
+//   ]);
+
+//   const dynamicWorkplaceOptions = useMemo(() => {
+//     if (selectedWorkplace.length === 0) {
+//       return extractedWorkplaceOptions;
+//     }
+//     return sortWorkplaceOptions([
+//       ...knownWorkplaceOptions,
+//       ...extractedWorkplaceOptions,
+//       ...selectedWorkplace,
+//     ]);
+//   }, [knownWorkplaceOptions, extractedWorkplaceOptions, selectedWorkplace]);
+
+//   // Filter all cached jobs across all loaded pages
+//   const allFilteredJobs = useMemo(() => {
+//     return filterJobMatches(
+//       allCachedJobs,
+//       {
+//         searchQuery,
+//         selectedDate,
+//         selectedLocations,
+//         selectedCompanies,
+//         selectedRoles,
+//         selectedWorkplace,
+//       },
+//       {
+//         isSubmittedFn: (job) =>
+//           isJobSubmitted(job, submittedJobIdSet, applicationMap),
+//       }
+//     );
+//   }, [
+//     allCachedJobs,
+//     submittedJobIdSet,
+//     applicationMap,
+//     searchQuery,
+//     selectedDate,
+//     selectedLocations,
+//     selectedCompanies,
+//     selectedRoles,
+//     selectedWorkplace,
+//   ]);
+
+//   // Derived total pages for pagination controls
+//   const totalFilteredPages = Math.max(1, Math.ceil(allFilteredJobs.length / pageSize));
+//   const displayTotalPages =
+//     totalPages > totalFilteredPages && hasMoreJobs
+//       ? totalPages
+//       : totalFilteredPages;
+
+//   // Active slice of jobs for the current page (strictly derived from allFilteredJobs)
+//   const displayedJobs = useMemo(() => {
+//     const startIdx = (activePage - 1) * pageSize;
+//     const endIdx = startIdx + pageSize;
+//     return allFilteredJobs.slice(startIdx, endIdx);
+//   }, [allFilteredJobs, activePage, pageSize]);
+
+//   // Auto-fetch next page if filtering submitted jobs left the current page with empty slots
+//   useEffect(() => {
+//     const neededCount = activePage * pageSize;
+//     if (!isLoadingJobs && !isLoadingPage && hasMoreJobs && allFilteredJobs.length < neededCount) {
+//       const cachedPages = Object.keys(jobsCache).map(Number).filter((n) => !isNaN(n));
+//       const maxCached = cachedPages.length > 0 ? Math.max(...cachedPages) : 0;
+//       const nextPage = maxCached + 1;
+//       if (nextPage <= totalPages && !fetchingPagesRef.current.has(`${queryVersionRef.current}:${nextPage}`)) {
+//         if (loadPageRef.current) {
+//           loadPageRef.current(nextPage);
+//         }
+//       }
+//     }
+//   }, [
+//     allFilteredJobs.length,
+//     activePage,
+//     pageSize,
+//     hasMoreJobs,
+//     isLoadingJobs,
+//     isLoadingPage,
+//     totalPages,
+//     jobsCache,
+//   ]);
+
+//   // Aliased for full compatibility with existing JSX
+//   const filteredJobs = displayedJobs;
+
+//   // Auto-reset activePage to 1 if activePage exceeds displayTotalPages
+//   useEffect(() => {
+//     if (activePage > displayTotalPages && displayTotalPages > 0) {
+//       setActivePage(1);
+//     }
+//   }, [activePage, displayTotalPages]);
+
+//   // Reset to page 1 and fetch backend filtered results whenever search query or filters change
+//   useEffect(() => {
+//     const currentDeps = [
+//       searchQuery,
+//       selectedLocations,
+//       selectedCompanies,
+//       selectedRoles,
+//       selectedWorkplace,
+//       selectedDate,
+//     ];
+//     if (!prevFilterDepsRef.current) {
+//       prevFilterDepsRef.current = currentDeps;
+//       return;
+//     }
+//     const changed = currentDeps.some((val, i) => val !== prevFilterDepsRef.current[i]);
+//     if (!changed) {
+//       return;
+//     }
+//     prevFilterDepsRef.current = currentDeps;
+//     setActivePage(1);
+//     if (loadPageRef.current) {
+//       loadPageRef.current(1, { forceRefresh: true, restoreFromBaseIfAvailable: true });
+//     }
+//   }, [
+//     searchQuery,
+//     selectedLocations,
+//     selectedCompanies,
+//     selectedRoles,
+//     selectedWorkplace,
+//     selectedDate,
+//   ]);
+
+//   // Determine dynamic visible pages for pagination controls
+//   const visiblePages = useMemo(() => {
+//     const highestPage = Math.max(1, displayTotalPages);
+//     if (highestPage <= 5) {
+//       return Array.from({ length: highestPage }, (_, i) => i + 1);
+//     }
+//     let start = Math.max(1, activePage - 2);
+//     let end = Math.min(highestPage, start + 4);
+//     if (end - start < 4) {
+//       start = Math.max(1, end - 4);
+//     }
+//     const pages = [];
+//     for (let i = start; i <= end; i++) {
+//       pages.push(i);
+//     }
+//     return pages;
+//   }, [displayTotalPages, activePage]);
+
+//   // Handle Page Change with Cache & In-Memory Checking
+//   const handlePageChange = (targetPage) => {
+//     if (targetPage < 1 || targetPage === activePage || targetPage > displayTotalPages) {
+//       return;
+//     }
+//     const startIdx = (targetPage - 1) * pageSize;
+//     // 1. If target page jobs are already loaded in allFilteredJobs:
+//     if (startIdx < allFilteredJobs.length) {
+//       setActivePage(targetPage);
+//       return;
+//     }
+//     // 2. If target page jobs are cached in jobsCache directly:
+//     if (jobsCacheRef.current[targetPage] && jobsCacheRef.current[targetPage].length > 0) {
+//       setActivePage(targetPage);
+//       return;
+//     }
+//     // 3. Otherwise fetch from server if more jobs might be available
+//     if (hasMoreJobs) {
+//       loadPage(targetPage);
+//     }
+//   };
+
+//   return (
+//     <div className="flex h-screen overflow-hidden bg-[#F8FAFC]">
+//       {/* Left Sidebar */}
+//       <Sidebar />
+
+//       {/* Main Content Area (Scrollable) */}
+//       <div className="flex min-w-0 flex-1 flex-col h-screen overflow-y-auto bg-[#F8FAFC]">
+//         {/* Top Header */}
+//         <Header />
+
+//         {/* Browse Jobs Main Content */}
+//         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-7 flex flex-col gap-6 w-full bg-[#F8FAFC]">
+//           {/* Page Heading & Actions */}
+//           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 w-full">
+//             {/* Page Heading */}
+//             <div className="flex flex-col gap-1 min-w-0">
+              
+//               <h1 className="text-[20px] md:text-[22px] font-bold text-black tracking-tight">
+//                Full Time Apply One At A Time
+//               </h1>
+//               <p className="text-[13px] text-[#64748B]">
+//                 Discover and browse all job opportunities matched to your resume from our live matching engine.
+//               </p>
+//             </div>
+
+//             {/* Select Resume Dropdown (Aligned Right - Prominent & Enlarged) */}
+//             <div className="relative shrink-0 self-start sm:self-center" ref={resumeDropdownRef}>
+//               <button
+//                 type="button"
+//                 onClick={() => setIsResumeDropdownOpen((prev) => !prev)}
+//                 className="h-[50px] sm:h-[52px] px-4 sm:px-5 rounded-[14px] bg-white border border-[#CBD5E1] hover:border-[#4F46E5] hover:shadow-md transition-all flex items-center gap-3 text-[#0F172A] cursor-pointer"
+//               >
+//                 {/* Document / Resume Icon */}
+//                 <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#EEF2FF] text-[#4F46E5] flex items-center justify-center shrink-0 shadow-2xs">
+//                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.2">
+//                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+//                     <polyline points="14 2 14 8 20 8" />
+//                     <line x1="16" y1="13" x2="8" y2="13" />
+//                     <line x1="16" y1="17" x2="8" y2="17" />
+//                   </svg>
+//                 </div>
+
+//                 {/* Selected Resume Info */}
+//                 <div className="flex flex-col text-left max-w-[200px] sm:max-w-[300px] leading-snug">
+//                   <span className="text-[10.5px] sm:text-[11px] uppercase font-bold text-[#475569] tracking-wider">
+//                     {isSettingPrimary ? "Updating..." : "Active Resume"}
+//                   </span>
+//                   <span className="text-[13.5px] sm:text-[14.5px] font-bold text-[#0F172A] truncate">
+//                     {isLoadingResumes ? (
+//                       "Loading resumes..."
+//                     ) : selectedResume ? (
+//                       selectedResume.fileName || selectedResume.name || selectedResume.originalName || "Selected Resume"
+//                     ) : (
+//                       "Select Resume"
+//                     )}
+//                   </span>
+//                 </div>
+
+//                 {/* Primary Tag if selected resume is primary */}
+//                 {selectedResume?.isPrimary && !isSettingPrimary && (
+//                   <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-[#EEF2FF] text-[#4F46E5] border border-indigo-200 shrink-0">
+//                     <svg className="w-3 h-3 text-[#4F46E5]" fill="currentColor" viewBox="0 0 20 20">
+//                       <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+//                     </svg>
+//                     Primary
+//                   </span>
+//                 )}
+
+//                 {/* Chevron Icon */}
+//                 <svg
+//                   className={`w-5 h-5 text-[#64748B] transition-transform duration-200 shrink-0 ${isResumeDropdownOpen ? "rotate-180" : ""
+//                     }`}
+//                   fill="none"
+//                   viewBox="0 0 24 24"
+//                   stroke="currentColor"
+//                   strokeWidth="2"
+//                 >
+//                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+//                 </svg>
+//               </button>
+
+//               {/* Dropdown Menu Popup (Enlarged & Prominent) */}
+//               {isResumeDropdownOpen && (
+//                 <div className="absolute right-0 mt-2 w-80 sm:w-[380px] bg-white rounded-[18px] border border-[#CBD5E1] shadow-2xl z-50 overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-150">
+//                   <div className="px-4 py-3 border-b border-[#F1F5F9] flex items-center justify-between bg-[#F8FAFC]">
+//                     <span className="text-[12px] font-bold text-[#0F172A] uppercase tracking-wider">
+//                       Select Resume
+//                     </span>
+//                     <span className="text-[12px] font-semibold text-[#475569] bg-white px-2.5 py-0.5 rounded-full border border-[#E2E8F0]">
+//                       {userResumes.length} {userResumes.length === 1 ? "resume" : "resumes"}
+//                     </span>
+//                   </div>
+
+//                   <div className="max-h-[300px] overflow-y-auto p-2 space-y-1.5">
+//                     {isLoadingResumes ? (
+//                       <div className="p-5 text-center text-sm font-medium text-[#64748B]">
+//                         Loading resumes...
+//                       </div>
+//                     ) : userResumes.length === 0 ? (
+//                       <div className="p-5 text-center">
+//                         <p className="text-sm text-[#64748B] mb-2.5">No uploaded resumes found</p>
+//                         <button
+//                           type="button"
+//                           onClick={() => {
+//                             setIsResumeDropdownOpen(false);
+//                             navigate("/profile");
+//                           }}
+//                           className="px-4 py-2 bg-[#4F46E5] text-white text-xs font-bold rounded-xl hover:bg-[#4338CA] transition-colors cursor-pointer"
+//                         >
+//                           Upload in Profile
+//                         </button>
+//                       </div>
+//                     ) : (
+//                       userResumes.map((resume, idx) => {
+//                         const resumeId = resume.id ?? resume.resumeId ?? resume._id ?? resume.fileId ?? resume.uuid ?? resume.resume_id;
+//                         const selectedId = selectedResume?.id ?? selectedResume?.resumeId ?? selectedResume?._id ?? selectedResume?.fileId ?? selectedResume?.uuid ?? selectedResume?.resume_id;
+//                         const isSelected = String(resumeId) === String(selectedId);
+//                         const resumeName = resume.fileName || resume.name || resume.originalName || `Resume ${idx + 1}`;
+//                         const isPrimary = Boolean(resume.isPrimary === true);
+
+//                         return (
+//                           <button
+//                             key={resumeId || idx}
+//                             type="button"
+//                             onClick={() => handleSelectResume(resume)}
+//                             className={`w-full p-3 rounded-[12px] text-left transition-all flex items-center justify-between gap-3 cursor-pointer ${isSelected
+//                               ? "bg-[#EEF2FF] border border-indigo-200 shadow-2xs"
+//                               : "hover:bg-[#F8FAFC] border border-transparent"
+//                               }`}
+//                           >
+//                             <div className="flex items-center gap-3 min-w-0 flex-1">
+//                               <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${isSelected ? "bg-[#4F46E5] text-white shadow-2xs" : "bg-slate-100 text-slate-500"
+//                                 }`}>
+//                                 <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+//                                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+//                                   <polyline points="14 2 14 8 20 8" />
+//                                 </svg>
+//                               </div>
+//                               <div className="flex flex-col min-w-0">
+//                                 <span className={`text-[13.5px] sm:text-[14px] font-bold truncate ${isSelected ? "text-[#4F46E5]" : "text-[#0F172A]"
+//                                   }`}>
+//                                   {resumeName}
+//                                 </span>
+//                                 {resume.createdAt && (
+//                                   <span className="text-[11px] text-[#64748B]">
+//                                     Uploaded {new Date(resume.createdAt).toLocaleDateString()}
+//                                   </span>
+//                                 )}
+//                               </div>
+//                             </div>
+
+//                             <div className="flex items-center gap-2 shrink-0">
+//                               {isPrimary && (
+//                                 <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#EEF2FF] text-[#4F46E5] border border-indigo-200">
+//                                   Primary
+//                                 </span>
+//                               )}
+//                               {isSelected && (
+//                                 <svg className="w-5 h-5 text-[#4F46E5]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+//                                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+//                                 </svg>
+//                               )}
+//                             </div>
+//                           </button>
+//                         );
+//                       })
+//                     )}
+//                   </div>
+
+//                   <div className="p-3 border-t border-[#F1F5F9] bg-[#F8FAFC] flex items-center justify-between">
+//                     <button
+//                       type="button"
+//                       onClick={() => {
+//                         setIsResumeDropdownOpen(false);
+//                         navigate("/profile");
+//                       }}
+//                       className="w-full py-2 px-3 text-center text-[12.5px] font-bold text-[#4F46E5] hover:text-[#4338CA] hover:bg-white rounded-xl transition-all border border-transparent hover:border-[#E2E8F0] cursor-pointer"
+//                     >
+//                       + Manage / Upload Resumes in Profile
+//                     </button>
+//                   </div>
+//                 </div>
+//               )}
+//             </div>
+//           </div>
+
+//           {/* Search & Filter Container */}
+//           <JobFilterBar
+//             dropdownRef={dropdownRef}
+//             searchQuery={searchQuery}
+//             onSearchChange={setSearchQuery}
+//             onSearchEnter={() => {
+//               baseJobsCacheRef.current = null;
+//               jobsCacheRef.current = {};
+//               setJobsCache({});
+//               loadPage(1, { forceRefresh: true });
+//             }}
+//             onClear={handleClear}
+//             activeDropdown={activeDropdown}
+//             onToggleDropdown={toggleDropdown}
+//             selectedDate={selectedDate}
+//             onSelectDate={(opt) => {
+//               setSelectedDate(opt);
+//               setActiveDropdown(null);
+//             }}
+//             selectedLocations={selectedLocations}
+//             locationSearch={locationSearch}
+//             onLocationSearchChange={setLocationSearch}
+//             locationOptions={dynamicLocationOptions}
+//             onToggleLocation={(loc) =>
+//               toggleCheckbox(selectedLocations, setSelectedLocations, loc)
+//             }
+//             selectedRoles={selectedRoles}
+//             roleOptions={dynamicRoleOptions}
+//             onToggleRole={(role) =>
+//               toggleCheckbox(selectedRoles, setSelectedRoles, role)
+//             }
+//             selectedWorkplace={selectedWorkplace}
+//             workplaceOptions={dynamicWorkplaceOptions}
+//             onToggleWorkplace={(wp) =>
+//               toggleCheckbox(selectedWorkplace, setSelectedWorkplace, wp)
+//             }
+//             selectedCompanies={selectedCompanies}
+//             companySearch={companySearch}
+//             onCompanySearchChange={setCompanySearch}
+//             companyOptions={dynamicCompanyOptions}
+//             onToggleCompany={(comp) =>
+//               toggleCheckbox(selectedCompanies, setSelectedCompanies, comp)
+//             }
+//             sortOption={sortOption}
+//             onSelectSort={(newSort) => {
+//               setSortOption(newSort);
+//               setActiveDropdown(null);
+//               baseJobsCacheRef.current = null;
+//               jobsCacheRef.current = {};
+//               setJobsCache({});
+//               loadPage(1, { forceRefresh: true, customSort: newSort });
+//             }}
+//           />
+
+
+
+//           {/* Error Banner */}
+//           {fetchError && (
+//             <div className="p-4 rounded-[14px] bg-rose-50 border border-rose-200 text-rose-800 text-[13px] font-medium flex items-center justify-between gap-3 animate-in fade-in">
+//               <div className="flex items-center gap-2">
+//                 <span className="w-5 h-5 rounded-full bg-rose-600 text-white flex items-center justify-center text-[11px] font-bold shrink-0">!</span>
+//                 <span>{fetchError}</span>
+//               </div>
+//               <button
+//                 type="button"
+//                 onClick={() => {
+//                   baseJobsCacheRef.current = null;
+//                   loadPage(activePage, { forceRefresh: true });
+//                 }}
+//                 className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold cursor-pointer shrink-0 transition-colors"
+//               >
+//                 Retry
+//               </button>
+//             </div>
+//           )}
+
+//           {/* Application Status Error Banner */}
+//           {statusError && (
+//             <div className="p-4 rounded-[14px] bg-amber-50 border border-amber-200 text-amber-800 text-[13px] font-medium flex items-center justify-between gap-3 animate-in fade-in">
+//               <div className="flex items-center gap-2">
+//                 <span className="w-5 h-5 rounded-full bg-amber-600 text-white flex items-center justify-center text-[11px] font-bold shrink-0">!</span>
+//                 <span>Application Status Error: {statusError}</span>
+//               </div>
+//               <button
+//                 type="button"
+//                 onClick={fetchApplicationStatuses}
+//                 className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold cursor-pointer shrink-0 transition-colors"
+//               >
+//                 Retry Loading Statuses
+//               </button>
+//             </div>
+//           )}
+
+//           {/* Dynamic Job Cards Grid */}
+//           {(() => {
+//             return (
+//               <>
+//                 {isLoadingJobs ? (
+//                   <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-16 text-center flex flex-col items-center justify-center gap-3">
+//                     <svg className="animate-spin h-8 w-8 text-[#4F46E5]" fill="none" viewBox="0 0 24 24">
+//                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+//                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+//                     </svg>
+//                     <p className="text-[14px] font-medium text-slate-700">Loading stored job matches from server...</p>
+//                   </div>
+//                 ) : allCachedJobs.length === 0 && !hasActiveFilters ? (
+//                   <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-12 text-center flex flex-col items-center justify-center gap-3">
+//                     <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center text-[#4F46E5] mb-1">
+//                       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+//                         <circle cx="11" cy="11" r="7" />
+//                         <path d="m20 20-3.5-3.5" />
+//                       </svg>
+//                     </div>
+//                     <p className="text-[16px] font-bold text-slate-800">
+//                       No stored job matches found
+//                     </p>
+//                     <p className="text-[13px] text-slate-500 max-w-md leading-relaxed">
+//                       Upload or set a primary resume in your profile to enable automated ATS matching and job recommendations.
+//                     </p>
+//                     <div className="flex items-center gap-2.5 mt-2">
+//                       <button
+//                         type="button"
+//                         onClick={() => navigate("/profile")}
+//                         className="px-4 py-2 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-semibold rounded-xl transition-colors cursor-pointer shadow-xs"
+//                       >
+//                         Go to Profile & Resumes
+//                       </button>
+//                     </div>
+//                   </div>
+//                 ) : allFilteredJobs.length === 0 ? (
+//                   <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-10 text-center flex flex-col items-center justify-center gap-3">
+//                     <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+//                       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+//                         <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+//                       </svg>
+//                     </div>
+//                     <p className="text-[15px] font-bold text-slate-800">No matching jobs found</p>
+//                     <p className="text-[13px] text-slate-500 max-w-sm">
+//                       No jobs match your current search or filter options. Try clearing or broadening your filters.
+//                     </p>
+//                     <button
+//                       type="button"
+//                       onClick={handleClear}
+//                       className="mt-1 px-4 py-2 bg-[#EEF2FF] hover:bg-[#E0E7FF] text-[#4F46E5] text-xs font-semibold rounded-xl transition-colors cursor-pointer"
+//                     >
+//                       Clear Filters
+//                     </button>
+//                   </div>
+//                 ) : (
+//                   <>
+//                     {statusError && (
+//                       <div className="mb-4 p-4 rounded-[16px] bg-red-50 border border-red-200 text-red-700 text-[13.5px] flex items-center justify-between gap-4 shadow-xs">
+//                         <div className="flex items-center gap-2.5">
+//                           <svg className="w-5 h-5 text-red-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+//                             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+//                           </svg>
+//                           <div>
+//                             <span className="font-semibold">Application Status Error:</span> {statusError}
+//                           </div>
+//                         </div>
+//                         <button
+//                           type="button"
+//                           onClick={fetchApplicationStatuses}
+//                           className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer shrink-0"
+//                         >
+//                           Retry Status
+//                         </button>
+//                       </div>
+//                     )}
+//                     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4.5 w-full">
+//                       {filteredJobs.map((job, idx) => (
+//                         <div
+//                           key={job.id || job.job_id || job.jobId || `job-${idx}`}
+//                           onClick={() => handleOpenJobModal(job)}
+//                           className="bg-white rounded-[20px] border border-[#E2E8F0] p-5 flex flex-col justify-between shadow-[0_1px_3px_rgba(15,23,42,0.02)] hover:shadow-md hover:border-slate-300 transition-all duration-200 min-h-[260px] cursor-pointer group"
+//                         >
+//                           <div>
+//                             {/* Top Header: Logo + Match Badge */}
+//                             <div className="flex items-center justify-between gap-2">
+//                               {job.logo ? (
+//                                 <div className="w-[40px] h-[40px] rounded-[10px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-1.5 overflow-hidden">
+//                                   <img
+//                                     src={job.logo}
+//                                     alt={job.company || "Company Logo"}
+//                                     className="w-full h-full object-contain"
+//                                   />
+//                                 </div>
+//                               ) : (
+//                                 <div className="w-[40px] h-[40px] rounded-[10px] bg-[#EEF2FF] border border-indigo-100/80 flex items-center justify-center shrink-0 text-[#4F46E5] shadow-2xs">
+//                                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+//                                     <path strokeLinecap="round" strokeLinejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+//                                   </svg>
+//                                 </div>
+//                               )}
+//                               {(() => {
+//                                 const cardJobId = getJobId(job);
+//                                 const cardEnh = cardJobId ? enhancedResultsMap[cardJobId] : null;
+//                                 const cardScore = cardEnh?.enhancedScore ?? cardEnh?.enhanced_score ?? job.matchPercent;
+//                                 const isCardEnhanced = !!(cardEnh?.enhancedScore ?? cardEnh?.enhanced_score);
+//                                 return (
+//                                   <span
+//                                     className={`text-[12px] font-semibold px-2.5 py-0.5 rounded-full ${isCardEnhanced
+//                                         ? "bg-[#EEF2FF] text-[#4F46E5] border border-[#C7D2FE]"
+//                                         : (job.matchColor || "bg-[#EEF2FF] text-[#4F46E5]")
+//                                       }`}
+//                                   >
+//                                     {cardScore !== null && cardScore !== undefined ? `${cardScore}% match` : (job.match || "ATS Match")}
+//                                   </span>
+//                                 );
+//                               })()}
+//                             </div>
+
+//                             {/* Job Title & Company */}
+//                             <div className="mt-3.5">
+//                               <h3 className="text-[15px] font-bold text-[#0F172A] tracking-tight leading-snug group-hover:text-[#4F46E5] transition-colors line-clamp-2">
+//                                 {job.title}
+//                               </h3>
+//                               <div className="flex items-center gap-1.5 text-[13px] text-[#64748B] font-normal mt-1 flex-wrap">
+//                                 <span className="font-medium text-slate-700 truncate max-w-[140px]">{job.company}</span>
+//                                 {job.companyDomain && (
+//                                   <span className="text-[11px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded font-mono">
+//                                     {job.companyDomain}
+//                                   </span>
+//                                 )}
+//                                 <VerifiedTick />
+//                               </div>
+//                             </div>
+
+//                             {/* Location, Workplace & Type Pills */}
+//                             <div className="mt-3 flex flex-col gap-1.5">
+//                               <div className="flex items-center gap-1.5 text-[12.5px] text-[#64748B]">
+//                                 <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+//                                   <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+//                                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+//                                 </svg>
+//                                 <span className="truncate">{job.fullLocation || job.location}</span>
+//                               </div>
+
+//                               <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+//                                 {job.workMode && (
+//                                   <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 capitalize">
+//                                     {job.workMode}
+//                                   </span>
+//                                 )}
+//                                 {job.type && (
+//                                   <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 capitalize">
+//                                     {job.type}
+//                                   </span>
+//                                 )}
+//                               </div>
+
+//                               <div className="text-[11.5px] text-[#94A3B8] mt-0.5">
+//                                 {job.posted}
+//                               </div>
+//                             </div>
+//                           </div>
+
+//                           {/* Action Buttons */}
+//                           {(() => {
+//                             const cardJobIdKey = job.id || job.jobId || extractNumericJobId(job);
+
+//                             if (isStatusLoading) {
+//                               return (
+//                                 <div className="flex items-center gap-2.5 pt-4 mt-auto">
+//                                   <button
+//                                     type="button"
+//                                     onClick={(e) => {
+//                                       e.stopPropagation();
+//                                       handleOpenJobModal(job);
+//                                     }}
+//                                     className="flex-1 h-[36px] font-medium rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#334155] hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-center"
+//                                   >
+//                                     View Details
+//                                   </button>
+//                                   <button
+//                                     type="button"
+//                                     disabled
+//                                     className="flex-1 h-[36px] rounded-[10px] bg-slate-50 border border-slate-200/80 text-slate-400 text-[12px] font-medium flex items-center justify-center gap-1.5 cursor-not-allowed"
+//                                   >
+//                                     <svg className="animate-spin h-3.5 w-3.5 text-slate-400" fill="none" viewBox="0 0 24 24">
+//                                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+//                                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+//                                     </svg>
+//                                     <span>Checking...</span>
+//                                   </button>
+//                                 </div>
+//                               );
+//                             }
+
+//                             const actualJobId = extractNumericJobId(job) || job.jobId || job.job_id || job.id;
+//                             const record = getMatchingApplicationForJob(job, applicationMap);
+//                             const hideApply = isApplyNowHiddenForJob(job, applicationMap, submittedJobIdSet);
+
+//                             console.log("[BrowseJobs] Application status match", {
+//                               cardJobId: actualJobId,
+//                               matchedApplicationJobId: record ? (extractJobIdFromApplicationRecord(record) ?? null) : null,
+//                               applicationId: record?.id ?? null,
+//                               status: record?.status ?? record?.state ?? null,
+//                               hideApplyNow: hideApply
+//                             });
+
+//                             if (hideApply) {
+//                               const rawStatus = record?.status || record?.state || record?.applicationStatus;
+//                               const norm = normalizeApplicationStatus(rawStatus);
+
+//                               let displayLabel = "Applied";
+//                               let badgeClass = "bg-slate-100 text-slate-600 border-slate-200";
+//                               if (norm === "SUBMITTED") {
+//                                 displayLabel = "Submitted";
+//                                 badgeClass = "bg-emerald-50 text-emerald-700 border-emerald-200/80";
+//                               } else if (norm === "QUEUED") {
+//                                 displayLabel = "Queued";
+//                                 badgeClass = "bg-indigo-50 text-indigo-700 border-indigo-200/80";
+//                               } else if (norm === "IN_PROGRESS") {
+//                                 displayLabel = "In Progress";
+//                                 badgeClass = "bg-blue-50 text-blue-700 border-blue-200/80";
+//                               } else if (norm === "NEEDS_ACTION") {
+//                                 displayLabel = "Needs Action";
+//                                 badgeClass = "bg-amber-50 text-amber-700 border-amber-200/80";
+//                               } else if (norm === "PREPARING") {
+//                                 displayLabel = "Preparing";
+//                                 badgeClass = "bg-purple-50 text-purple-700 border-purple-200/80";
+//                               }
+
+//                               return (
+//                                 <div className="flex items-center gap-2.5 pt-4 mt-auto">
+//                                   <button
+//                                     type="button"
+//                                     onClick={(e) => {
+//                                       e.stopPropagation();
+//                                       handleOpenJobModal(job);
+//                                     }}
+//                                     className="flex-1 h-[36px] font-medium rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#334155] hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-center"
+//                                   >
+//                                     View Details
+//                                   </button>
+//                                   <span
+//                                     className={`flex-1 h-[36px] rounded-[10px] border text-[12.5px] font-semibold flex items-center justify-center ${badgeClass}`}
+//                                   >
+//                                     {displayLabel}
+//                                   </span>
+//                                 </div>
+//                               );
+//                             }
+
+//                             return (
+//                               <div className="flex items-center gap-2.5 pt-4 mt-auto">
+//                                 <button
+//                                   type="button"
+//                                   onClick={(e) => {
+//                                     e.stopPropagation();
+//                                     handleOpenJobModal(job);
+//                                   }}
+//                                   className="flex-1 h-[36px] font-medium rounded-[10px] border border-[#E2E8F0] bg-white text-[13px] text-[#334155] hover:bg-slate-50 transition-colors cursor-pointer flex items-center justify-center"
+//                                 >
+//                                   View Details
+//                                 </button>
+//                                 <button
+//                                   type="button"
+//                                   onClick={(e) => handleApplyToCardJob(job, e)}
+//                                   disabled={Boolean(applyingCardIds[cardJobIdKey])}
+//                                   className="flex-1 h-[36px] rounded-[10px] bg-[#EEF2FF] hover:bg-[#E0E7FF] disabled:opacity-60 text-[#4F46E5] border border-[#C7D2FE]/80 text-[13px] font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed flex items-center justify-center active:scale-[0.99]"
+//                                 >
+//                                   {applyingCardIds[cardJobIdKey] ? (
+//                                     <span className="flex items-center gap-1.5">
+//                                       <svg className="animate-spin h-3.5 w-3.5 text-[#4F46E5]" fill="none" viewBox="0 0 24 24">
+//                                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+//                                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+//                                       </svg>
+//                                       <span>Applying...</span>
+//                                     </span>
+//                                   ) : (
+//                                     "Apply Now"
+//                                   )}
+//                                 </button>
+//                               </div>
+//                             );
+//                           })()}
+//                         </div>
+//                       ))}
+//                     </div>
+
+//                     {/* Bottom Pagination Card (Image 2 Design) */}
+//                     <div className="bg-white rounded-[16px] border border-[#E2E8F0] px-5 py-3.5 flex items-center justify-between flex-wrap gap-4 shadow-[0_1px_3px_rgba(15,23,42,0.02)] mt-2 mb-8">
+//                       {/* Left Side: Dynamic Loaded Jobs Count Text */}
+//                       <span className="text-[13px] sm:text-[13.5px] font-medium text-[#475569]">
+//                         {(() => {
+//                           const currentCount = displayedJobs.length;
+//                           const startIdx = allFilteredJobs.length > 0 ? (activePage - 1) * pageSize + 1 : 0;
+//                           const endIdx = allFilteredJobs.length > 0 ? (activePage - 1) * pageSize + currentCount : 0;
+//                           const displayTotal =
+//                             isClientWorkplaceFilterActive && !hasMoreJobs
+//                               ? allFilteredJobs.length
+//                               : totalItems > allFilteredJobs.length
+//                                 ? totalItems
+//                                 : allFilteredJobs.length;
+
+//                           return `Showing ${startIdx}–${endIdx} of ${displayTotal} jobs (Page ${activePage} of ${displayTotalPages})`;
+//                         })()}
+//                       </span>
+
+//                       {/* Right Side: Pagination Controls (< 1 2 3 >) */}
+//                       <div className="flex items-center gap-1.5">
+//                         {/* Previous Button */}
+//                         <button
+//                           type="button"
+//                           onClick={() => handlePageChange(activePage - 1)}
+//                           disabled={activePage <= 1 || isLoadingPage}
+//                           className="w-8 h-8 rounded-lg border border-[#E2E8F0] bg-white hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed text-slate-700 text-sm flex items-center justify-center transition-colors cursor-pointer"
+//                           aria-label="Previous Page"
+//                         >
+//                           <svg
+//                             className="w-4 h-4 text-slate-600"
+//                             fill="none"
+//                             viewBox="0 0 24 24"
+//                             stroke="currentColor"
+//                             strokeWidth="2.5"
+//                           >
+//                             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+//                           </svg>
+//                         </button>
+
+//                         {/* Page Numbers */}
+//                         {visiblePages.map((pg) => {
+//                           const isActive = activePage === pg;
+//                           return (
+//                             <button
+//                               key={pg}
+//                               type="button"
+//                               onClick={() => handlePageChange(pg)}
+//                               disabled={isLoadingPage && isActive}
+//                               className={`w-8 h-8 rounded-lg text-sm font-semibold flex items-center justify-center transition-colors cursor-pointer ${isActive
+//                                 ? "bg-[#4F46E5] text-white shadow-xs"
+//                                 : "border border-[#E2E8F0] bg-white text-slate-700 hover:bg-slate-50"
+//                                 }`}
+//                             >
+//                               {pg}
+//                             </button>
+//                           );
+//                         })}
+
+//                         {/* Next Button */}
+//                         <button
+//                           type="button"
+//                           onClick={() => handlePageChange(activePage + 1)}
+//                           disabled={activePage >= displayTotalPages || isLoadingPage}
+//                           className="w-8 h-8 rounded-lg border border-[#E2E8F0] bg-white hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed text-slate-700 text-sm flex items-center justify-center transition-colors cursor-pointer"
+//                           aria-label="Next Page"
+//                         >
+//                           <svg
+//                             className="w-4 h-4 text-slate-600"
+//                             fill="none"
+//                             viewBox="0 0 24 24"
+//                             stroke="currentColor"
+//                             strokeWidth="2.5"
+//                           >
+//                             <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+//                           </svg>
+//                         </button>
+//                       </div>
+//                     </div>
+//                   </>
+//                 )
+//                 }
+//               </>
+//             );
+//           })()}
+//         </main>
+//       </div>
+
+//       {/* Job Details Modal Drawer (Right side slide-over) */}
+//       {
+//         selectedJobModal && (() => {
+//           const selectedJobId = getJobId(selectedJobModal);
+//           const enhResult = selectedJobId ? enhancedResultsMap[selectedJobId] : null;
+//           const hasEnhanced = !!enhResult;
+
+//           // Old / Original ATS score (from enhance endpoint or initial job match)
+//           const rawOldScore =
+//             enhResult?.originalScore ??
+//             enhResult?.original_score ??
+//             (selectedJobModal.rawScore !== null && selectedJobModal.rawScore !== undefined && !isNaN(Number(selectedJobModal.rawScore))
+//               ? Number(selectedJobModal.rawScore)
+//               : selectedJobModal.matchPercent);
+
+//           const oldAtsScore =
+//             rawOldScore !== null && rawOldScore !== undefined && !isNaN(Number(rawOldScore))
+//               ? Number(rawOldScore)
+//               : null;
+
+//           // New / Enhanced ATS score (from enhance endpoint)
+//           const rawNewScore =
+//             enhResult?.enhancedScore ??
+//             enhResult?.enhanced_score ??
+//             null;
+
+//           const newAtsScore =
+//             rawNewScore !== null && rawNewScore !== undefined && !isNaN(Number(rawNewScore))
+//               ? Number(rawNewScore)
+//               : null;
+
+//           const activeAtsScore = (hasEnhanced && newAtsScore !== null) ? newAtsScore : oldAtsScore;
+
+//           const matchCategory =
+//             activeAtsScore !== null
+//               ? (activeAtsScore >= 80 ? "Strong match" : activeAtsScore >= 60 ? "Moderate match" : "Lower match")
+//               : null;
+
+//           const activeScoreData =
+//             enhResult?.score_data ||
+//             selectedJobModal.scoreData ||
+//             selectedJobModal.rawMatch?.score_data ||
+//             null;
+
+//           const missingRequiredSkills =
+//             activeScoreData?.missing_required_skills ||
+//             selectedJobModal.rawMatch?.missing_required_skills ||
+//             [];
+//           const missingPreferredSkills =
+//             activeScoreData?.missing_preferred_skills ||
+//             selectedJobModal.rawMatch?.missing_preferred_skills ||
+//             [];
+//           const missingKeywords =
+//             activeScoreData?.missing_keywords ||
+//             selectedJobModal.rawMatch?.missing_keywords ||
+//             [];
+
+//           return (
+//             <div
+//               className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[2px]"
+//               onClick={() => {
+//                 setSelectedJobModal(null);
+//                 setEnhanceError(null);
+//                 setEnhanceSuccess(null);
+//               }}
+//             >
+//               <div
+//                 className="absolute top-0 right-0 h-full w-full sm:w-[520px] lg:w-[440px] bg-white shadow-2xl overflow-hidden flex flex-col min-h-0 animate-in slide-in-from-right duration-300"
+//                 onClick={(e) => e.stopPropagation()}
+//               >
+//                 {/* Modal Header */}
+//                 <div className="p-5 sm:p-6 pb-4 border-b border-slate-100 flex items-start justify-between gap-4 shrink-0">
+//                   <div className="flex items-start gap-3.5 flex-1 min-w-0 pr-2">
+//                     {selectedJobModal.logo ? (
+//                       <div className="w-[44px] h-[44px] rounded-[12px] bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 p-2 mt-0.5">
+//                         <img
+//                           src={selectedJobModal.logo}
+//                           alt={selectedJobModal.company || "Company Logo"}
+//                           className="w-full h-full object-contain"
+//                         />
+//                       </div>
+//                     ) : null}
+
+//                     <div className="flex flex-col flex-1 min-w-0">
+//                       <h2 className="text-[17px] font-bold text-[#0F172A] tracking-tight leading-snug break-words">
+//                         {typeof selectedJobModal.title === "string"
+//                           ? selectedJobModal.title
+//                             .replace(/<[^>]*>/g, " ")
+//                             .replace(/\s+/g, " ")
+//                             .trim()
+//                           : selectedJobModal.title}
+//                       </h2>
+
+//                       <div className="flex items-center gap-1.5 text-[13.5px] text-[#475569] font-medium mt-1">
+//                         <span className="truncate">{selectedJobModal.company}</span>
+//                         <VerifiedTick />
+//                       </div>
+
+//                       <div className="flex items-center gap-2.5 text-[12px] text-[#64748B] mt-2 flex-wrap">
+//                         <span>
+//                           {selectedJobModal.fullLocation ||
+//                             selectedJobModal.location}
+//                         </span>
+//                         <span className="text-slate-300">•</span>
+//                         <span>{selectedJobModal.type || "Full-time"}</span>
+//                         <span className="text-slate-300">•</span>
+//                         <span>{selectedJobModal.workMode || "On-Site"}</span>
+//                       </div>
+//                       <div className="text-[12px] text-[#64748B] mt-1">
+//                         {selectedJobModal.department || "Engineering"}
+//                       </div>
+//                     </div>
+//                   </div>
+
+//                   {/* Right Actions (Close & Enhance Resume) */}
+//                   <div className="flex flex-col items-end gap-2 shrink-0">
+//                     <button
+//                       type="button"
+//                       onClick={() => {
+//                         setSelectedJobModal(null);
+//                         setEnhanceError(null);
+//                         setEnhanceSuccess(null);
+//                       }}
+//                       className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
+//                     >
+//                       <svg
+//                         className="w-5 h-5"
+//                         fill="none"
+//                         viewBox="0 0 24 24"
+//                         stroke="currentColor"
+//                         strokeWidth="2"
+//                       >
+//                         <path
+//                           strokeLinecap="round"
+//                           strokeLinejoin="round"
+//                           d="M6 18L18 6M6 6l12 12"
+//                         />
+//                       </svg>
+//                     </button>
+
+//                     {!enhancedResultsMap[selectedJobId] && (
+//                       <div className="flex items-center gap-1.5 mt-0.5">
+//                         <button
+//                           type="button"
+//                           onClick={handleEnhanceResume}
+//                           disabled={isEnhancing}
+//                           className="bg-[#4F46E5] hover:bg-[#4338CA] disabled:bg-[#818CF8] text-white text-[12.5px] font-semibold px-3.5 py-1.5 rounded-lg transition-colors cursor-pointer shadow-xs whitespace-nowrap flex items-center gap-1.5 active:scale-[0.98] disabled:cursor-not-allowed"
+//                         >
+//                           {isEnhancing ? (
+//                             <>
+//                               <svg
+//                                 className="animate-spin w-3.5 h-3.5 text-white"
+//                                 fill="none"
+//                                 viewBox="0 0 24 24"
+//                               >
+//                                 <circle
+//                                   className="opacity-25"
+//                                   cx="12"
+//                                   cy="12"
+//                                   r="10"
+//                                   stroke="currentColor"
+//                                   strokeWidth="4"
+//                                 />
+//                                 <path
+//                                   className="opacity-75"
+//                                   fill="currentColor"
+//                                   d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+//                                 />
+//                               </svg>
+//                               <span>Enhancing...</span>
+//                             </>
+//                           ) : (
+//                             "Enhance Resume"
+//                           )}
+//                         </button>
+//                       </div>
+//                     )}
+//                   </div>
+//                 </div>
+
+//                 {/* Modal Scrollable Body */}
+//                 <div className="flex-1 min-h-0 overflow-y-auto p-5 sm:p-6 space-y-5">
+//                   {/* Feedback Alerts */}
+//                   {enhanceSuccess && (
+//                     <div className="bg-[#EEF2FF] border border-[#C7D2FE] text-[#312E81] text-xs px-3.5 py-2.5 rounded-xl flex items-center justify-between shadow-2xs">
+//                       <div className="flex items-center gap-2">
+//                         <span className="w-4 h-4 rounded-full bg-[#4F46E5] text-white flex items-center justify-center text-[10px] font-bold">
+//                           ✓
+//                         </span>
+//                         <span className="font-semibold">{enhanceSuccess}</span>
+//                       </div>
+//                       <button
+//                         type="button"
+//                         onClick={() => setShowEnhancedModal(true)}
+//                         className="underline font-bold text-[#4F46E5] hover:text-[#3730A3] cursor-pointer ml-2"
+//                       >
+//                         View
+//                       </button>
+//                     </div>
+//                   )}
+
+//                   {enhanceError && (
+//                     <div className="bg-rose-50 border border-rose-200 text-rose-800 text-xs px-3.5 py-2.5 rounded-xl flex items-center justify-between shadow-2xs">
+//                       <div className="flex items-center gap-2">
+//                         <span className="w-4 h-4 rounded-full bg-rose-600 text-white flex items-center justify-center text-[10px] font-bold">
+//                           !
+//                         </span>
+//                         <span className="font-medium">{enhanceError}</span>
+//                       </div>
+//                       <button
+//                         type="button"
+//                         onClick={() => setEnhanceError(null)}
+//                         className="text-rose-500 hover:text-rose-700 font-bold ml-2 cursor-pointer"
+//                       >
+//                         ✕
+//                       </button>
+//                     </div>
+//                   )}
+
+//                   {/* ATS Match Box */}
+//                   {(() => {
+//                     const isEnhanced = hasEnhanced && newAtsScore !== null;
+//                     const activeScore = isEnhanced ? newAtsScore : oldAtsScore;
+
+//                     return (
+//                       <div className="rounded-[18px] border border-slate-200/90 bg-white p-4.5 sm:p-5 shadow-xs">
+//                         {/* Header Row: Title */}
+//                         <div className="flex items-center justify-between mb-3.5">
+//                           <h3 className="text-[15px] font-bold text-[#0F172A] tracking-tight">
+//                             ATS Match
+//                           </h3>
+//                         </div>
+
+//                         {/* Body: Single Centered Ring */}
+//                         <div className="flex flex-col items-center justify-center text-center py-1">
+//                           <div className="relative w-[76px] h-[76px] flex items-center justify-center">
+//                             <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+//                               <path
+//                                 className="text-slate-100"
+//                                 strokeWidth="3.2"
+//                                 stroke="currentColor"
+//                                 fill="none"
+//                                 d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+//                               />
+//                               <path
+//                                 className={isEnhanced ? "text-[#4F46E5]" : "text-slate-400"}
+//                                 strokeDasharray={`${Number(activeScore) || 0}, 100`}
+//                                 strokeWidth="3.2"
+//                                 strokeLinecap="round"
+//                                 stroke="currentColor"
+//                                 fill="none"
+//                                 d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+//                               />
+//                             </svg>
+//                             <div className="absolute inset-0 flex flex-col items-center justify-center">
+//                               <span className="text-[16px] font-bold text-[#0F172A] leading-none">
+//                                 {activeScore !== null ? `${activeScore}%` : "N/A"}
+//                               </span>
+//                               <span className="text-[9px] text-[#64748B] font-medium leading-none mt-0.5">
+//                                 Match
+//                               </span>
+//                             </div>
+//                           </div>
+//                           <span
+//                             className={`mt-2.5 text-[11px] font-semibold px-2.5 py-0.5 rounded-full inline-block ${isEnhanced
+//                                 ? "bg-[#EEF2FF] text-[#4F46E5] border border-[#C7D2FE]"
+//                                 : "bg-slate-100 text-slate-600 border border-slate-200"
+//                               }`}
+//                           >
+//                             {isEnhanced ? "Enhanced ATS" : "Original ATS"}
+//                           </span>
+//                         </div>
+
+//                         {/* Footer Description */}
+
+//                       </div>
+//                     );
+//                   })()}
+
+//                   {/* ATS Identified Gaps & Missing Skills */}
+//                   {(missingRequiredSkills.length > 0 ||
+//                     missingPreferredSkills.length > 0 ||
+//                     missingKeywords.length > 0) && (
+//                       <div className="rounded-[16px] border border-amber-200/80 bg-gradient-to-br from-amber-50/60 to-orange-50/30 p-4 space-y-3 shadow-2xs">
+//                         <div className="flex items-center justify-between">
+//                           <div className="flex items-center gap-2">
+//                             <span className="w-5 h-5 rounded-md bg-amber-100 text-amber-800 text-[11px] font-bold flex items-center justify-center">
+//                               !
+//                             </span>
+//                             <h4 className="text-[13px] font-bold text-amber-950">
+//                               ATS Identified Gaps
+//                             </h4>
+//                           </div>
+//                           <span className="text-[10.5px] font-semibold text-amber-800 bg-amber-100/80 border border-amber-200 px-2 py-0.5 rounded-full">
+//                             {missingRequiredSkills.length +
+//                               missingPreferredSkills.length +
+//                               missingKeywords.length}{" "}
+//                             Gaps
+//                           </span>
+//                         </div>
+
+//                         {missingRequiredSkills.length > 0 && (
+//                           <div>
+//                             <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">
+//                               Missing Required Skills:
+//                             </span>
+//                             <div className="flex flex-wrap gap-1.5">
+//                               {missingRequiredSkills.map((skill, i) => (
+//                                 <span
+//                                   key={i}
+//                                   className="bg-white border border-amber-200 text-amber-900 text-[11.5px] font-medium px-2.5 py-0.5 rounded-md shadow-2xs"
+//                                 >
+//                                   • {skill}
+//                                 </span>
+//                               ))}
+//                             </div>
+//                           </div>
+//                         )}
+
+//                         {missingPreferredSkills.length > 0 && (
+//                           <div>
+//                             <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">
+//                               Missing Preferred Skills:
+//                             </span>
+//                             <div className="flex flex-wrap gap-1.5">
+//                               {missingPreferredSkills.map((skill, i) => (
+//                                 <span
+//                                   key={i}
+//                                   className="bg-white border border-amber-200 text-amber-900 text-[11.5px] font-medium px-2.5 py-0.5 rounded-md shadow-2xs"
+//                                 >
+//                                   • {skill}
+//                                 </span>
+//                               ))}
+//                             </div>
+//                           </div>
+//                         )}
+
+//                         {missingKeywords.length > 0 && (
+//                           <div>
+//                             <span className="text-[11.5px] font-semibold text-amber-900 block mb-1.5">
+//                               Missing Keywords:
+//                             </span>
+//                             <div className="flex flex-wrap gap-1.5">
+//                               {missingKeywords.map((kw, i) => (
+//                                 <span
+//                                   key={i}
+//                                   className="bg-white border border-amber-200 text-slate-700 text-[11px] font-normal px-2 py-0.5 rounded-md"
+//                                 >
+//                                   {kw}
+//                                 </span>
+//                               ))}
+//                             </div>
+//                           </div>
+//                         )}
+//                       </div>
+//                     )}
+
+//                   {/* Job Description */}
+//                   <div>
+//                     <h3 className="text-[14px] font-bold text-[#0F172A]">
+//                       Job description
+//                     </h3>
+//                     <p className="text-[12.5px] text-[#475569] leading-relaxed mt-1.5">
+//                       {cleanHtmlText(
+//                         selectedJobModal.description ||
+//                         selectedJobModal.fullJdText ||
+//                         selectedJobModal.preview
+//                       )}
+//                     </p>
+//                   </div>
+
+//                   {/* Key Responsibilities */}
+//                   {Array.isArray(selectedJobModal.responsibilities) &&
+//                     selectedJobModal.responsibilities.length > 0 && (
+//                       <div>
+//                         <h3 className="text-[14px] font-bold text-[#0F172A]">
+//                           Key responsibilities:
+//                         </h3>
+//                         <ul className="space-y-2 mt-2">
+//                           {selectedJobModal.responsibilities.map((resp, idx) => (
+//                             <li
+//                               key={idx}
+//                               className="text-[12.5px] text-[#475569] flex items-start gap-2 leading-snug"
+//                             >
+//                               <span className="text-[#94A3B8] shrink-0">•</span>
+//                               <span>{resp}</span>
+//                             </li>
+//                           ))}
+//                         </ul>
+//                       </div>
+//                     )}
+
+//                   {/* Required Skills */}
+//                   {Array.isArray(selectedJobModal.requiredSkills) &&
+//                     selectedJobModal.requiredSkills.length > 0 && (
+//                       <div>
+//                         <h3 className="text-[14px] font-bold text-[#0F172A]">
+//                           Required skills
+//                         </h3>
+//                         <div className="flex flex-wrap gap-2 mt-2">
+//                           {selectedJobModal.requiredSkills.map((skill) => (
+//                             <span
+//                               key={skill}
+//                               className="bg-[#F1F5F9] text-[#334155] rounded-[8px] px-3 py-1.5 text-[12px] font-medium"
+//                             >
+//                               {skill}
+//                             </span>
+//                           ))}
+//                         </div>
+//                       </div>
+//                     )}
+
+//                   {/* Preferred Skills */}
+//                   {Array.isArray(selectedJobModal.preferredSkills) &&
+//                     selectedJobModal.preferredSkills.length > 0 && (
+//                       <div>
+//                         <h3 className="text-[14px] font-bold text-[#0F172A]">
+//                           Preferred skills
+//                         </h3>
+//                         <div className="flex flex-wrap gap-2 mt-2">
+//                           {selectedJobModal.preferredSkills.map((skill) => (
+//                             <span
+//                               key={skill}
+//                               className="bg-[#F1F5F9] text-[#334155] rounded-[8px] px-3 py-1.5 text-[12px] font-medium"
+//                             >
+//                               {skill}
+//                             </span>
+//                           ))}
+//                         </div>
+//                       </div>
+//                     )}
+
+//                   {/* Job Details */}
+//                   <div>
+//                     <h3 className="text-[14px] font-bold text-[#0F172A] mb-2.5">
+//                       Job details
+//                     </h3>
+//                     <div className="grid grid-cols-2 gap-y-2.5 gap-x-4">
+//                       <div className="flex items-center gap-2 text-[12.5px]">
+//                         <span className="text-[#64748B]">Experience</span>
+//                         <span className="font-semibold text-[#0F172A]">
+//                           {selectedJobModal.experience || "Not specified"}
+//                         </span>
+//                       </div>
+//                       <div className="flex items-center gap-2 text-[12.5px]">
+//                         <span className="text-[#64748B]">Work mode</span>
+//                         <span className="font-semibold text-[#0F172A]">
+//                           {selectedJobModal.workMode || "On-Site"}
+//                         </span>
+//                       </div>
+//                       <div className="flex items-center gap-2 text-[12.5px]">
+//                         <span className="text-[#64748B]">Employment type</span>
+//                         <span className="font-semibold text-[#0F172A]">
+//                           {selectedJobModal.type || "Full-time"}
+//                         </span>
+//                       </div>
+//                       <div className="flex items-center gap-2 text-[12.5px]">
+//                         <span className="text-[#64748B]">Location</span>
+//                         <span className="font-semibold text-[#0F172A]">
+//                           {selectedJobModal.fullLocation ||
+//                             selectedJobModal.location || "Remote / Flexible"}
+//                         </span>
+//                       </div>
+//                     </div>
+//                   </div>
+//                 </div>
+
+//                 {/* Modal Footer */}
+//                 <div className="p-4 sm:p-5 border-t border-slate-100 bg-white shrink-0 flex flex-col gap-2.5">
+//                   {panelApplyStatus && (
+//                     <div
+//                       className={`p-3 rounded-xl border text-[12.5px] font-medium flex items-center justify-between gap-2 ${panelApplyStatus.type === "success"
+//                         ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+//                         : panelApplyStatus.type === "skipped"
+//                           ? "bg-amber-50 border-amber-200 text-amber-800"
+//                           : "bg-rose-50 border-rose-200 text-rose-800"
+//                         }`}
+//                     >
+//                       <span>{panelApplyStatus.message}</span>
+//                       <button
+//                         type="button"
+//                         onClick={() => setPanelApplyStatus(null)}
+//                         className="text-xs font-bold text-slate-400 hover:text-slate-600 shrink-0"
+//                       >
+//                         ✕
+//                       </button>
+//                     </div>
+//                   )}
+//                   {(() => {
+//                     if (isStatusLoading) {
+//                       return (
+//                         <button
+//                           type="button"
+//                           disabled
+//                           className="w-full h-[44px] rounded-[12px] bg-slate-100 border border-slate-200 text-slate-400 text-[13.5px] font-medium flex items-center justify-center gap-2 cursor-not-allowed"
+//                         >
+//                           <svg className="animate-spin h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24">
+//                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+//                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+//                           </svg>
+//                           <span>Checking status...</span>
+//                         </button>
+//                       );
+//                     }
+
+//                     const isHidden = isApplyNowHiddenForJob(selectedJobModal, applicationMap, submittedJobIdSet);
+
+//                     if (isHidden) {
+//                       const numericId = extractNumericJobId(selectedJobModal);
+//                       const stringId = getJobId(selectedJobModal);
+//                       const record = (numericId !== null && applicationMap.get(numericId)) || (stringId && applicationMap.get(stringId));
+//                       const rawStatus = record?.status || record?.state || record?.applicationStatus;
+//                       const norm = normalizeApplicationStatus(rawStatus);
+
+//                       let displayLabel = 'Already Applied';
+//                       if (norm === 'SUBMITTED') displayLabel = 'Submitted';
+//                       else if (norm === 'QUEUED') displayLabel = 'Queued';
+//                       else if (norm === 'IN_PROGRESS') displayLabel = 'In Progress';
+//                       else if (norm === 'NEEDS_ACTION') displayLabel = 'Needs Action';
+//                       else if (norm === 'PREPARING') displayLabel = 'Preparing';
+
+//                       return (
+//                         <button
+//                           type="button"
+//                           disabled
+//                           className="w-full h-[44px] rounded-[12px] bg-slate-100 border border-slate-200 text-slate-500 text-[13.5px] font-semibold flex items-center justify-center cursor-not-allowed"
+//                         >
+//                           {displayLabel}
+//                         </button>
+//                       );
+//                     }
+
+//                     return (
+//                       <button
+//                         type="button"
+//                         onClick={handleApplyToPanelJob}
+//                         disabled={isApplyingPanelJob}
+//                         className="w-full h-[44px] rounded-[12px] bg-[#2563EB] hover:bg-[#1D4ED8] disabled:opacity-60 text-white text-[13.5px] font-medium flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.99] transition-all cursor-pointer disabled:cursor-not-allowed"
+//                       >
+//                         {isApplyingPanelJob ? (
+//                           <span className="flex items-center gap-2">
+//                             <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+//                               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+//                               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+//                             </svg>
+//                             <span>Submitting application...</span>
+//                           </span>
+//                         ) : (
+//                           <>
+//                             <span>Apply now</span>
+//                             <span>→</span>
+//                           </>
+//                         )}
+//                       </button>
+//                     );
+//                   })()}
+
+//                   <p className="text-[11.5px] text-[#94A3B8] text-center">
+//                     Your application quota will be reserved before submission.
+//                   </p>
+//                 </div>
+//               </div>
+//             </div>
+//           );
+//         })()
+//       }
+
+//       {/* Full Enhanced Resume Modal View */}
+//       {
+//         showEnhancedModal &&
+//         selectedJobModal &&
+//         enhancedResultsMap[getJobId(selectedJobModal)] && (
+//           <div className="fixed inset-0 z-[60] overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+//             <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+//               {/* Modal Header */}
+//               <div className="p-6 pb-4 border-b border-slate-100 flex items-center justify-between">
+//                 <div className="flex items-center gap-3">
+//                   <div className="w-9 h-9 rounded-xl bg-[#EEF2FF] border border-[#C7D2FE] flex items-center justify-center text-[#4F46E5] font-bold text-sm">
+//                     AI
+//                   </div>
+//                   <div>
+//                     <h3 className="text-lg font-bold text-[#0F172A]">
+//                       AI Enhanced Resume
+//                     </h3>
+//                     <p className="text-xs text-[#64748B] mt-0.5">
+//                       Tailored specifically for {selectedJobModal.title} at{" "}
+//                       {selectedJobModal.company}
+//                     </p>
+//                   </div>
+//                 </div>
+
+//                 <div className="flex items-center gap-2">
+//                   <button
+//                     type="button"
+//                     onClick={() =>
+//                       handleDownloadEnhancedResume(
+//                         enhancedResultsMap[getJobId(selectedJobModal)]
+//                           ?.EnhResume ||
+//                         enhancedResultsMap[getJobId(selectedJobModal)]
+//                           ?.enhResume ||
+//                         enhancedResultsMap[getJobId(selectedJobModal)]
+//                           ?.enhanced_resume ||
+//                         enhancedResultsMap[getJobId(selectedJobModal)]
+//                           ?.enhancedResume,
+//                         selectedJobModal
+//                       )
+//                     }
+//                     disabled={isDownloadingResume}
+//                     className="px-3.5 py-1.5 bg-[#EEF2FF] hover:bg-[#E0E7FF] disabled:bg-slate-100 text-[#4F46E5] disabled:text-slate-400 text-xs font-semibold rounded-lg transition-colors cursor-pointer disabled:cursor-not-allowed flex items-center gap-1.5"
+//                   >
+//                     {isDownloadingResume ? (
+//                       <>
+//                         <svg className="animate-spin w-3.5 h-3.5 text-[#4F46E5]" fill="none" viewBox="0 0 24 24">
+//                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+//                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+//                         </svg>
+//                         <span>Downloading...</span>
+//                       </>
+//                     ) : (
+//                       <>
+//                         <svg
+//                           className="w-4 h-4"
+//                           fill="none"
+//                           viewBox="0 0 24 24"
+//                           stroke="currentColor"
+//                           strokeWidth="2"
+//                         >
+//                           <path
+//                             strokeLinecap="round"
+//                             strokeLinejoin="round"
+//                             d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+//                           />
+//                         </svg>
+//                         <span>Download</span>
+//                       </>
+//                     )}
+//                   </button>
+
+//                   <button
+//                     type="button"
+//                     onClick={() => setShowEnhancedModal(false)}
+//                     className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+//                   >
+//                     <svg
+//                       className="w-5 h-5"
+//                       fill="none"
+//                       viewBox="0 0 24 24"
+//                       stroke="currentColor"
+//                       strokeWidth="2"
+//                     >
+//                       <path
+//                         strokeLinecap="round"
+//                         strokeLinejoin="round"
+//                         d="M6 18L18 6M6 6l12 12"
+//                       />
+//                     </svg>
+//                   </button>
+//                 </div>
+//               </div>
+
+//               {/* Modal Body */}
+//               <div className="p-6 overflow-y-auto space-y-4 flex-1">
+//                 {/* Bridged Gaps Summary */}
+//                 {enhancedResultsMap[getJobId(selectedJobModal)]
+//                   ?.bridgeable_gaps && (
+//                     <div className="bg-[#EEF2FF]/70 border border-[#C7D2FE] rounded-xl p-4.5 space-y-3">
+//                       <div className="flex items-center justify-between">
+//                         <h4 className="text-xs font-bold text-[#312E81] uppercase tracking-wide">
+//                           Bridged Skills & Qualifications
+//                         </h4>
+//                         {Array.isArray(
+//                           enhancedResultsMap[getJobId(selectedJobModal)]
+//                             .bridgeable_gaps
+//                         ) && (
+//                             <span className="text-[11px] font-semibold text-[#4F46E5] bg-white border border-[#C7D2FE] px-2 py-0.5 rounded-full">
+//                               {
+//                                 enhancedResultsMap[getJobId(selectedJobModal)]
+//                                   .bridgeable_gaps.length
+//                               }{" "}
+//                               Tailored Improvements
+//                             </span>
+//                           )}
+//                       </div>
+//                       <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
+//                         {Array.isArray(
+//                           enhancedResultsMap[getJobId(selectedJobModal)]
+//                             .bridgeable_gaps
+//                         ) ? (
+//                           enhancedResultsMap[
+//                             getJobId(selectedJobModal)
+//                           ].bridgeable_gaps.map((gap, i) => {
+//                             if (typeof gap === "string") {
+//                               return (
+//                                 <div
+//                                   key={i}
+//                                   className="flex items-center gap-2 bg-white text-slate-800 border border-[#E0E7FF] rounded-lg p-2.5 shadow-2xs"
+//                                 >
+//                                   <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">
+//                                     ✓
+//                                   </span>
+//                                   <span className="text-xs font-semibold text-slate-900">
+//                                     {gap}
+//                                   </span>
+//                                 </div>
+//                               );
+//                             }
+
+//                             const skill =
+//                               gap?.skill || gap?.name || gap?.title || "";
+//                             const severity =
+//                               gap?.severity ||
+//                               (gap?.source ? String(gap.source).toUpperCase() : "");
+//                             const rationale =
+//                               gap?.rationale ||
+//                               gap?.description ||
+//                               gap?.reason ||
+//                               "";
+
+//                             return (
+//                               <div
+//                                 key={i}
+//                                 className="bg-white text-slate-800 border border-[#E0E7FF] rounded-xl p-3 shadow-2xs space-y-1.5"
+//                               >
+//                                 <div className="flex items-center justify-between gap-2">
+//                                   <div className="flex items-center gap-2">
+//                                     <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">
+//                                       ✓
+//                                     </span>
+//                                     <span className="text-xs font-bold text-slate-900">
+//                                       {skill || "Optimized Skill"}
+//                                     </span>
+//                                   </div>
+//                                   {severity && (
+//                                     <span
+//                                       className={`text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${severity === "CRITICAL"
+//                                         ? "bg-amber-50 text-amber-700 border-amber-200"
+//                                         : severity === "PREFERRED"
+//                                           ? "bg-blue-50 text-blue-700 border-blue-200"
+//                                           : "bg-indigo-50 text-[#4F46E5] border-indigo-200"
+//                                         }`}
+//                                     >
+//                                       {severity}
+//                                     </span>
+//                                   )}
+//                                 </div>
+//                                 {rationale && (
+//                                   <p className="text-xs text-slate-600 leading-relaxed pl-6 font-normal">
+//                                     {rationale}
+//                                   </p>
+//                                 )}
+//                               </div>
+//                             );
+//                           })
+//                         ) : typeof enhancedResultsMap[getJobId(selectedJobModal)]
+//                           .bridgeable_gaps === "object" ? (
+//                           Object.entries(
+//                             enhancedResultsMap[getJobId(selectedJobModal)]
+//                               .bridgeable_gaps
+//                           ).map(([k, v], i) => (
+//                             <div
+//                               key={i}
+//                               className="bg-white text-slate-800 border border-[#E0E7FF] rounded-xl p-3 shadow-2xs space-y-1"
+//                             >
+//                               <div className="flex items-center gap-2">
+//                                 <span className="w-4 h-4 rounded-full bg-[#EEF2FF] text-[#4F46E5] text-[10px] font-bold flex items-center justify-center shrink-0">
+//                                   ✓
+//                                 </span>
+//                                 <span className="text-xs font-bold text-slate-900">
+//                                   {k}
+//                                 </span>
+//                               </div>
+//                               <p className="text-xs text-slate-600 leading-relaxed pl-6 font-normal">
+//                                 {String(v)}
+//                               </p>
+//                             </div>
+//                           ))
+//                         ) : (
+//                           <p className="text-xs text-[#4F46E5]">
+//                             {String(
+//                               enhancedResultsMap[getJobId(selectedJobModal)]
+//                                 .bridgeable_gaps
+//                             )}
+//                           </p>
+//                         )}
+//                       </div>
+//                     </div>
+//                   )}
+
+//                 {/* Professional Enhanced Resume Content */}
+//                 <div>
+//                   <div className="flex items-center justify-between mb-3">
+//                     <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+//                       Professional Formatted Resume
+//                     </h4>
+//                     <span className="text-[11px] text-[#4F46E5] font-semibold bg-[#EEF2FF] border border-[#C7D2FE] px-2.5 py-0.5 rounded-full">
+//                       Dynamically Formatted
+//                     </span>
+//                   </div>
+//                   <EnhancedResumeViewer
+//                     resumeText={
+//                       enhancedResultsMap[getJobId(selectedJobModal)]?.EnhResume ||
+//                       enhancedResultsMap[getJobId(selectedJobModal)]?.enhResume ||
+//                       enhancedResultsMap[getJobId(selectedJobModal)]?.enhanced_resume ||
+//                       enhancedResultsMap[getJobId(selectedJobModal)]?.enhancedResume
+//                     }
+//                     compact={false}
+//                   />
+//                 </div>
+//               </div>
+
+//               {/* Modal Footer */}
+//               <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-end gap-3">
+//                 <button
+//                   type="button"
+//                   onClick={() => setShowEnhancedModal(false)}
+//                   className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+//                 >
+//                   Close
+//                 </button>
+//               </div>
+//             </div>
+//           </div>
+//         )
+//       }
+
+//       {/* Floating Toast Notification */}
+//       {
+//         toast.show && (
+//           <div className="fixed top-20 right-6 md:right-8 z-[100] animate-in fade-in slide-in-from-top-3 duration-300">
+//             <div
+//               className={`flex items-center gap-3 px-4 py-3 rounded-xl border shadow-[0_4px_20px_-2px_rgba(0,0,0,0.15)] ${toast.type === "error"
+//                 ? "bg-rose-50 border-rose-200 text-rose-800"
+//                 : toast.type === "skipped" || toast.type === "warning"
+//                   ? "bg-amber-50 border-amber-200 text-amber-900"
+//                   : "bg-[#EEF2FF] border-[#C7D2FE] text-[#4338CA]"
+//                 }`}
+//             >
+//               <div
+//                 className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${toast.type === "error"
+//                   ? "bg-rose-100 text-rose-600"
+//                   : toast.type === "skipped" || toast.type === "warning"
+//                     ? "bg-amber-100 text-amber-700"
+//                     : "bg-[#E0E7FF] text-[#4F46E5]"
+//                   }`}
+//               >
+//                 {toast.type === "error" ? (
+//                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+//                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+//                   </svg>
+//                 ) : toast.type === "skipped" || toast.type === "warning" ? (
+//                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+//                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+//                   </svg>
+//                 ) : (
+//                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+//                     <polyline points="20 6 9 17 4 12" />
+//                   </svg>
+//                 )}
+//               </div>
+//               <p className="text-[13px] font-semibold tracking-wide">{toast.message}</p>
+//               <button
+//                 type="button"
+//                 onClick={() => setToast((prev) => ({ ...prev, show: false }))}
+//                 className="ml-2 text-slate-400 hover:text-slate-600 cursor-pointer transition-colors"
+//               >
+//                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+//                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+//                 </svg>
+//               </button>
+//             </div>
+//           </div>
+//         )
+//       }
+//     </div >
+//   );
+// };
+
+// export default BrowseJobs;
+
+
+
+
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
 import EnhancedResumeViewer from "../components/EnhancedResumeViewer";
+import JobFilterBar from "../components/JobFilterBar";
 import {
   getJobs,
   getPrimaryResumeId,
@@ -48,19 +6592,16 @@ import {
   extractCleanCompany,
   transformMatchToJob,
   buildJobQueryParams,
+  buildBaseJobFilterKey,
+  shouldFallbackToClientWorkplaceFilter,
+  recordUnsupportedWorkplaces,
+  hasUnsupportedWorkplaceTarget,
+  hasAnyJobMatchingWorkplaces,
+  extractDynamicJobFilterOptions,
+  filterJobMatches,
+  normalizeWorkplaceValue,
+  sortWorkplaceOptions,
 } from "../utils/jobHelpers";
-
-// Standard filter static options
-const dateOptions = [
-  "Last 6 hours",
-  "Last 24 hours",
-  "Last 7 days",
-  "Last 14 days",
-  "Last 30 days",
-  "All time",
-];
-
-const workplaceOptions = ["Remote", "On-site", "Hybrid"];
 
 const experienceOptions = [
   "Entry Level (0-1 yrs)",
@@ -68,14 +6609,6 @@ const experienceOptions = [
   "Mid-Level (3-5 yrs)",
   "Senior (5-8 yrs)",
   "Lead / Principal (8+ yrs)",
-];
-
-const jobTypeOptions = [
-  "Full-time",
-  "Part-time",
-  "Contract",
-  "Internship",
-  "Freelance",
 ];
 
 const BrowseJobs = () => {
@@ -126,7 +6659,30 @@ const BrowseJobs = () => {
                   ? details.preferredSkills
                   : prevModal.preferredSkills,
                 experience: details.experience || details.requiredExperience || prevModal.experience,
-                workMode: details.workplace || details.workMode || prevModal.workMode,
+                workMode:
+                  normalizeWorkplaceValue(
+                    details.workplace ||
+                      details.workMode ||
+                      details.work_mode ||
+                      details.workplaceType ||
+                      details.workplace_type ||
+                      details.workLocationType ||
+                      details.work_location_type ||
+                      details.remoteType ||
+                      details.remote_type
+                  ) || prevModal.workMode,
+                workplace:
+                  normalizeWorkplaceValue(
+                    details.workplace ||
+                      details.workMode ||
+                      details.work_mode ||
+                      details.workplaceType ||
+                      details.workplace_type ||
+                      details.workLocationType ||
+                      details.work_location_type ||
+                      details.remoteType ||
+                      details.remote_type
+                  ) || prevModal.workplace,
                 type: details.employmentType || details.type || prevModal.type,
                 salary: details.salary || details.salaryRange || prevModal.salary,
                 applyUrl: details.applyUrl || details.jobUrl || details.url || prevModal.applyUrl,
@@ -174,6 +6730,13 @@ const BrowseJobs = () => {
     }
   });
   const fetchingPagesRef = useRef(new Set());
+  const requestGenerationRef = useRef(0);
+  const navigationRequestRef = useRef(0);
+  const fillingPagesRef = useRef(false);
+  const didMountFiltersRef = useRef(false);
+  const baseJobsCacheRef = useRef(null);
+  const serverUnsupportedWorkplacesRef = useRef(new Set());
+  const [isClientWorkplaceFilterActive, setIsClientWorkplaceFilterActive] = useState(false);
   const resumeDropdownRef = useRef(null);
 
   // Resume Selector States & Logic
@@ -551,11 +7114,11 @@ const BrowseJobs = () => {
   const [selectedLocations, setSelectedLocations] = useState([]);
   const [locationSearch, setLocationSearch] = useState("");
   const [selectedWorkplace, setSelectedWorkplace] = useState([]);
+  const [knownWorkplaceOptions, setKnownWorkplaceOptions] = useState([]);
   const [selectedCompanies, setSelectedCompanies] = useState([]);
   const [companySearch, setCompanySearch] = useState("");
   const [selectedExperience, setSelectedExperience] = useState("");
   const [selectedRoles, setSelectedRoles] = useState([]);
-  const [selectedJobTypes, setSelectedJobTypes] = useState([]);
   const [sponsorsVisa, setSponsorsVisa] = useState(false);
 
   const dropdownRef = useRef(null);
@@ -565,28 +7128,48 @@ const BrowseJobs = () => {
    * If the page is already cached (and not forcing refresh), returns cached data without API call.
    */
   const loadPage = useCallback(
-    async (pageNumber, { forceRefresh = false, customQuery = null, customSort = null, overrideFilters = null, customResumeId = null } = {}) => {
+    async (
+      pageNumber,
+      {
+        forceRefresh = false,
+        customQuery = null,
+        customSort = null,
+        overrideFilters = null,
+        customResumeId = null,
+        restoreFromBaseIfAvailable = false,
+        background = false,
+      } = {}
+    ) => {
+      const generation = requestGenerationRef.current;
+      const navigationRequest = background
+        ? navigationRequestRef.current
+        : ++navigationRequestRef.current;
+      const isCurrent = () => generation === requestGenerationRef.current;
+      const isLatestNavigation = () =>
+        isCurrent() && navigationRequest === navigationRequestRef.current;
+
       // 1. Check cache first (unless forceRefresh is requested)
       if (!forceRefresh && jobsCacheRef.current[pageNumber] && jobsCacheRef.current[pageNumber].length > 0) {
         console.log(`[BrowseJobs] Page ${pageNumber} found in cache. Using cached data (NO API CALL).`);
-        setActivePage(pageNumber);
+        if (!background && isLatestNavigation()) setActivePage(pageNumber);
         return jobsCacheRef.current[pageNumber];
       }
 
-      // 2. Prevent duplicate concurrent requests for the same page
-      if (fetchingPagesRef.current.has(pageNumber)) {
+      const fetchKey = `${generation}:${pageNumber}`;
+      // 2. Prevent duplicate concurrent requests for the same query generation + page
+      if (fetchingPagesRef.current.has(fetchKey)) {
         console.log(`[BrowseJobs] Request for page ${pageNumber} is already in flight. Skipping duplicate call.`);
         return;
       }
 
-      fetchingPagesRef.current.add(pageNumber);
-      if (pageNumber === 1 && (forceRefresh || Object.keys(jobsCacheRef.current).length === 0)) {
-        setIsLoadingJobs(true);
-      } else {
-        setIsLoadingPage(true);
-      }
-      setLoadMoreError(null);
-      setFetchError(null);
+      const activeWorkplaces = overrideFilters?.workplace ?? selectedWorkplace;
+      const activeLocs = overrideFilters?.locations ?? selectedLocations;
+      const activeRoles = overrideFilters?.roles ?? selectedRoles;
+      const activeDate = overrideFilters?.date ?? selectedDate;
+      const activeCompanies = overrideFilters?.companies ?? selectedCompanies;
+      const q = customQuery !== null ? customQuery : searchQuery;
+      const sort = customSort !== null ? customSort : sortOption;
+      const apiPage = Math.max(0, pageNumber - 1); // 0-indexed for GET /api/jobs
 
       // Extract target resumeId for GET /api/jobs?resumeId=...
       let resumeIdVal = customResumeId;
@@ -605,6 +7188,72 @@ const BrowseJobs = () => {
           sessionStorage.getItem("resume_id") ||
           sessionStorage.getItem("resumeId");
       }
+
+      const preCheckBaseKey = buildBaseJobFilterKey({
+        resumeId: resumeIdVal,
+        searchQuery: q,
+        selectedLocations: activeLocs,
+        selectedRoles: activeRoles,
+        selectedCompanies: activeCompanies,
+        selectedDate: activeDate,
+        sortOption: sort || "best_match",
+        pageSize: pageSize || 20,
+      });
+
+      const applyBaseCacheEntry = (entry, clientFiltered) => {
+        const nextPages = { ...(entry?.pages || {}) };
+        jobsCacheRef.current = nextPages;
+        setJobsCache(nextPages);
+        const allBaseJobs = Object.keys(nextPages)
+          .map(Number)
+          .sort((a, b) => a - b)
+          .flatMap((p) => nextPages[p] || []);
+        setKnownWorkplaceOptions(extractDynamicJobFilterOptions(allBaseJobs).workplaceOptions);
+        setTotalItems(entry?.totalItems ?? allBaseJobs.length);
+        setTotalPages(entry?.totalPages ?? 1);
+        setHasMoreJobs(Boolean(entry?.hasMore));
+        setIsClientWorkplaceFilterActive(Boolean(clientFiltered));
+        if (!background && isLatestNavigation()) {
+          setActivePage(pageNumber <= (entry?.totalPages || 1) ? pageNumber : 1);
+        }
+        return nextPages[pageNumber] || allBaseJobs;
+      };
+
+      const preBaseEntry =
+        baseJobsCacheRef.current?.key === preCheckBaseKey ? baseJobsCacheRef.current : null;
+      const isKnownUnsupportedPre = hasUnsupportedWorkplaceTarget({
+        unsupportedSet: serverUnsupportedWorkplacesRef.current,
+        activeWorkplaces,
+      });
+
+      // Fast path: restore from unfiltered base cache without network call when possible
+      if (preBaseEntry?.pages?.[pageNumber]) {
+        if (
+          (activeWorkplaces.length === 0 && restoreFromBaseIfAvailable) ||
+          (activeWorkplaces.length > 0 &&
+            (isKnownUnsupportedPre || (restoreFromBaseIfAvailable && !preBaseEntry.hasMore)))
+        ) {
+          setLoadMoreError(null);
+          setFetchError(null);
+          setIsLoadingJobs(false);
+          setIsLoadingPage(false);
+          return applyBaseCacheEntry(preBaseEntry, activeWorkplaces.length > 0);
+        }
+      }
+
+      fetchingPagesRef.current.add(fetchKey);
+      if (forceRefresh && pageNumber === 1) {
+        jobsCacheRef.current = {};
+        setJobsCache({});
+      }
+      if (pageNumber === 1 && (forceRefresh || Object.keys(jobsCacheRef.current).length === 0)) {
+        setIsLoadingJobs(true);
+      } else {
+        setIsLoadingPage(true);
+      }
+      setLoadMoreError(null);
+      setFetchError(null);
+
       if (!resumeIdVal) {
         try {
           resumeIdVal = await getPrimaryResumeId();
@@ -621,30 +7270,51 @@ const BrowseJobs = () => {
       }
       const userHasResume =
         Boolean(resumeIdVal) || (await checkUserHasResume().catch(() => false));
+      if (!isCurrent()) {
+        fetchingPagesRef.current.delete(fetchKey);
+        return [];
+      }
       setHasResume(userHasResume);
       if (resumeIdVal) {
         setActiveResumeId(String(resumeIdVal));
       }
 
-      try {
-        const q = customQuery !== null ? customQuery : searchQuery;
-        const sort = customSort !== null ? customSort : sortOption;
+      const baseQueryKey = buildBaseJobFilterKey({
+        resumeId: resumeIdVal,
+        searchQuery: q,
+        selectedLocations: activeLocs,
+        selectedRoles: activeRoles,
+        selectedCompanies: activeCompanies,
+        selectedDate: activeDate,
+        sortOption: sort || "best_match",
+        pageSize: pageSize || 20,
+      });
+      const matchingBaseEntry =
+        baseJobsCacheRef.current?.key === baseQueryKey ? baseJobsCacheRef.current : null;
+      const baseJobsForRef = matchingBaseEntry
+        ? Object.keys(matchingBaseEntry.pages || {})
+            .map(Number)
+            .sort((a, b) => a - b)
+            .flatMap((p) => matchingBaseEntry.pages[p] || [])
+        : Object.keys(jobsCacheRef.current || {})
+            .map(Number)
+            .sort((a, b) => a - b)
+            .flatMap((p) => jobsCacheRef.current[p] || []);
 
-        const activeLocs = overrideFilters?.locations ?? selectedLocations;
-        const activeRoles = overrideFilters?.roles ?? selectedRoles;
-        const activeWorkplaces = overrideFilters?.workplace ?? selectedWorkplace;
-        const activeJobTypes = overrideFilters?.jobTypes ?? selectedJobTypes;
-        const activeDate = overrideFilters?.date ?? selectedDate;
-        const activeCompanies = overrideFilters?.companies ?? selectedCompanies;
-        const apiPage = Math.max(0, pageNumber - 1); // 0-indexed for GET /api/jobs
+      const shouldSendWorkplace =
+        activeWorkplaces.length > 0 &&
+        !hasUnsupportedWorkplaceTarget({
+          unsupportedSet: serverUnsupportedWorkplacesRef.current,
+          activeWorkplaces,
+        });
 
-        const params = buildJobQueryParams({
+      const buildUnfilteredParams = () =>
+        buildJobQueryParams({
           resumeId: resumeIdVal,
           searchQuery: q,
           selectedLocations: activeLocs,
           selectedRoles: activeRoles,
-          selectedWorkplace: activeWorkplaces,
-          selectedJobTypes: activeJobTypes,
+          selectedWorkplace: [],
           selectedCompanies: activeCompanies,
           selectedDate: activeDate,
           sortOption: sort || "best_match",
@@ -652,55 +7322,183 @@ const BrowseJobs = () => {
           pageSize: pageSize || 20,
         });
 
+      const parsePagedResult = (resObj) => {
+        const rawItems = resObj?.items || [];
+        const mapped = rawItems
+          .map((m, idx) => transformMatchToJob(m, apiPage * pageSize + idx))
+          .filter(Boolean);
+        const calcTotalItems =
+          typeof resObj?.totalItems === "number" && resObj.totalItems >= 0
+            ? resObj.totalItems
+            : rawItems.length >= pageSize
+              ? (apiPage + 2) * pageSize
+              : apiPage * pageSize + rawItems.length;
+        const calcTotalPages =
+          typeof resObj?.totalPages === "number" && resObj.totalPages > 0
+            ? resObj.totalPages
+            : Math.max(1, Math.ceil(calcTotalItems / (pageSize || 20)));
+        const calcHasMore = apiPage + 1 < calcTotalPages && rawItems.length >= pageSize;
+        return {
+          items: rawItems,
+          transformed: mapped,
+          resTotalItems: calcTotalItems,
+          resTotalPages: calcTotalPages,
+          hasMore: calcHasMore,
+        };
+      };
+
+      try {
+        const params = buildJobQueryParams({
+          resumeId: resumeIdVal,
+          searchQuery: q,
+          selectedLocations: activeLocs,
+          selectedRoles: activeRoles,
+          selectedWorkplace: shouldSendWorkplace ? activeWorkplaces : [],
+          selectedCompanies: activeCompanies,
+          selectedDate: activeDate,
+          sortOption: sort || "best_match",
+          page: apiPage,
+          pageSize: pageSize || 20,
+          referenceJobs: baseJobsForRef,
+        });
+
         console.log(`[BrowseJobs] Fetching Page ${pageNumber} (apiPage ${apiPage}) via GET /api/jobs with params:`, params);
         const res = await getJobs(params);
+        if (!isCurrent()) return [];
 
-        const items = res?.items || [];
-        const transformed = items.map((m, idx) => transformMatchToJob(m, apiPage * pageSize + idx)).filter(Boolean);
+        const {
+          transformed,
+          resTotalItems,
+          resTotalPages,
+          hasMore,
+        } = parsePagedResult(res);
 
-        const resTotalItems =
-          typeof res?.totalItems === "number" && res.totalItems >= 0
-            ? res.totalItems
-            : (items.length >= pageSize ? (apiPage + 2) * pageSize : (apiPage * pageSize + items.length));
+        // If server workplace query returned empty or omitted expected workplaces, seamlessly fall back to base jobs + client filtering
+        if (shouldSendWorkplace) {
+          const needFallback = shouldFallbackToClientWorkplaceFilter({
+            activeWorkplaces,
+            pageNumber,
+            transformed,
+            hasMoreServer: hasMore,
+            baseJobs: baseJobsForRef,
+          });
 
-        const resTotalPages =
-          typeof res?.totalPages === "number" && res.totalPages > 0
-            ? res.totalPages
-            : Math.max(1, Math.ceil(resTotalItems / (pageSize || 20)));
+          if (needFallback && matchingBaseEntry?.pages?.[1]) {
+            recordUnsupportedWorkplaces({
+              unsupportedSet: serverUnsupportedWorkplacesRef.current,
+              activeWorkplaces,
+              transformed,
+            });
+            return applyBaseCacheEntry(matchingBaseEntry, true);
+          }
 
-        const hasMore = (apiPage + 1) < resTotalPages && items.length >= pageSize;
+          if (transformed.length === 0 && pageNumber === 1 && !matchingBaseEntry) {
+            const unfilteredParams = buildUnfilteredParams();
+            const unfilteredRes = await getJobs(unfilteredParams);
+            if (!isCurrent()) return [];
+            const parsedUnfiltered = parsePagedResult(unfilteredRes);
+            if (parsedUnfiltered.transformed.length > 0) {
+              let unfilteredPages;
+              let finalTotalItems = parsedUnfiltered.resTotalItems;
+              let finalTotalPages = parsedUnfiltered.resTotalPages;
+              let finalHasMore = parsedUnfiltered.hasMore;
+              if (parsedUnfiltered.transformed.length > pageSize) {
+                unfilteredPages = {};
+                finalTotalPages = Math.ceil(parsedUnfiltered.transformed.length / pageSize);
+                for (let p = 1; p <= finalTotalPages; p++) {
+                  unfilteredPages[p] = parsedUnfiltered.transformed.slice((p - 1) * pageSize, p * pageSize);
+                }
+                finalTotalItems = parsedUnfiltered.transformed.length;
+                finalHasMore = false;
+              } else {
+                unfilteredPages = { 1: parsedUnfiltered.transformed };
+              }
+              const newBaseEntry = {
+                key: baseQueryKey,
+                pages: unfilteredPages,
+                totalItems: finalTotalItems,
+                totalPages: finalTotalPages,
+                hasMore: finalHasMore,
+              };
+              baseJobsCacheRef.current = newBaseEntry;
+              if (hasAnyJobMatchingWorkplaces(parsedUnfiltered.transformed, activeWorkplaces)) {
+                recordUnsupportedWorkplaces({
+                  unsupportedSet: serverUnsupportedWorkplacesRef.current,
+                  activeWorkplaces,
+                  transformed,
+                });
+              }
+              return applyBaseCacheEntry(newBaseEntry, true);
+            }
+          }
+        }
+
         setHasMoreJobs(hasMore);
         setTotalItems(resTotalItems);
         setTotalPages(resTotalPages);
 
         if (transformed.length === 0) {
           if (pageNumber === 1 && (forceRefresh || Object.keys(jobsCacheRef.current).length === 0)) {
-            const stored = getStoredJobMatches();
+            const hasAnyActiveFilters =
+              Boolean(typeof q === "string" && q.trim()) ||
+              activeLocs.length > 0 ||
+              activeRoles.length > 0 ||
+              activeCompanies.length > 0 ||
+              (activeDate && activeDate !== "All time") ||
+              activeWorkplaces.length > 0;
+            const stored = !hasAnyActiveFilters ? getStoredJobMatches() : null;
             if (Array.isArray(stored) && stored.length > 0) {
               const fallback = stored.map((m, idx) => transformMatchToJob(m, idx)).filter(Boolean);
+              let nextFallbackCache;
+              let fallbackTotalPages = 1;
               if (fallback.length > pageSize) {
                 const chunked = {};
-                const chunkPages = Math.ceil(fallback.length / pageSize);
-                for (let p = 1; p <= chunkPages; p++) {
+                fallbackTotalPages = Math.ceil(fallback.length / pageSize);
+                for (let p = 1; p <= fallbackTotalPages; p++) {
                   chunked[p] = fallback.slice((p - 1) * pageSize, p * pageSize);
                 }
-                jobsCacheRef.current = chunked;
-                setJobsCache(chunked);
-                setTotalPages(chunkPages);
+                nextFallbackCache = chunked;
               } else {
-                jobsCacheRef.current[1] = fallback;
-                setJobsCache({ 1: fallback });
-                setTotalPages(1);
+                nextFallbackCache = { 1: fallback };
               }
-              setActivePage(1);
+              jobsCacheRef.current = nextFallbackCache;
+              setJobsCache(nextFallbackCache);
+              setTotalPages(fallbackTotalPages);
+              setKnownWorkplaceOptions(
+                extractDynamicJobFilterOptions(Object.values(nextFallbackCache).flat()).workplaceOptions
+              );
+              baseJobsCacheRef.current = {
+                key: baseQueryKey,
+                pages: nextFallbackCache,
+                totalItems: fallback.length,
+                totalPages: fallbackTotalPages,
+                hasMore: false,
+              };
+              setIsClientWorkplaceFilterActive(false);
+              if (!background && isLatestNavigation()) setActivePage(1);
               setTotalItems(fallback.length);
               setHasMoreJobs(false);
               return fallback;
             }
+            jobsCacheRef.current = {};
+            setJobsCache({});
+            setTotalItems(0);
+            setTotalPages(1);
+            setHasMoreJobs(false);
+            setIsClientWorkplaceFilterActive(false);
+            if (!background && isLatestNavigation()) setActivePage(1);
+            return [];
           } else if (pageNumber > 1) {
             // Server has no more jobs for this page; stay on current page and mark no more jobs
             setHasMoreJobs(false);
             setTotalPages((prev) => Math.min(prev, pageNumber - 1));
+            if (!shouldSendWorkplace && matchingBaseEntry) {
+              matchingBaseEntry.hasMore = false;
+              matchingBaseEntry.totalPages = Math.min(
+                matchingBaseEntry.totalPages || pageNumber - 1,
+                pageNumber - 1
+              );
+            }
             return [];
           }
         }
@@ -714,7 +7512,22 @@ const BrowseJobs = () => {
           }
           jobsCacheRef.current = chunked;
           setJobsCache(chunked);
-          setActivePage(1);
+          if (!shouldSendWorkplace) {
+            baseJobsCacheRef.current = {
+              key: baseQueryKey,
+              pages: chunked,
+              totalItems: transformed.length,
+              totalPages: chunkPages,
+              hasMore: false,
+            };
+            setKnownWorkplaceOptions(
+              extractDynamicJobFilterOptions(Object.values(chunked).flat()).workplaceOptions
+            );
+            setIsClientWorkplaceFilterActive(activeWorkplaces.length > 0);
+          } else {
+            setIsClientWorkplaceFilterActive(false);
+          }
+          if (!background && isLatestNavigation()) setActivePage(1);
           setTotalItems(transformed.length);
           setTotalPages(chunkPages);
           setHasMoreJobs(false);
@@ -722,38 +7535,124 @@ const BrowseJobs = () => {
         }
 
         // Cache page data
-        jobsCacheRef.current[pageNumber] = transformed;
+        const nextCache = forceRefresh
+          ? { [pageNumber]: transformed }
+          : { ...jobsCacheRef.current, [pageNumber]: transformed };
+        jobsCacheRef.current = nextCache;
         setJobsCache((prev) => ({
           ...(forceRefresh ? {} : prev),
           [pageNumber]: transformed,
         }));
-        setActivePage(pageNumber);
+        if (!shouldSendWorkplace) {
+          const nextBasePages =
+            pageNumber === 1 && forceRefresh && !matchingBaseEntry
+              ? { [pageNumber]: transformed }
+              : { ...(matchingBaseEntry?.pages || {}), [pageNumber]: transformed };
+          baseJobsCacheRef.current = {
+            key: baseQueryKey,
+            pages: nextBasePages,
+            totalItems: resTotalItems,
+            totalPages: resTotalPages,
+            hasMore,
+          };
+          setKnownWorkplaceOptions(
+            extractDynamicJobFilterOptions(Object.values(nextBasePages).flat()).workplaceOptions
+          );
+          setIsClientWorkplaceFilterActive(activeWorkplaces.length > 0);
+        } else {
+          setIsClientWorkplaceFilterActive(false);
+        }
+        if (!background && isLatestNavigation()) setActivePage(pageNumber);
 
         return transformed;
       } catch (err) {
+        if (!isCurrent()) return [];
         console.error(`[BrowseJobs] Error fetching Page ${pageNumber} from GET /api/jobs:`, err);
+
+        // If server rejected the workplace query param (e.g. 400 on 'on-site'), recover cleanly via base jobs
+        if (shouldSendWorkplace && pageNumber === 1) {
+          if (matchingBaseEntry?.pages?.[1]) {
+            recordUnsupportedWorkplaces({
+              unsupportedSet: serverUnsupportedWorkplacesRef.current,
+              activeWorkplaces,
+              transformed: [],
+            });
+            setFetchError(null);
+            setLoadMoreError(null);
+            return applyBaseCacheEntry(matchingBaseEntry, true);
+          }
+          try {
+            const unfilteredRes = await getJobs(buildUnfilteredParams());
+            if (!isCurrent()) return [];
+            const parsedUnfiltered = parsePagedResult(unfilteredRes);
+            const uPages =
+              parsedUnfiltered.transformed.length > pageSize
+                ? (() => {
+                    const chunked = {};
+                    const cp = Math.ceil(parsedUnfiltered.transformed.length / pageSize);
+                    for (let p = 1; p <= cp; p++) {
+                      chunked[p] = parsedUnfiltered.transformed.slice((p - 1) * pageSize, p * pageSize);
+                    }
+                    return chunked;
+                  })()
+                : { 1: parsedUnfiltered.transformed };
+            const uTotalPages =
+              parsedUnfiltered.transformed.length > pageSize
+                ? Object.keys(uPages).length
+                : parsedUnfiltered.resTotalPages;
+            const uTotalItems =
+              parsedUnfiltered.transformed.length > pageSize
+                ? parsedUnfiltered.transformed.length
+                : parsedUnfiltered.resTotalItems;
+            const uHasMore =
+              parsedUnfiltered.transformed.length > pageSize ? false : parsedUnfiltered.hasMore;
+            const newBaseEntry = {
+              key: baseQueryKey,
+              pages: uPages,
+              totalItems: uTotalItems,
+              totalPages: uTotalPages,
+              hasMore: uHasMore,
+            };
+            baseJobsCacheRef.current = newBaseEntry;
+            recordUnsupportedWorkplaces({
+              unsupportedSet: serverUnsupportedWorkplacesRef.current,
+              activeWorkplaces,
+              transformed: [],
+            });
+            setFetchError(null);
+            setLoadMoreError(null);
+            return applyBaseCacheEntry(newBaseEntry, true);
+          } catch {
+            // Fall through to error handling below
+          }
+        }
+
         const msg = err?.response?.data?.message || err?.message || "Unable to load jobs. Please try again.";
         setFetchError(msg);
         setLoadMoreError(msg);
 
         if (pageNumber === 1 && Object.keys(jobsCacheRef.current).length === 0) {
-          const stored = getStoredJobMatches();
+          const stored = activeWorkplaces.length === 0 ? getStoredJobMatches() : null;
           if (Array.isArray(stored) && stored.length > 0) {
             const fallback = stored.map((m, idx) => transformMatchToJob(m, idx)).filter(Boolean);
+            let nextFallbackCache;
+            let fallbackTotalPages = 1;
             if (fallback.length > pageSize) {
               const chunked = {};
-              const chunkPages = Math.ceil(fallback.length / pageSize);
-              for (let p = 1; p <= chunkPages; p++) {
+              fallbackTotalPages = Math.ceil(fallback.length / pageSize);
+              for (let p = 1; p <= fallbackTotalPages; p++) {
                 chunked[p] = fallback.slice((p - 1) * pageSize, p * pageSize);
               }
-              jobsCacheRef.current = chunked;
-              setJobsCache(chunked);
-              setTotalPages(chunkPages);
+              nextFallbackCache = chunked;
             } else {
-              jobsCacheRef.current[1] = fallback;
-              setJobsCache({ 1: fallback });
-              setTotalPages(1);
+              nextFallbackCache = { 1: fallback };
             }
+            jobsCacheRef.current = nextFallbackCache;
+            setJobsCache(nextFallbackCache);
+            setTotalPages(fallbackTotalPages);
+            setKnownWorkplaceOptions(
+              extractDynamicJobFilterOptions(Object.values(nextFallbackCache).flat()).workplaceOptions
+            );
             setActivePage(1);
             setTotalItems(fallback.length);
             setHasMoreJobs(false);
@@ -762,18 +7661,20 @@ const BrowseJobs = () => {
           setHasMoreJobs(false);
         }
       } finally {
-        fetchingPagesRef.current.delete(pageNumber);
-        setIsLoadingJobs(false);
-        setIsLoadingPage(false);
+        fetchingPagesRef.current.delete(fetchKey);
+        if (isCurrent()) {
+          setIsLoadingJobs(false);
+          setIsLoadingPage(false);
+        }
       }
     },
     [
       searchQuery,
       sortOption,
       selectedLocations,
+      selectedCompanies,
       selectedRoles,
       selectedWorkplace,
-      selectedJobTypes,
       selectedDate,
       pageSize,
     ]
@@ -886,15 +7787,27 @@ const BrowseJobs = () => {
           saveResumeSelection(targetResume, strId);
         }
       }
+      requestGenerationRef.current += 1;
+      fetchingPagesRef.current.clear();
+      baseJobsCacheRef.current = null;
+      serverUnsupportedWorkplacesRef.current.clear();
+      setIsClientWorkplaceFilterActive(false);
       jobsCacheRef.current = {};
       setJobsCache({});
+      setKnownWorkplaceOptions([]);
       if (loadPageRef.current) {
         loadPageRef.current(1, { forceRefresh: true, customResumeId: targetResumeId });
       }
     } catch (err) {
       console.error("[BrowseJobs] Error fetching resumes list:", err);
+      requestGenerationRef.current += 1;
+      fetchingPagesRef.current.clear();
+      baseJobsCacheRef.current = null;
+      serverUnsupportedWorkplacesRef.current.clear();
+      setIsClientWorkplaceFilterActive(false);
       jobsCacheRef.current = {};
       setJobsCache({});
+      setKnownWorkplaceOptions([]);
       if (loadPageRef.current) {
         loadPageRef.current(1, { forceRefresh: true });
       }
@@ -914,8 +7827,14 @@ const BrowseJobs = () => {
       const strId = String(resumeId);
       setActiveResumeId(strId);
       saveResumeSelection(resume, strId);
+      requestGenerationRef.current += 1;
+      fetchingPagesRef.current.clear();
+      baseJobsCacheRef.current = null;
+      serverUnsupportedWorkplacesRef.current.clear();
+      setIsClientWorkplaceFilterActive(false);
       jobsCacheRef.current = {};
       setJobsCache({});
+      setKnownWorkplaceOptions([]);
       loadPage(1, { forceRefresh: true, customResumeId: resumeId });
     }
   };
@@ -927,8 +7846,14 @@ const BrowseJobs = () => {
 
     const handleJobMatchesUpdated = () => {
       if (isMounted && loadPageRef.current) {
+        requestGenerationRef.current += 1;
+        fetchingPagesRef.current.clear();
+        baseJobsCacheRef.current = null;
+        serverUnsupportedWorkplacesRef.current.clear();
+        setIsClientWorkplaceFilterActive(false);
         jobsCacheRef.current = {};
         setJobsCache({});
+        setKnownWorkplaceOptions([]);
         loadPageRef.current(1, { forceRefresh: true });
       }
     };
@@ -1073,6 +7998,14 @@ const BrowseJobs = () => {
   }, []);
 
   const handleClear = () => {
+    const willTriggerFilterEffect =
+      Boolean(searchQuery) ||
+      selectedDate !== "All time" ||
+      selectedLocations.length > 0 ||
+      selectedWorkplace.length > 0 ||
+      selectedCompanies.length > 0 ||
+      selectedRoles.length > 0;
+
     setSearchQuery("");
     setSelectedDate("All time");
     setSelectedLocations([]);
@@ -1082,26 +8015,43 @@ const BrowseJobs = () => {
     setCompanySearch("");
     setSelectedExperience("");
     setSelectedRoles([]);
-    setSelectedJobTypes([]);
     setSponsorsVisa(false);
     setSortOption("best_match");
     setActiveDropdown(null);
-    jobsCacheRef.current = {};
-    setJobsCache({});
+    baseJobsCacheRef.current = null;
+    serverUnsupportedWorkplacesRef.current.clear();
+    setIsClientWorkplaceFilterActive(false);
     setActivePage(1);
-    loadPage(1, {
-      forceRefresh: true,
-      customQuery: "",
-      customSort: "best_match",
-      overrideFilters: {
-        locations: [],
-        roles: [],
-        workplace: [],
-        jobTypes: [],
-        date: "All time",
-      },
-    });
+
+    if (!willTriggerFilterEffect) {
+      requestGenerationRef.current += 1;
+      fetchingPagesRef.current.clear();
+      jobsCacheRef.current = {};
+      setJobsCache({});
+      setTotalPages(1);
+      loadPage(1, {
+        forceRefresh: true,
+        customQuery: "",
+        customSort: "best_match",
+        overrideFilters: {
+          locations: [],
+          companies: [],
+          roles: [],
+          workplace: [],
+          date: "All time",
+        },
+      });
+    }
   };
+
+  const hasActiveFilters = Boolean(
+    searchQuery.trim() ||
+      (selectedDate && selectedDate !== "All time") ||
+      selectedLocations.length > 0 ||
+      selectedRoles.length > 0 ||
+      selectedWorkplace.length > 0 ||
+      selectedCompanies.length > 0
+  );
 
   const toggleDropdown = (name) => {
     setActiveDropdown((prev) => (prev === name ? null : name));
@@ -1117,114 +8067,58 @@ const BrowseJobs = () => {
 
   // Flatten all cached jobs across pages for options extraction
   const allCachedJobs = useMemo(() => {
-    return Object.values(jobsCache).flat();
+    return Object.keys(jobsCache).map(Number).sort((a, b) => a - b).flatMap((page) => jobsCache[page] || []);
   }, [jobsCache]);
 
-  // Dynamically extract filter options from cached jobs
-  const dynamicCompanyOptions = useMemo(() => {
-    const set = new Set();
-    allCachedJobs.forEach((j) => {
-      if (j.company && j.company !== "Hiring Organization") {
-        set.add(j.company);
-      }
+  // Dynamically extract filter options from cached jobs (preserving selected values)
+  const {
+    companyOptions: dynamicCompanyOptions,
+    roleOptions: dynamicRoleOptions,
+    locationOptions: dynamicLocationOptions,
+    workplaceOptions: extractedWorkplaceOptions,
+  } = useMemo(() => {
+    return extractDynamicJobFilterOptions(allCachedJobs, {
+      selectedLocations,
+      selectedCompanies,
+      selectedRoles,
+      selectedWorkplace,
     });
-    return Array.from(set);
-  }, [allCachedJobs]);
+  }, [
+    allCachedJobs,
+    selectedLocations,
+    selectedCompanies,
+    selectedRoles,
+    selectedWorkplace,
+  ]);
 
-  const dynamicRoleOptions = useMemo(() => {
-    const set = new Set();
-    allCachedJobs.forEach((j) => {
-      if (j.title && !j.title.startsWith("Position #")) {
-        set.add(j.title);
-      }
-    });
-    return Array.from(set);
-  }, [allCachedJobs]);
-
-  const dynamicLocationOptions = useMemo(() => {
-    const set = new Set();
-    allCachedJobs.forEach((j) => {
-      if (j.location && j.location !== "Remote / Flexible") {
-        set.add(j.location);
-      }
-    });
-    return Array.from(set);
-  }, [allCachedJobs]);
+  const dynamicWorkplaceOptions = useMemo(() => {
+    if (selectedWorkplace.length === 0) {
+      return extractedWorkplaceOptions;
+    }
+    return sortWorkplaceOptions([
+      ...knownWorkplaceOptions,
+      ...extractedWorkplaceOptions,
+      ...selectedWorkplace,
+    ]);
+  }, [knownWorkplaceOptions, extractedWorkplaceOptions, selectedWorkplace]);
 
   // Filter all cached jobs across all loaded pages
   const allFilteredJobs = useMemo(() => {
-    return allCachedJobs.filter((job) => {
-      // Exclude already submitted jobs from Browse & Apply
-      if (isJobSubmitted(job, submittedJobIdSet, applicationMap)) {
-        return false;
+    return filterJobMatches(
+      allCachedJobs,
+      {
+        searchQuery,
+        selectedDate,
+        selectedLocations,
+        selectedCompanies,
+        selectedRoles,
+        selectedWorkplace,
+      },
+      {
+        isSubmittedFn: (job) =>
+          isJobSubmitted(job, submittedJobIdSet, applicationMap),
       }
-
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const matchTitle = (job.title || "").toLowerCase().includes(q);
-        const matchComp = (job.company || "").toLowerCase().includes(q);
-        const matchLoc = (job.location || "").toLowerCase().includes(q);
-        const matchDesc = (job.description || "").toLowerCase().includes(q);
-        const matchSkills =
-          Array.isArray(job.requiredSkills) &&
-          job.requiredSkills.some((s) => s.toLowerCase().includes(q));
-        if (!matchTitle && !matchComp && !matchLoc && !matchDesc && !matchSkills) {
-          return false;
-        }
-      }
-      if (selectedDate && selectedDate !== "All time") {
-        if (job.createdAt || job.postedAt || job.date) {
-          const jobTime = new Date(job.createdAt || job.postedAt || job.date).getTime();
-          const now = Date.now();
-          if (!isNaN(jobTime)) {
-            let maxAgeMs = Infinity;
-            if (selectedDate === "Last 6 hours") maxAgeMs = 6 * 60 * 60 * 1000;
-            else if (selectedDate === "Last 24 hours") maxAgeMs = 24 * 60 * 60 * 1000;
-            else if (selectedDate === "Last 7 days") maxAgeMs = 7 * 24 * 60 * 60 * 1000;
-            else if (selectedDate === "Last 14 days") maxAgeMs = 14 * 24 * 60 * 60 * 1000;
-            else if (selectedDate === "Last 30 days") maxAgeMs = 30 * 24 * 60 * 60 * 1000;
-
-            if (now - jobTime > maxAgeMs) return false;
-          }
-        }
-      }
-      if (selectedLocations.length > 0) {
-        const jobLoc = (job.location || job.fullLocation || "").toLowerCase();
-        const matchesLoc = selectedLocations.some((loc) =>
-          jobLoc.includes(loc.toLowerCase().split(",")[0].trim())
-        );
-        if (!matchesLoc) return false;
-      }
-      if (selectedCompanies.length > 0) {
-        const jobComp = (job.company || "").toLowerCase();
-        const matchesComp = selectedCompanies.some((comp) =>
-          jobComp.includes(comp.toLowerCase().trim())
-        );
-        if (!matchesComp) return false;
-      }
-      if (selectedRoles.length > 0) {
-        const jobRole = (job.title || "").toLowerCase();
-        const matchesRole = selectedRoles.some((role) =>
-          jobRole.includes(role.toLowerCase().trim())
-        );
-        if (!matchesRole) return false;
-      }
-      if (selectedWorkplace.length > 0) {
-        const jobMode = (job.workMode || job.workplace || "").toLowerCase();
-        const matchesWorkMode = selectedWorkplace.some((m) =>
-          jobMode.includes(m.toLowerCase().trim())
-        );
-        if (!matchesWorkMode) return false;
-      }
-      if (selectedJobTypes.length > 0) {
-        const jobType = (job.type || job.employmentType || "").toLowerCase();
-        const matchesType = selectedJobTypes.some((t) =>
-          jobType.includes(t.toLowerCase().trim())
-        );
-        if (!matchesType) return false;
-      }
-      return true;
-    });
+    );
   }, [
     allCachedJobs,
     submittedJobIdSet,
@@ -1235,72 +8129,77 @@ const BrowseJobs = () => {
     selectedCompanies,
     selectedRoles,
     selectedWorkplace,
-    selectedJobTypes,
   ]);
 
-  // Derived total pages for pagination controls
+  // Compact eligible jobs across sequentially fetched backend pages.
+  // Filtering out submitted jobs must not leave holes in the UI pages.
   const totalFilteredPages = Math.max(1, Math.ceil(allFilteredJobs.length / pageSize));
   const displayTotalPages =
-    totalPages > totalFilteredPages && hasMoreJobs
-      ? totalPages
-      : totalFilteredPages;
+    isClientWorkplaceFilterActive && !hasMoreJobs
+      ? totalFilteredPages
+      : Math.max(1, totalPages);
+  const currentPage =
+    !isLoadingJobs && !isLoadingPage && activePage > displayTotalPages && displayTotalPages > 0
+      ? displayTotalPages
+      : activePage;
+  const displayedJobs = allFilteredJobs.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
 
-  // Active slice of jobs for the current page (strictly derived from allFilteredJobs)
-  const displayedJobs = useMemo(() => {
-    const startIdx = (activePage - 1) * pageSize;
-    const endIdx = startIdx + pageSize;
-    return allFilteredJobs.slice(startIdx, endIdx);
-  }, [allFilteredJobs, activePage, pageSize]);
-
-  // Auto-fetch next page if filtering submitted jobs left the current page with empty slots
-  useEffect(() => {
-    const neededCount = activePage * pageSize;
-    if (!isLoadingJobs && !isLoadingPage && hasMoreJobs && allFilteredJobs.length < neededCount) {
-      const cachedPages = Object.keys(jobsCache).map(Number).filter((n) => !isNaN(n));
-      const maxCached = cachedPages.length > 0 ? Math.max(...cachedPages) : 0;
-      const nextPage = maxCached + 1;
-      if (nextPage <= totalPages && !fetchingPagesRef.current.has(nextPage)) {
-        if (loadPageRef.current) {
-          loadPageRef.current(nextPage);
-        }
-      }
-    }
-  }, [
-    allFilteredJobs.length,
-    activePage,
-    pageSize,
-    hasMoreJobs,
-    isLoadingJobs,
-    isLoadingPage,
-    totalPages,
-    jobsCache,
-  ]);
-
-  // Aliased for full compatibility with existing JSX
   const filteredJobs = displayedJobs;
 
-  // Auto-reset activePage to 1 if activePage exceeds displayTotalPages
+  // Fetch additional backend pages until the selected UI page has 20 eligible
+  // jobs, or the backend is exhausted. This never changes activePage.
   useEffect(() => {
-    if (activePage > displayTotalPages && displayTotalPages > 0) {
-      setActivePage(1);
-    }
-  }, [activePage, displayTotalPages]);
+    if (fillingPagesRef.current || isLoadingJobs || isLoadingPage || fetchError) return;
+    if (allFilteredJobs.length >= currentPage * pageSize) return;
+    const generation = requestGenerationRef.current;
+    let cancelled = false;
+    const fill = async () => {
+      fillingPagesRef.current = true;
+      try {
+        while (!cancelled && generation === requestGenerationRef.current) {
+          const cached = jobsCacheRef.current;
+          const pages = Object.keys(cached).map(Number);
+          const lastPage = pages.length ? Math.max(...pages) : 0;
+          if (lastPage >= totalPages || lastPage === 0) break;
+          const next = lastPage + 1;
+          const result = await loadPageRef.current(next, { background: true });
+          if (!Array.isArray(result) || result.length === 0) break;
+          // Re-render after every fetched page; the effect will check again.
+          break;
+        }
+      } finally {
+        fillingPagesRef.current = false;
+      }
+    };
+    fill();
+    return () => { cancelled = true; };
+  }, [currentPage, allFilteredJobs.length, jobsCache, pageSize, totalPages,
+      isLoadingJobs, isLoadingPage, fetchError, submittedJobIdSet, applicationMap,
+      searchQuery, selectedLocations, selectedCompanies, selectedRoles,
+      selectedWorkplace, selectedDate]);
 
-  // Reset to page 1 and fetch backend filtered results whenever search query or filters change
+  // Refresh results on filter changes, but leave initial loading to fetchUserResumes.
   useEffect(() => {
-    setActivePage(1);
+    if (!didMountFiltersRef.current) {
+      didMountFiltersRef.current = true;
+      return;
+    }
+    requestGenerationRef.current += 1;
+    fetchingPagesRef.current.clear();
     jobsCacheRef.current = {};
     setJobsCache({});
-    if (loadPageRef.current) {
-      loadPageRef.current(1, { forceRefresh: true });
-    }
+    setActivePage(1);
+    setTotalPages(1);
+    loadPageRef.current?.(1, { forceRefresh: true, restoreFromBaseIfAvailable: true });
   }, [
     searchQuery,
     selectedLocations,
     selectedCompanies,
     selectedRoles,
     selectedWorkplace,
-    selectedJobTypes,
     selectedDate,
   ]);
 
@@ -1310,7 +8209,7 @@ const BrowseJobs = () => {
     if (highestPage <= 5) {
       return Array.from({ length: highestPage }, (_, i) => i + 1);
     }
-    let start = Math.max(1, activePage - 2);
+    let start = Math.max(1, currentPage - 2);
     let end = Math.min(highestPage, start + 4);
     if (end - start < 4) {
       start = Math.max(1, end - 4);
@@ -1320,28 +8219,15 @@ const BrowseJobs = () => {
       pages.push(i);
     }
     return pages;
-  }, [displayTotalPages, activePage]);
+  }, [displayTotalPages, currentPage]);
 
-  // Handle Page Change with Cache & In-Memory Checking
+  // Navigate through compacted eligible jobs, not raw backend page numbers.
   const handlePageChange = (targetPage) => {
-    if (targetPage < 1 || targetPage === activePage || targetPage > displayTotalPages) {
-      return;
-    }
-    const startIdx = (targetPage - 1) * pageSize;
-    // 1. If target page jobs are already loaded in allFilteredJobs:
-    if (startIdx < allFilteredJobs.length) {
-      setActivePage(targetPage);
-      return;
-    }
-    // 2. If target page jobs are cached in jobsCache directly:
-    if (jobsCacheRef.current[targetPage] && jobsCacheRef.current[targetPage].length > 0) {
-      setActivePage(targetPage);
-      return;
-    }
-    // 3. Otherwise fetch from server if more jobs might be available
-    if (hasMoreJobs) {
-      loadPage(targetPage);
-    }
+    if (!Number.isInteger(targetPage) || targetPage < 1 ||
+        targetPage > displayTotalPages || targetPage === currentPage ||
+        isLoadingJobs || isLoadingPage) return;
+    navigationRequestRef.current += 1;
+    setActivePage(targetPage);
   };
 
   return (
@@ -1531,568 +8417,66 @@ const BrowseJobs = () => {
           </div>
 
           {/* Search & Filter Container */}
-          <div
-            ref={dropdownRef}
-            className="bg-white rounded-[20px] border border-[#E2E8F0] p-4.5 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col gap-3.5 relative z-10"
-          >
-            {/* First Row: Search Input + Clear */}
-            <div className="flex items-center gap-3 w-full">
-              <div className="flex-1 flex items-center gap-2.5 px-3.5 h-[42px] rounded-[10px] border border-[#E2E8F0] bg-white focus-within:border-slate-400 focus-within:ring-2 focus-within:ring-slate-100 transition-all">
-                <svg
-                  className="w-4 h-4 text-[#94A3B8] shrink-0"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <circle cx="11" cy="11" r="7" />
-                  <path d="m20 20-3.5-3.5" />
-                </svg>
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      jobsCacheRef.current = {};
-                      setJobsCache({});
-                      loadPage(1, { forceRefresh: true });
-                    }
-                  }}
-                  placeholder="Search by title, keyword, company or skills..."
-                  className="w-full bg-transparent border-none text-[13.5px] text-[#0F172A] placeholder:text-[#94A3B8] outline-none"
-                />
-              </div>
-
-              <button
-                type="button"
-                onClick={handleClear}
-                className="h-[42px] px-3 flex items-center gap-1 text-[13.5px] font-medium text-[#64748B] hover:text-[#0F172A] transition-colors cursor-pointer"
-              >
-                <span className="text-base leading-none">✕</span>
-                <span>Clear</span>
-              </button>
-            </div>
-
-            {/* Second Row: Filter Buttons */}
-            <div className="flex items-center gap-2 flex-wrap pt-0.5 relative">
-              {/* Date Dropdown */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => toggleDropdown("date")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "date" || (selectedDate && selectedDate !== "All time")
-                    ? "border-[#4F46E5] bg-[#EEF2FF] text-[#4F46E5] font-semibold"
-                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                    }`}
-                >
-                  <span>{selectedDate && selectedDate !== "All time" ? `Date: ${selectedDate}` : "Date"}</span>
-                  <svg
-                    className={`w-3 h-3 transition-transform ${selectedDate && selectedDate !== "All time" ? "text-[#4F46E5]" : "text-[#94A3B8]"} ${activeDropdown === "date" ? "rotate-180" : ""}`}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                  >
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
-                </button>
-
-                {activeDropdown === "date" && (
-                  <div className="absolute top-full left-0 mt-2 w-[180px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2 z-50 flex flex-col gap-0.5">
-                    {dateOptions.map((opt) => {
-                      const isSelected = selectedDate === opt;
-                      return (
-                        <div
-                          key={opt}
-                          onClick={() => {
-                            setSelectedDate(opt);
-                            setActiveDropdown(null);
-                          }}
-                          className={`flex items-center gap-2.5 px-3 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] ${isSelected
-                            ? "font-semibold text-[#0F172A] bg-slate-50"
-                            : "text-slate-700"
-                            }`}
-                        >
-                          <div
-                            className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${isSelected
-                              ? "border-[#0F4C3A] bg-[#0F4C3A] text-white"
-                              : "border-slate-300"
-                              }`}
-                          >
-                            {isSelected && (
-                              <svg
-                                className="w-2 h-2"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="4"
-                              >
-                                <polyline points="20 6 9 17 4 12" />
-                              </svg>
-                            )}
-                          </div>
-                          <span>{opt}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Location Dropdown */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => toggleDropdown("location")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "location" || selectedLocations.length > 0
-                    ? "border-[#4F46E5] bg-[#EEF2FF] text-[#4F46E5] font-semibold"
-                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                    }`}
-                >
-                  <span>{selectedLocations.length > 0 ? `Location (${selectedLocations.length})` : "Location"}</span>
-                  <svg
-                    className={`w-3 h-3 transition-transform ${selectedLocations.length > 0 ? "text-[#4F46E5]" : "text-[#94A3B8]"} ${activeDropdown === "location" ? "rotate-180" : ""}`}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                  >
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
-                </button>
-
-                {activeDropdown === "location" && (
-                  <div className="absolute top-full left-0 mt-2 w-[240px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-3 z-50 flex flex-col gap-2">
-                    <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-[8px] border border-slate-200 bg-white">
-                      <svg
-                        className="w-3.5 h-3.5 text-slate-400 shrink-0"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      >
-                        <circle cx="11" cy="11" r="7" />
-                        <path d="m20 20-3.5-3.5" />
-                      </svg>
-                      <input
-                        type="text"
-                        placeholder="Search locations..."
-                        value={locationSearch}
-                        onChange={(e) => setLocationSearch(e.target.value)}
-                        className="w-full text-[12px] bg-transparent outline-none placeholder:text-slate-400 text-slate-700"
-                      />
-                    </div>
-
-                    <div className="flex flex-col gap-1 max-h-[220px] overflow-y-auto">
-                      {dynamicLocationOptions.length === 0 ? (
-                        <div className="text-xs text-slate-400 px-2 py-1">
-                          No locations available yet
-                        </div>
-                      ) : (
-                        dynamicLocationOptions
-                          .filter((loc) =>
-                            loc.toLowerCase().includes(locationSearch.toLowerCase())
-                          )
-                          .map((loc) => {
-                            const isChecked = selectedLocations.includes(loc);
-                            return (
-                              <div
-                                key={loc}
-                                onClick={() =>
-                                  toggleCheckbox(
-                                    selectedLocations,
-                                    setSelectedLocations,
-                                    loc
-                                  )
-                                }
-                                className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
-                              >
-                                <div
-                                  className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
-                                    ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                                    : "border-slate-300 bg-white"
-                                    }`}
-                                >
-                                  {isChecked && (
-                                    <svg
-                                      className="w-2.5 h-2.5"
-                                      viewBox="0 0 24 24"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="3.5"
-                                    >
-                                      <polyline points="20 6 9 17 4 12" />
-                                    </svg>
-                                  )}
-                                </div>
-                                <span>{loc}</span>
-                              </div>
-                            );
-                          })
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Role Dropdown */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => toggleDropdown("role")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "role" || selectedRoles.length > 0
-                    ? "border-[#4F46E5] bg-[#EEF2FF] text-[#4F46E5] font-semibold"
-                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                    }`}
-                >
-                  <span>{selectedRoles.length > 0 ? `Role (${selectedRoles.length})` : "Role"}</span>
-                  <svg
-                    className={`w-3 h-3 transition-transform ${selectedRoles.length > 0 ? "text-[#4F46E5]" : "text-[#94A3B8]"} ${activeDropdown === "role" ? "rotate-180" : ""}`}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                  >
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
-                </button>
-
-                {activeDropdown === "role" && (
-                  <div className="absolute top-full left-0 mt-2 w-[220px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2.5 z-50 flex flex-col gap-1 max-h-[220px] overflow-y-auto">
-                    {dynamicRoleOptions.length === 0 ? (
-                      <div className="text-xs text-slate-400 px-2 py-1">
-                        No roles available yet
-                      </div>
-                    ) : (
-                      dynamicRoleOptions.map((role) => {
-                        const isChecked = selectedRoles.includes(role);
-                        return (
-                          <div
-                            key={role}
-                            onClick={() =>
-                              toggleCheckbox(selectedRoles, setSelectedRoles, role)
-                            }
-                            className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
-                          >
-                            <div
-                              className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
-                                ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                                : "border-slate-300 bg-white"
-                                }`}
-                            >
-                              {isChecked && (
-                                <svg
-                                  className="w-2.5 h-2.5"
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="3.5"
-                                >
-                                  <polyline points="20 6 9 17 4 12" />
-                                </svg>
-                              )}
-                            </div>
-                            <span className="truncate">{role}</span>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Job Type Dropdown */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => toggleDropdown("jobType")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "jobType" || selectedJobTypes.length > 0
-                    ? "border-[#4F46E5] bg-[#EEF2FF] text-[#4F46E5] font-semibold"
-                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                    }`}
-                >
-                  <span>{selectedJobTypes.length > 0 ? `Job Type (${selectedJobTypes.length})` : "Job Type"}</span>
-                  <svg
-                    className={`w-3 h-3 transition-transform ${selectedJobTypes.length > 0 ? "text-[#4F46E5]" : "text-[#94A3B8]"} ${activeDropdown === "jobType" ? "rotate-180" : ""}`}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                  >
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
-                </button>
-
-                {activeDropdown === "jobType" && (
-                  <div className="absolute top-full left-0 mt-2 w-[190px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2.5 z-50 flex flex-col gap-1">
-                    {jobTypeOptions.map((type) => {
-                      const isChecked = selectedJobTypes.includes(type);
-                      return (
-                        <div
-                          key={type}
-                          onClick={() =>
-                            toggleCheckbox(selectedJobTypes, setSelectedJobTypes, type)
-                          }
-                          className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
-                        >
-                          <div
-                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
-                              ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                              : "border-slate-300 bg-white"
-                              }`}
-                          >
-                            {isChecked && (
-                              <svg
-                                className="w-2.5 h-2.5"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="3.5"
-                              >
-                                <polyline points="20 6 9 17 4 12" />
-                              </svg>
-                            )}
-                          </div>
-                          <span>{type}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Workplace Dropdown */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => toggleDropdown("workplace")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "workplace" || selectedWorkplace.length > 0
-                    ? "border-[#4F46E5] bg-[#EEF2FF] text-[#4F46E5] font-semibold"
-                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                    }`}
-                >
-                  <span>{selectedWorkplace.length > 0 ? `Workplace (${selectedWorkplace.length})` : "Workplace"}</span>
-                  <svg
-                    className={`w-3 h-3 transition-transform ${selectedWorkplace.length > 0 ? "text-[#4F46E5]" : "text-[#94A3B8]"} ${activeDropdown === "workplace" ? "rotate-180" : ""}`}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                  >
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
-                </button>
-
-                {activeDropdown === "workplace" && (
-                  <div className="absolute top-full left-0 mt-2 w-[180px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2.5 z-50 flex flex-col gap-1">
-                    {workplaceOptions.map((wp) => {
-                      const isChecked = selectedWorkplace.includes(wp);
-                      return (
-                        <div
-                          key={wp}
-                          onClick={() =>
-                            toggleCheckbox(selectedWorkplace, setSelectedWorkplace, wp)
-                          }
-                          className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
-                        >
-                          <div
-                            className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
-                              ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                              : "border-slate-300 bg-white"
-                              }`}
-                          >
-                            {isChecked && (
-                              <svg
-                                className="w-2.5 h-2.5"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="3.5"
-                              >
-                                <polyline points="20 6 9 17 4 12" />
-                              </svg>
-                            )}
-                          </div>
-                          <span>{wp}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Companies Dropdown */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => toggleDropdown("companies")}
-                  className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "companies" || selectedCompanies.length > 0
-                    ? "border-[#4F46E5] bg-[#EEF2FF] text-[#4F46E5] font-semibold"
-                    : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                    }`}
-                >
-                  <span>{selectedCompanies.length > 0 ? `Companies (${selectedCompanies.length})` : "Companies"}</span>
-                  <svg
-                    className={`w-3 h-3 transition-transform ${selectedCompanies.length > 0 ? "text-[#4F46E5]" : "text-[#94A3B8]"} ${activeDropdown === "companies" ? "rotate-180" : ""}`}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                  >
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
-                </button>
-
-                {activeDropdown === "companies" && (
-                  <div className="absolute top-full left-0 mt-2 w-[240px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-3 z-50 flex flex-col gap-2">
-                    <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-[8px] border border-slate-200 bg-white">
-                      <svg
-                        className="w-3.5 h-3.5 text-slate-400 shrink-0"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      >
-                        <circle cx="11" cy="11" r="7" />
-                        <path d="m20 20-3.5-3.5" />
-                      </svg>
-                      <input
-                        type="text"
-                        placeholder="Search companies..."
-                        value={companySearch}
-                        onChange={(e) => setCompanySearch(e.target.value)}
-                        className="w-full text-[12px] bg-transparent outline-none placeholder:text-slate-400 text-slate-700"
-                      />
-                    </div>
-
-                    <div className="flex flex-col gap-1 max-h-[220px] overflow-y-auto">
-                      {dynamicCompanyOptions.length === 0 ? (
-                        <div className="text-xs text-slate-400 px-2 py-1">
-                          No companies available yet
-                        </div>
-                      ) : (
-                        dynamicCompanyOptions
-                          .filter((c) =>
-                            c.toLowerCase().includes(companySearch.toLowerCase())
-                          )
-                          .map((comp) => {
-                            const isChecked = selectedCompanies.includes(comp);
-                            return (
-                              <div
-                                key={comp}
-                                onClick={() =>
-                                  toggleCheckbox(
-                                    selectedCompanies,
-                                    setSelectedCompanies,
-                                    comp
-                                  )
-                                }
-                                className="flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] text-slate-700"
-                              >
-                                <div
-                                  className={`w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0 ${isChecked
-                                    ? "bg-[#0F4C3A] border-[#0F4C3A] text-white"
-                                    : "border-slate-300 bg-white"
-                                    }`}
-                                >
-                                  {isChecked && (
-                                    <svg
-                                      className="w-2.5 h-2.5"
-                                      viewBox="0 0 24 24"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="3.5"
-                                    >
-                                      <polyline points="20 6 9 17 4 12" />
-                                    </svg>
-                                  )}
-                                </div>
-                                <span className="truncate">{comp}</span>
-                              </div>
-                            );
-                          })
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Sort & Auto Apply Actions */}
-              <div className="relative sm:ml-auto flex items-center gap-2.5 flex-wrap">
-                {/* Sort Dropdown (Best Match vs Newest) */}
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => toggleDropdown("sort")}
-                    className={`h-[34px] px-3.5 rounded-[10px] border text-[13px] font-normal flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${activeDropdown === "sort" || sortOption !== "best_match"
-                      ? "border-slate-300 bg-[#F8FAFC] text-[#0F172A]"
-                      : "border-[#E2E8F0] bg-white text-[#334155] hover:bg-[#F8FAFC]"
-                      }`}
-                  >
-                    <span className="text-[#64748B]">Sort:</span>
-                    <span className="font-semibold text-[#0F172A]">
-                      {sortOption === "newest" ? "Newest First" : "Best ATS Match"}
-                    </span>
-                    <svg
-                      className={`w-3 h-3 text-[#94A3B8] transition-transform ${activeDropdown === "sort" ? "rotate-180" : ""
-                        }`}
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                    >
-                      <path d="m6 9 6 6 6-6" />
-                    </svg>
-                  </button>
-
-                  {activeDropdown === "sort" && (
-                    <div className="absolute top-full right-0 mt-2 w-[190px] bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.1)] p-2 z-50 flex flex-col gap-0.5">
-                      <div
-                        onClick={() => {
-                          setSortOption("best_match");
-                          setActiveDropdown(null);
-                          jobsCacheRef.current = {};
-                          setJobsCache({});
-                          loadPage(1, { forceRefresh: true, customSort: "best_match" });
-                        }}
-                        className={`flex items-center justify-between px-3 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] ${sortOption === "best_match"
-                          ? "font-semibold text-[#0F172A] bg-slate-50"
-                          : "text-slate-700"
-                          }`}
-                      >
-                        <span>Best ATS Match</span>
-                        {sortOption === "best_match" && (
-                          <span className="text-[#4F46E5] text-xs font-bold">✓</span>
-                        )}
-                      </div>
-                      <div
-                        onClick={() => {
-                          setSortOption("newest");
-                          setActiveDropdown(null);
-                          jobsCacheRef.current = {};
-                          setJobsCache({});
-                          loadPage(1, { forceRefresh: true, customSort: "newest" });
-                        }}
-                        className={`flex items-center justify-between px-3 py-1.5 rounded-[6px] hover:bg-slate-50 cursor-pointer text-[13px] ${sortOption === "newest"
-                          ? "font-semibold text-[#0F172A] bg-slate-50"
-                          : "text-slate-700"
-                          }`}
-                      >
-                        <span>Newest First</span>
-                        {sortOption === "newest" && (
-                          <span className="text-[#4F46E5] text-xs font-bold">✓</span>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Auto Apply All Button */}
-                
-              </div>
-            </div>
-          </div>
+          <JobFilterBar
+            dropdownRef={dropdownRef}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            onSearchEnter={() => {
+              requestGenerationRef.current += 1;
+              fetchingPagesRef.current.clear();
+              baseJobsCacheRef.current = null;
+              jobsCacheRef.current = {};
+              setJobsCache({});
+              setActivePage(1);
+              setTotalPages(1);
+              loadPage(1, { forceRefresh: true });
+            }}
+            onClear={handleClear}
+            activeDropdown={activeDropdown}
+            onToggleDropdown={toggleDropdown}
+            selectedDate={selectedDate}
+            onSelectDate={(opt) => {
+              setSelectedDate(opt);
+              setActiveDropdown(null);
+            }}
+            selectedLocations={selectedLocations}
+            locationSearch={locationSearch}
+            onLocationSearchChange={setLocationSearch}
+            locationOptions={dynamicLocationOptions}
+            onToggleLocation={(loc) =>
+              toggleCheckbox(selectedLocations, setSelectedLocations, loc)
+            }
+            selectedRoles={selectedRoles}
+            roleOptions={dynamicRoleOptions}
+            onToggleRole={(role) =>
+              toggleCheckbox(selectedRoles, setSelectedRoles, role)
+            }
+            selectedWorkplace={selectedWorkplace}
+            workplaceOptions={dynamicWorkplaceOptions}
+            onToggleWorkplace={(wp) =>
+              toggleCheckbox(selectedWorkplace, setSelectedWorkplace, wp)
+            }
+            selectedCompanies={selectedCompanies}
+            companySearch={companySearch}
+            onCompanySearchChange={setCompanySearch}
+            companyOptions={dynamicCompanyOptions}
+            onToggleCompany={(comp) =>
+              toggleCheckbox(selectedCompanies, setSelectedCompanies, comp)
+            }
+            sortOption={sortOption}
+            onSelectSort={(newSort) => {
+              setSortOption(newSort);
+              setActiveDropdown(null);
+              requestGenerationRef.current += 1;
+              fetchingPagesRef.current.clear();
+              baseJobsCacheRef.current = null;
+              jobsCacheRef.current = {};
+              setJobsCache({});
+              setActivePage(1);
+              setTotalPages(1);
+              loadPage(1, { forceRefresh: true, customSort: newSort });
+            }}
+          />
 
 
 
@@ -2105,7 +8489,12 @@ const BrowseJobs = () => {
               </div>
               <button
                 type="button"
-                onClick={() => loadPage(activePage, { forceRefresh: true })}
+                onClick={() => {
+                  requestGenerationRef.current += 1;
+                  fetchingPagesRef.current.clear();
+                  baseJobsCacheRef.current = null;
+                  loadPage(currentPage, { forceRefresh: true });
+                }}
                 className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold cursor-pointer shrink-0 transition-colors"
               >
                 Retry
@@ -2142,7 +8531,7 @@ const BrowseJobs = () => {
                     </svg>
                     <p className="text-[14px] font-medium text-slate-700">Loading stored job matches from server...</p>
                   </div>
-                ) : allCachedJobs.length === 0 ? (
+                ) : allCachedJobs.length === 0 && !hasActiveFilters ? (
                   <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-12 text-center flex flex-col items-center justify-center gap-3">
                     <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center text-[#4F46E5] mb-1">
                       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -2425,11 +8814,14 @@ const BrowseJobs = () => {
                       <span className="text-[13px] sm:text-[13.5px] font-medium text-[#475569]">
                         {(() => {
                           const currentCount = displayedJobs.length;
-                          const startIdx = allFilteredJobs.length > 0 ? (activePage - 1) * pageSize + 1 : 0;
-                          const endIdx = allFilteredJobs.length > 0 ? (activePage - 1) * pageSize + currentCount : 0;
-                          const displayTotal = totalItems > allFilteredJobs.length ? totalItems : allFilteredJobs.length;
+                          const startIdx = currentCount > 0 ? (currentPage - 1) * pageSize + 1 : 0;
+                          const endIdx = currentCount > 0 ? (currentPage - 1) * pageSize + currentCount : 0;
+                          const displayTotal =
+                            isClientWorkplaceFilterActive && !hasMoreJobs
+                              ? allFilteredJobs.length
+                              : totalItems;
 
-                          return `Showing ${startIdx}–${endIdx} of ${displayTotal} jobs (Page ${activePage} of ${displayTotalPages})`;
+                          return `Showing ${startIdx}–${endIdx} of ${displayTotal} jobs (Page ${currentPage} of ${displayTotalPages})`;
                         })()}
                       </span>
 
@@ -2438,8 +8830,8 @@ const BrowseJobs = () => {
                         {/* Previous Button */}
                         <button
                           type="button"
-                          onClick={() => handlePageChange(activePage - 1)}
-                          disabled={activePage <= 1 || isLoadingPage}
+                          onClick={() => handlePageChange(currentPage - 1)}
+                          disabled={currentPage <= 1 || isLoadingPage}
                           className="w-8 h-8 rounded-lg border border-[#E2E8F0] bg-white hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed text-slate-700 text-sm flex items-center justify-center transition-colors cursor-pointer"
                           aria-label="Previous Page"
                         >
@@ -2456,7 +8848,7 @@ const BrowseJobs = () => {
 
                         {/* Page Numbers */}
                         {visiblePages.map((pg) => {
-                          const isActive = activePage === pg;
+                          const isActive = currentPage === pg;
                           return (
                             <button
                               key={pg}
@@ -2476,8 +8868,8 @@ const BrowseJobs = () => {
                         {/* Next Button */}
                         <button
                           type="button"
-                          onClick={() => handlePageChange(activePage + 1)}
-                          disabled={activePage >= displayTotalPages || isLoadingPage}
+                          onClick={() => handlePageChange(currentPage + 1)}
+                          disabled={currentPage >= displayTotalPages || isLoadingPage}
                           className="w-8 h-8 rounded-lg border border-[#E2E8F0] bg-white hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed text-slate-700 text-sm flex items-center justify-center transition-colors cursor-pointer"
                           aria-label="Next Page"
                         >
@@ -2608,7 +9000,7 @@ const BrowseJobs = () => {
                         <span className="text-slate-300">•</span>
                         <span>{selectedJobModal.type || "Full-time"}</span>
                         <span className="text-slate-300">•</span>
-                        <span>{selectedJobModal.workMode || "On-site"}</span>
+                        <span>{selectedJobModal.workMode || "On-Site"}</span>
                       </div>
                       <div className="text-[12px] text-[#64748B] mt-1">
                         {selectedJobModal.department || "Engineering"}
@@ -2949,7 +9341,7 @@ const BrowseJobs = () => {
                       <div className="flex items-center gap-2 text-[12.5px]">
                         <span className="text-[#64748B]">Work mode</span>
                         <span className="font-semibold text-[#0F172A]">
-                          {selectedJobModal.workMode || "On-site"}
+                          {selectedJobModal.workMode || "On-Site"}
                         </span>
                       </div>
                       <div className="flex items-center gap-2 text-[12.5px]">

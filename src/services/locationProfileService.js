@@ -48,6 +48,7 @@ export const updateLocationProfile = async (data = {}, token = null) => {
       response = await fetchWithAuth(url, {
         method: 'PATCH',
         headers: {
+          'Content-Type': 'application/json',
           'Accept': 'application/json, text/plain, */*',
         },
         body: JSON.stringify(payload),

@@ -25,7 +25,7 @@ import BrowseJobs from './pages/BrowseJobs';
 import AutoApply from './pages/AutoApply'; 
 import Tracker from './pages/Tracker';
 import Profile from './pages/Profile';
-import Settings from './pages/Settings';
+
 import UpgradePlan from './pages/UpgradePlan';
 import Home from "./pages/Home";
 import FullTimeAutoApply from "./pages/FullTimeAutoApply";
@@ -60,7 +60,7 @@ function App() {
         <Route path="/profile" element={<Profile />} />
         <Route path="/subscriptions" element={<UpgradePlan />} />
         <Route path="/subscription" element={<UpgradePlan />} />
-        <Route path="/settings" element={<Settings />} />
+       
         <Route path="/upgrade-plan" element={<UpgradePlan />} />
         <Route path="/upgrade" element={<UpgradePlan />} />
         <Route path="/plan" element={<Plan />} />

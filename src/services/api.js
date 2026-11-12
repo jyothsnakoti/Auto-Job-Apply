@@ -14,11 +14,14 @@ export * from './enhanceResumeService';
 export * from './enhancedResumeDownloadService';
 export * from './enhancedAtsService';
 export * from './jobService';
+export * from './c2cJobService';
+export * from './c2cApplicationService';
 export * from '../utils/jobHelpers';
 export * from './dashboardService';
 export * from './applicationService';
 export * from './applicationNeedsActionService';
 export * from './phoneVerificationService';
+export * from './c2cService';
 export {
   getStoredAuthToken,
   getStoredRefreshToken,
@@ -93,10 +96,13 @@ export { default as enhancedResumeDownloadService } from './enhancedResumeDownlo
 export { default as enhancedAtsService } from './enhancedAtsService';
 export { default as moreJobsService } from './moreJobsService';
 export { default as jobService } from './jobService';
+export { default as c2cJobService } from './c2cJobService';
+export { default as c2cApplicationService } from './c2cApplicationService';
 export { default as dashboardService } from './dashboardService';
 export { default as applicationService } from './applicationService';
 export { default as applicationNeedsActionService } from './applicationNeedsActionService';
-export { default as endpoints, ENDPOINTS, AUTH_ENDPOINTS, BILLING_ENDPOINTS, ONBOARDING_ENDPOINTS, PROFILE_ENDPOINTS, RESUME_ENDPOINTS, ENHANCE_RESUME_ENDPOINTS, MORE_JOBS_ENDPOINTS, JOB_ENDPOINTS, DASHBOARD_ENDPOINTS, APPLICATION_ENDPOINTS, API_BASE_URL, RESUME_API_BASE_URL } from './endpoints';
+export { default as c2cService } from './c2cService';
+export { default as endpoints, ENDPOINTS, AUTH_ENDPOINTS, BILLING_ENDPOINTS, ONBOARDING_ENDPOINTS, PROFILE_ENDPOINTS, RESUME_ENDPOINTS, ENHANCE_RESUME_ENDPOINTS, MORE_JOBS_ENDPOINTS, JOB_ENDPOINTS, DASHBOARD_ENDPOINTS, APPLICATION_ENDPOINTS, C2C_AUTO_APPLY_ENDPOINTS, API_BASE_URL, RESUME_API_BASE_URL } from './endpoints';
 
 export default apiClient;
 

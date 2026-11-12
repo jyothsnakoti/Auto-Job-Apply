@@ -1,6 +1,5 @@
 import { getJobs, getPrimaryResumeId } from "../services/jobService.js";
 import { getOnboardingState } from "../services/onboardingService.js";
-import { checkUserHasResume } from "../services/resumeService.js";
 import { getStoredResumeId } from "../services/enhanceResumeService.js";
 import { extractNumericJobId } from "../services/applicationService.js";
 
@@ -162,6 +161,122 @@ export const extractCleanCompany = (rawCompany, rawText) => {
   return company || "Hiring Organization";
 };
 
+const isPlaceholderWorkplaceToken = (text) => {
+  if (!text) return true;
+  const compact = String(text).toUpperCase().replace(/[\s_/-]+/g, "");
+  return (
+    !compact ||
+    compact === "NULL" ||
+    compact === "UNDEFINED" ||
+    compact === "NONE" ||
+    compact === "NA"
+  );
+};
+
+const firstValidWorkplaceRaw = (...values) => {
+  for (const val of values) {
+    if (val === undefined || val === null || typeof val === "boolean") continue;
+    const cleaned = cleanHtmlText(val);
+    if (cleaned && !isPlaceholderWorkplaceToken(cleaned)) return cleaned;
+  }
+  return "";
+};
+
+const WORKPLACE_DISPLAY_ORDER = new Map([
+  ["remote", 0],
+  ["on-site", 1],
+  ["hybrid", 2],
+]);
+
+export const normalizeWorkplaceValue = (rawWorkplace) => {
+  if (rawWorkplace === undefined || rawWorkplace === null) return "";
+  if (typeof rawWorkplace === "boolean") {
+    return rawWorkplace ? "Remote" : "";
+  }
+  const cleaned = cleanHtmlText(rawWorkplace);
+  if (!cleaned || isPlaceholderWorkplaceToken(cleaned)) return "";
+
+  const upper = cleaned.toUpperCase();
+  const compact = upper.replace(/[\s_-]+/g, "");
+
+  if (compact.includes("HYBRID")) return "Hybrid";
+  if (
+    compact.includes("NONREMOTE") ||
+    compact.includes("NOTREMOTE") ||
+    compact.includes("ONSITE") ||
+    upper.includes("OFFICE") ||
+    compact.includes("INPERSON")
+  ) {
+    return "On-Site";
+  }
+  if (compact.includes("REMOTE")) return "Remote";
+
+  return cleaned;
+};
+
+export const extractRawJobWorkplace = (job) => {
+  if (!job || typeof job !== "object") return "";
+  const source = job.rawMatch && typeof job.rawMatch === "object" ? job.rawMatch : job;
+  return firstValidWorkplaceRaw(
+    source.workplace,
+    source.workMode,
+    source.work_mode,
+    source.workplaceType,
+    source.workplace_type,
+    source.workLocationType,
+    source.work_location_type,
+    source.remoteType,
+    source.remote_type
+  );
+};
+
+export const getJobWorkplace = (job) => {
+  if (!job || typeof job !== "object") return "";
+  const raw = firstValidWorkplaceRaw(
+    job.workMode,
+    job.workplace,
+    job.work_mode,
+    job.workplaceType,
+    job.workplace_type,
+    job.workLocationType,
+    job.work_location_type,
+    job.remoteType,
+    job.remote_type,
+    job.rawMatch?.workplace,
+    job.rawMatch?.workMode,
+    job.rawMatch?.work_mode,
+    job.rawMatch?.workplaceType,
+    job.rawMatch?.workplace_type,
+    job.rawMatch?.workLocationType,
+    job.rawMatch?.work_location_type,
+    job.rawMatch?.remoteType,
+    job.rawMatch?.remote_type,
+    job.isRemote === true || job.remote === true ? "Remote" : ""
+  );
+  return normalizeWorkplaceValue(raw);
+};
+
+export const sortWorkplaceOptions = (options = []) => {
+  const uniqueMap = new Map();
+  (options || []).forEach((opt) => {
+    const normalized = normalizeWorkplaceValue(opt);
+    if (!normalized) return;
+    const key = normalized.toLowerCase();
+    if (!uniqueMap.has(key)) {
+      uniqueMap.set(key, normalized);
+    }
+  });
+
+  return Array.from(uniqueMap.values()).sort((a, b) => {
+    const rankA = WORKPLACE_DISPLAY_ORDER.get(a.toLowerCase());
+    const rankB = WORKPLACE_DISPLAY_ORDER.get(b.toLowerCase());
+    if (rankA !== undefined && rankB !== undefined) return rankA - rankB;
+    if (rankA !== undefined) return -1;
+    if (rankB !== undefined) return 1;
+    return a.localeCompare(b);
+  });
+};
+
 export const transformMatchToJob = (match, index = 0) => {
   if (!match) return null;
 
@@ -226,22 +341,30 @@ export const transformMatchToJob = (match, index = 0) => {
   const fullLocation = [location, country].filter(Boolean).join(", ");
 
   // Workplace & Employment Type normalization for backend responses
-  const rawWorkplace = match.workplace || match.workMode || match.work_mode || "";
-  let workplace = "";
-  if (rawWorkplace) {
-    const rawWp = String(rawWorkplace).toUpperCase();
-    if (rawWp.includes("REMOTE")) workplace = "Remote";
-    else if (rawWp.includes("ONSITE") || rawWp.includes("ON_SITE") || rawWp.includes("OFFICE")) workplace = "On-site";
-    else if (rawWp.includes("HYBRID")) workplace = "Hybrid";
-    else workplace = cleanHtmlText(rawWorkplace);
+  const rawWorkplace = firstValidWorkplaceRaw(
+    match.workplace,
+    match.workMode,
+    match.work_mode,
+    match.workplaceType,
+    match.workplace_type,
+    match.workLocationType,
+    match.work_location_type,
+    match.remoteType,
+    match.remote_type,
+    match.isRemote === true || match.remote === true ? "Remote" : ""
+  );
+  const normalizedRawWorkplace = normalizeWorkplaceValue(rawWorkplace);
+  let workplace;
+  if (normalizedRawWorkplace) {
+    workplace = normalizedRawWorkplace;
   } else if (location.toLowerCase().includes("remote")) {
     workplace = "Remote";
   } else {
-    workplace = "On-site";
+    workplace = "On-Site";
   }
 
   const rawEmploymentType = match.employmentType || match.type || match.employment_type || "";
-  let employmentType = "";
+  let employmentType;
   if (rawEmploymentType) {
     const rawEmp = String(rawEmploymentType).toUpperCase().replace(/_/g, "-");
     if (rawEmp.includes("FULL")) employmentType = "Full-time";
@@ -472,6 +595,189 @@ export const resolveSelectedResumeId = async ({
   return resumeIdVal ? String(resumeIdVal) : null;
 };
 
+export const buildWorkplaceQueryParam = (selectedWorkplace = [], referenceJobs = []) => {
+  if (!Array.isArray(selectedWorkplace) || selectedWorkplace.length === 0) {
+    return undefined;
+  }
+
+  const observedByNormalizedKey = new Map();
+  (referenceJobs || []).forEach((job) => {
+    const raw = extractRawJobWorkplace(job);
+    if (!raw) return;
+    const normalized = normalizeWorkplaceValue(raw);
+    if (!normalized) return;
+    const key = normalized.toLowerCase();
+    if (!observedByNormalizedKey.has(key)) {
+      observedByNormalizedKey.set(key, new Set());
+    }
+    observedByNormalizedKey.get(key).add(raw.trim().toLowerCase());
+  });
+
+  const queryTokens = [];
+  const seen = new Set();
+
+  selectedWorkplace.forEach((item) => {
+    const normalized = normalizeWorkplaceValue(item);
+    if (!normalized) return;
+    const key = normalized.toLowerCase();
+    const observed = observedByNormalizedKey.get(key);
+    if (observed && observed.size > 0) {
+      observed.forEach((token) => {
+        if (token && !seen.has(token)) {
+          seen.add(token);
+          queryTokens.push(token);
+        }
+      });
+    } else if (!seen.has(key)) {
+      seen.add(key);
+      queryTokens.push(key);
+    }
+  });
+
+  return queryTokens.length > 0 ? queryTokens.join(",") : undefined;
+};
+
+export const buildBaseJobFilterKey = ({
+  resumeId = null,
+  searchQuery = "",
+  selectedLocations = [],
+  selectedRoles = [],
+  selectedCompanies = [],
+  selectedDate = "All time",
+  sortOption = "best_match",
+  pageSize = 20,
+} = {}) => {
+  const normList = (arr) =>
+    Array.isArray(arr) ? [...arr].map((v) => String(v ?? "").trim()).filter(Boolean).sort() : [];
+  return JSON.stringify({
+    resumeId: resumeId ? String(resumeId) : "",
+    q: typeof searchQuery === "string" ? searchQuery.trim() : "",
+    locations: normList(selectedLocations),
+    roles: normList(selectedRoles),
+    companies: normList(selectedCompanies),
+    date: selectedDate || "All time",
+    sort: sortOption || "best_match",
+    size: pageSize || 20,
+  });
+};
+
+export const shouldFallbackToClientWorkplaceFilter = ({
+  activeWorkplaces = [],
+  pageNumber = 1,
+  transformed = [],
+  hasMoreServer = false,
+  baseJobs = [],
+} = {}) => {
+  if (!Array.isArray(activeWorkplaces) || activeWorkplaces.length === 0) {
+    return false;
+  }
+
+  const targetKeys = Array.from(
+    new Set(
+      activeWorkplaces
+        .map((w) => normalizeWorkplaceValue(w).toLowerCase())
+        .filter(Boolean)
+    )
+  );
+  if (targetKeys.length === 0) return false;
+
+  const baseWorkplaceSet = new Set(
+    (baseJobs || []).map((j) => getJobWorkplace(j).toLowerCase()).filter(Boolean)
+  );
+  const baseHasAnyTarget = targetKeys.some((k) => baseWorkplaceSet.has(k));
+
+  if ((!transformed || transformed.length === 0) && pageNumber === 1 && baseHasAnyTarget) {
+    return true;
+  }
+
+  if (
+    pageNumber === 1 &&
+    !hasMoreServer &&
+    Array.isArray(transformed) &&
+    transformed.length > 0 &&
+    baseHasAnyTarget
+  ) {
+    const returnedWorkplaceSet = new Set(
+      transformed.map((j) => getJobWorkplace(j).toLowerCase()).filter(Boolean)
+    );
+    const missingFromServer = targetKeys.some(
+      (k) => baseWorkplaceSet.has(k) && !returnedWorkplaceSet.has(k)
+    );
+    if (missingFromServer) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+export const recordUnsupportedWorkplaces = ({
+  unsupportedSet,
+  activeWorkplaces = [],
+  transformed = [],
+} = {}) => {
+  if (!unsupportedSet || !Array.isArray(activeWorkplaces) || activeWorkplaces.length === 0) {
+    return;
+  }
+  const targetKeys = Array.from(
+    new Set(
+      activeWorkplaces
+        .map((w) => normalizeWorkplaceValue(w).toLowerCase())
+        .filter(Boolean)
+    )
+  );
+  if (targetKeys.length === 0) return;
+
+  if (targetKeys.length === 1) {
+    unsupportedSet.add(targetKeys[0]);
+    return;
+  }
+
+  if (!Array.isArray(transformed) || transformed.length === 0) {
+    unsupportedSet.add(targetKeys.slice().sort().join(","));
+    return;
+  }
+
+  const returnedWorkplaceSet = new Set(
+    transformed.map((j) => getJobWorkplace(j).toLowerCase()).filter(Boolean)
+  );
+  targetKeys.forEach((k) => {
+    if (!returnedWorkplaceSet.has(k)) {
+      unsupportedSet.add(k);
+    }
+  });
+};
+
+export const hasUnsupportedWorkplaceTarget = ({
+  unsupportedSet,
+  activeWorkplaces = [],
+} = {}) => {
+  if (!unsupportedSet || unsupportedSet.size === 0 || !Array.isArray(activeWorkplaces) || activeWorkplaces.length === 0) {
+    return false;
+  }
+  const targetKeys = Array.from(
+    new Set(
+      activeWorkplaces
+        .map((w) => normalizeWorkplaceValue(w).toLowerCase())
+        .filter(Boolean)
+    )
+  );
+  if (targetKeys.length === 0) return false;
+  const comboKey = targetKeys.slice().sort().join(",");
+  return targetKeys.some((k) => unsupportedSet.has(k)) || unsupportedSet.has(comboKey);
+};
+
+export const hasAnyJobMatchingWorkplaces = (jobs = [], activeWorkplaces = []) => {
+  if (!Array.isArray(jobs) || jobs.length === 0 || !Array.isArray(activeWorkplaces) || activeWorkplaces.length === 0) {
+    return false;
+  }
+  const targetKeys = new Set(
+    activeWorkplaces.map((w) => normalizeWorkplaceValue(w).toLowerCase()).filter(Boolean)
+  );
+  if (targetKeys.size === 0) return false;
+  return jobs.some((j) => targetKeys.has(getJobWorkplace(j).toLowerCase()));
+};
+
 export const buildJobQueryParams = ({
   resumeId = null,
   searchQuery = "",
@@ -484,6 +790,7 @@ export const buildJobQueryParams = ({
   sortOption = "best_match",
   page = 0,
   pageSize = 20,
+  referenceJobs = [],
 } = {}) => {
   let postedWithinDays = undefined;
   if (selectedDate === "Last 6 hours" || selectedDate === "Last 24 hours") {
@@ -501,7 +808,7 @@ export const buildJobQueryParams = ({
     q: searchQuery && typeof searchQuery === "string" && searchQuery.trim() ? searchQuery.trim() : undefined,
     location: selectedLocations.length > 0 ? selectedLocations.join(",") : undefined,
     role: selectedRoles.length > 0 ? selectedRoles.join(",") : undefined,
-    workplace: selectedWorkplace.length > 0 ? selectedWorkplace.map((w) => w.toLowerCase()).join(",") : undefined,
+    workplace: buildWorkplaceQueryParam(selectedWorkplace, referenceJobs),
     employmentType: selectedJobTypes.length > 0 ? selectedJobTypes.map((t) => t.toLowerCase()).join(",") : undefined,
     company: selectedCompanies.length > 0 ? selectedCompanies.join(",") : undefined,
     postedWithinDays,
@@ -568,17 +875,273 @@ export const fetchJobsForResume = async ({
   };
 };
 
+export const JOB_DATE_OPTIONS = [
+  "Last 6 hours",
+  "Last 24 hours",
+  "Last 7 days",
+  "Last 14 days",
+  "Last 30 days",
+  "All time",
+];
+
+export const JOB_WORKPLACE_OPTIONS = ["Remote", "On-Site", "Hybrid"];
+
+export const JOB_TYPE_OPTIONS = [
+  "Full-time",
+  "Part-time",
+  "Contract",
+  "Internship",
+  "Freelance",
+];
+
+export const FULL_TIME_JOB_TYPE_OPTIONS = ["Full-Time"];
+
+export const C2C_JOB_TYPE_OPTIONS = ["C2C"];
+
+export const JOB_SORT_OPTIONS = [
+  { value: "best_match", label: "Best ATS Match" },
+  { value: "newest", label: "Newest First" },
+];
+
+export const extractDynamicJobFilterOptions = (
+  jobs = [],
+  {
+    selectedLocations = [],
+    selectedCompanies = [],
+    selectedRoles = [],
+    selectedWorkplace = [],
+  } = {}
+) => {
+  const companySet = new Set();
+  const roleSet = new Set();
+  const locationSet = new Set();
+  const workplaceList = [];
+
+  (jobs || []).forEach((j) => {
+    if (!j) return;
+    if (j.company && j.company !== "Hiring Organization") {
+      companySet.add(j.company);
+    }
+    if (j.title && !j.title.startsWith("Position #")) {
+      roleSet.add(j.title);
+    }
+    if (j.location && j.location !== "Remote / Flexible") {
+      locationSet.add(j.location);
+    }
+    const wp = getJobWorkplace(j);
+    if (wp) {
+      workplaceList.push(wp);
+    }
+  });
+
+  (selectedCompanies || []).forEach((c) => {
+    if (c) companySet.add(c);
+  });
+  (selectedRoles || []).forEach((r) => {
+    if (r) roleSet.add(r);
+  });
+  (selectedLocations || []).forEach((l) => {
+    if (l) locationSet.add(l);
+  });
+  (selectedWorkplace || []).forEach((w) => {
+    const normalized = normalizeWorkplaceValue(w);
+    if (normalized) workplaceList.push(normalized);
+  });
+
+  return {
+    companyOptions: Array.from(companySet),
+    roleOptions: Array.from(roleSet),
+    locationOptions: Array.from(locationSet),
+    workplaceOptions: sortWorkplaceOptions(workplaceList),
+  };
+};
+
+export const getJobDateFilterMaxAgeMs = (selectedDate) => {
+  if (selectedDate === "Last 6 hours") return 6 * 60 * 60 * 1000;
+  if (selectedDate === "Last 24 hours") return 24 * 60 * 60 * 1000;
+  if (selectedDate === "Last 7 days") return 7 * 24 * 60 * 60 * 1000;
+  if (selectedDate === "Last 14 days") return 14 * 24 * 60 * 60 * 1000;
+  if (selectedDate === "Last 30 days") return 30 * 24 * 60 * 60 * 1000;
+  return Infinity;
+};
+
+export const matchesJobDateFilter = (job, selectedDate, nowMs = Date.now()) => {
+  if (!selectedDate || selectedDate === "All time" || selectedDate === "All") {
+    return true;
+  }
+
+  const maxAgeMs = getJobDateFilterMaxAgeMs(selectedDate);
+  if (!Number.isFinite(maxAgeMs)) {
+    return true;
+  }
+
+  const rawDate = job?.createdAt || job?.postedAt || job?.postedDate || job?.date;
+  if (!rawDate) {
+    return true;
+  }
+
+  const jobTime = new Date(rawDate).getTime();
+  if (isNaN(jobTime)) {
+    return true;
+  }
+
+  return nowMs - jobTime <= maxAgeMs;
+};
+
+export const matchesJobTypeFilter = (job, selectedJobTypes = []) => {
+  const types = Array.isArray(selectedJobTypes)
+    ? selectedJobTypes
+    : selectedJobTypes && selectedJobTypes !== "All"
+      ? [selectedJobTypes]
+      : [];
+
+  if (types.length === 0) {
+    return true;
+  }
+
+  const jobTypeText = [job?.type, job?.jobType, job?.employmentType]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return types.some((t) => {
+    const target = String(t).toLowerCase().trim();
+    if (!target || target === "all") return true;
+    if (target === "full-time") {
+      return (
+        jobTypeText.includes("full-time") ||
+        jobTypeText.includes("full_time") ||
+        jobTypeText.includes("full time") ||
+        /\bfulltime\b/.test(jobTypeText)
+      );
+    }
+    if (target === "c2c") {
+      return (
+        jobTypeText.includes("c2c") ||
+        jobTypeText.includes("contract") ||
+        jobTypeText.includes("corp-to-corp") ||
+        jobTypeText.includes("corp_to_corp") ||
+        jobTypeText.includes("corp to corp")
+      );
+    }
+    return jobTypeText.includes(target);
+  });
+};
+
+export const filterJobMatches = (
+  jobs = [],
+  {
+    searchQuery = "",
+    selectedDate = "All time",
+    selectedLocations = [],
+    selectedCompanies = [],
+    selectedRoles = [],
+    selectedWorkplace = [],
+    selectedJobTypes = [],
+  } = {},
+  { isSubmittedFn = null } = {}
+) => {
+  const trimmedQuery =
+    typeof searchQuery === "string" ? searchQuery.toLowerCase().trim() : "";
+  const now = Date.now();
+
+  return (jobs || []).filter((job) => {
+    if (!job) return false;
+
+    if (typeof isSubmittedFn === "function" && isSubmittedFn(job)) {
+      return false;
+    }
+
+    if (trimmedQuery) {
+      const matchTitle = (job.title || "").toLowerCase().includes(trimmedQuery);
+      const matchComp = (job.company || "").toLowerCase().includes(trimmedQuery);
+      const matchLoc = (job.location || "").toLowerCase().includes(trimmedQuery);
+      const matchDesc = (job.description || "").toLowerCase().includes(trimmedQuery);
+      const matchSkills =
+        Array.isArray(job.requiredSkills) &&
+        job.requiredSkills.some((s) => String(s).toLowerCase().includes(trimmedQuery));
+      if (!matchTitle && !matchComp && !matchLoc && !matchDesc && !matchSkills) {
+        return false;
+      }
+    }
+
+    if (!matchesJobDateFilter(job, selectedDate, now)) {
+      return false;
+    }
+
+    if (selectedLocations.length > 0) {
+      const jobLoc = (job.location || job.fullLocation || "").toLowerCase();
+      const matchesLoc = selectedLocations.some((loc) =>
+        jobLoc.includes(loc.toLowerCase().split(",")[0].trim())
+      );
+      if (!matchesLoc) return false;
+    }
+
+    if (selectedCompanies.length > 0) {
+      const jobComp = (job.company || "").toLowerCase();
+      const matchesComp = selectedCompanies.some((comp) =>
+        jobComp.includes(comp.toLowerCase().trim())
+      );
+      if (!matchesComp) return false;
+    }
+
+    if (selectedRoles.length > 0) {
+      const jobRole = (job.title || "").toLowerCase();
+      const matchesRole = selectedRoles.some((role) =>
+        jobRole.includes(role.toLowerCase().trim())
+      );
+      if (!matchesRole) return false;
+    }
+
+    if (selectedWorkplace.length > 0) {
+      const jobMode = getJobWorkplace(job).toLowerCase();
+      const matchesWorkMode = selectedWorkplace.some((m) => {
+        const targetMode = normalizeWorkplaceValue(m).toLowerCase();
+        return Boolean(targetMode) && jobMode === targetMode;
+      });
+      if (!matchesWorkMode) return false;
+    }
+
+    if (!matchesJobTypeFilter(job, selectedJobTypes)) {
+      return false;
+    }
+
+    return true;
+  });
+};
+
 export default {
   cleanHtmlText,
   formatPostedDate,
   extractCleanJobTitle,
   extractCleanCompany,
+  normalizeWorkplaceValue,
+  extractRawJobWorkplace,
+  getJobWorkplace,
+  sortWorkplaceOptions,
   transformMatchToJob,
   getStoredSelectedResumeId,
   getStoredSelectedResumeData,
   saveResumeSelection,
   findTargetResume,
   resolveSelectedResumeId,
+  buildWorkplaceQueryParam,
+  buildBaseJobFilterKey,
+  shouldFallbackToClientWorkplaceFilter,
+  recordUnsupportedWorkplaces,
+  hasUnsupportedWorkplaceTarget,
+  hasAnyJobMatchingWorkplaces,
   buildJobQueryParams,
   fetchJobsForResume,
+  JOB_DATE_OPTIONS,
+  JOB_WORKPLACE_OPTIONS,
+  JOB_TYPE_OPTIONS,
+  FULL_TIME_JOB_TYPE_OPTIONS,
+  C2C_JOB_TYPE_OPTIONS,
+  JOB_SORT_OPTIONS,
+  getJobDateFilterMaxAgeMs,
+  matchesJobDateFilter,
+  matchesJobTypeFilter,
+  extractDynamicJobFilterOptions,
+  filterJobMatches,
 };

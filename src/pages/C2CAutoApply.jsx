@@ -1,7 +1,932 @@
+// import React, { useState, useEffect, useRef } from "react";
+// import Sidebar from "../components/Sidebar";
+// import Header from "../components/Header";
+// import { Lock } from "lucide-react";
+// import {
+//   Mail,
+//   Phone,
+//   FileText,
+//   Clock,
+//   Briefcase,
+//   MapPin,
+//   Plus,
+//   X,
+//   Info,
+//   ChevronDown,
+//   Check,
+//   CheckCircle2,
+//   AlertCircle,
+//   HelpCircle,
+//   Sparkles,
+//   Save,
+// } from "lucide-react";
+// import {
+//   getStoredUser,
+//   getOnboardingProfile,
+//   getResumes,
+//   updatePersonalProfile,
+// } from "../services/api";
+// import PhoneOtpModal from "../components/PhoneOtpModal";
+// import { sendPhoneOtpApi } from "../services/phoneVerificationService";
+
+// // Google Gmail Icon Component Matching Image 2
+// const GmailLogo = () => (
+//   <svg className="w-5 h-5 shrink-0" viewBox="0 0 48 48">
+//     <path fill="#4caf50" d="M45,16.2l-5,2.75l-5,4.75L35,40h7c1.657,0,3-1.343,3-3V16.2z" />
+//     <path fill="#1e88e5" d="M3,16.2l3.614,1.71L13,23.7V40H6c-1.657,0-3-1.343-3-3V16.2z" />
+//     <polygon fill="#e53935" points="35,11.2 24,19.45 13,11.2 12,17 13,23.7 24,31.95 35,23.7 36,17" />
+//     <path fill="#c62828" d="M3,12.298V16.2l10,7.5V11.2L4.376,4.732C3.537,4.103,2.337,4.469,2.072,5.503 C2.025,5.687,3,12.298,3,12.298z" />
+//     <path fill="#fbc02d" d="M45,12.298V16.2l-10,7.5V11.2l8.624-6.468c0.839-0.629,2.039-0.263,2.304,0.771 C45.975,5.687,45,12.298,45,12.298z" />
+//   </svg>
+// );
+
+// const TIME_OPTIONS = [
+//   "8:00 AM",
+//   "8:30 AM",
+//   "9:00 AM",
+//   "9:30 AM",
+//   "10:00 AM",
+//   "10:30 AM",
+//   "11:00 AM",
+//   "11:30 AM",
+//   "12:00 PM",
+//   "1:00 PM",
+//   "2:00 PM",
+//   "3:00 PM",
+//   "4:00 PM",
+//   "5:00 PM",
+//   "6:00 PM",
+// ];
+
+// const DEFAULT_RESUME_NAME = "Default (Vasim_Lureshi_Mission_Lead_SOF_Resume.pdf)";
+
+// const C2CAutoApply = () => {
+//   // Contact States
+//   const [isGmailConnected, setIsGmailConnected] = useState(false);
+//   const [connectedGmail, setConnectedGmail] = useState("");
+//   const [phoneNumber, setPhoneNumber] = useState(() => {
+//     try {
+//       const savedSettings = localStorage.getItem("c2c_auto_apply_settings");
+//       if (savedSettings) {
+//         const parsed = JSON.parse(savedSettings);
+//         if (parsed.phoneNumber) return parsed.phoneNumber;
+//       }
+//     } catch (e) {}
+//     return "9632587412";
+//   });
+//   const [isPhoneVerified, setIsPhoneVerified] = useState(() => {
+//     try {
+//       const savedSettings = localStorage.getItem("c2c_auto_apply_settings");
+//       if (savedSettings) {
+//         const parsed = JSON.parse(savedSettings);
+//         if (parsed.isPhoneVerified !== undefined) return parsed.isPhoneVerified;
+//       }
+//     } catch (e) {}
+//     return false;
+//   });
+//   const [isOtpModalOpen, setIsOtpModalOpen] = useState(false);
+// const [isPhoneModalOpen, setIsPhoneModalOpen] = useState(false);
+// const [phoneInput, setPhoneInput] = useState("");
+// const [phoneError, setPhoneError] = useState("");
+
+//   const [isGmailModalOpen, setIsGmailModalOpen] = useState(false);
+//   const [gmailInput, setGmailInput] = useState("");
+// const [isAutoApplyEnabled, setIsAutoApplyEnabled] = useState(false);
+
+
+//   // Resume Settings States
+//   const [resumesList, setResumesList] = useState([
+//     { id: "default", name: DEFAULT_RESUME_NAME },
+//   ]);
+//   const [selectedResume, setSelectedResume] = useState(DEFAULT_RESUME_NAME);
+//   const [isResumeDropdownOpen, setIsResumeDropdownOpen] = useState(false);
+//   const resumeDropdownRef = useRef(null);
+
+//   // Schedule & Targeting States
+//   const [appsCount, setAppsCount] = useState(10);
+//   const [selectedTime, setSelectedTime] = useState("9:00 AM");
+//   const [isTimeDropdownOpen, setIsTimeDropdownOpen] = useState(false);
+//   const timeDropdownRef = useRef(null);
+
+//   // Job Titles State
+//   const [jobTitleInput, setJobTitleInput] = useState("");
+//   const [jobTitles, setJobTitles] = useState(["Data Engineer"]);
+
+//   // Locations State
+//   const [locationInput, setLocationInput] = useState("");
+//   const [locations, setLocations] = useState(["Dallas, TX"]);
+
+//   // UI & Toast States
+//   const [isSaving, setIsSaving] = useState(false);
+//   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
+
+//   // Close dropdowns on click outside
+//   useEffect(() => {
+//     const handleOutsideClick = (e) => {
+//       if (resumeDropdownRef.current && !resumeDropdownRef.current.contains(e.target)) {
+//         setIsResumeDropdownOpen(false);
+//       }
+//       if (timeDropdownRef.current && !timeDropdownRef.current.contains(e.target)) {
+//         setIsTimeDropdownOpen(false);
+//       }
+//     };
+//     document.addEventListener("mousedown", handleOutsideClick);
+//     return () => document.removeEventListener("mousedown", handleOutsideClick);
+//   }, []);
+
+//   // Toast Auto-hide
+//   useEffect(() => {
+//     if (toast.show) {
+//       const timer = setTimeout(() => {
+//         setToast((prev) => ({ ...prev, show: false }));
+//       }, 3500);
+//       return () => clearTimeout(timer);
+//     }
+//   }, [toast.show]);
+
+//   // Load initial settings, profile, and resumes
+//   useEffect(() => {
+//     // 1. Check local storage for C2C Auto Apply settings
+//     try {
+//       const savedSettings = localStorage.getItem("c2c_auto_apply_settings");
+//       if (savedSettings) {
+//         const parsed = JSON.parse(savedSettings);
+//         if (parsed.isGmailConnected !== undefined) setIsGmailConnected(parsed.isGmailConnected);
+//         if (parsed.connectedGmail) setConnectedGmail(parsed.connectedGmail);
+//         if (parsed.phoneNumber) setPhoneNumber(parsed.phoneNumber);
+//         if (parsed.isPhoneVerified !== undefined) setIsPhoneVerified(parsed.isPhoneVerified);
+//         if (parsed.selectedResume) setSelectedResume(parsed.selectedResume);
+//         if (parsed.appsCount !== undefined) setAppsCount(parsed.appsCount);
+//         if (parsed.selectedTime) setSelectedTime(parsed.selectedTime);
+//         if (Array.isArray(parsed.jobTitles) && parsed.jobTitles.length > 0) {
+//           setJobTitles(parsed.jobTitles);
+//         }
+//         if (Array.isArray(parsed.locations) && parsed.locations.length > 0) {
+//           setLocations(parsed.locations);
+//         }
+//       }
+//     } catch (e) {
+//       console.warn("Could not load local C2C settings:", e);
+//     }
+
+//     // 2. Load profile phone & email
+//     const loadProfileData = async () => {
+//       try {
+//         const user = getStoredUser();
+//         if (user?.email && !connectedGmail) {
+//           setGmailInput(user.email);
+//         }
+
+//         const profileData = await getOnboardingProfile();
+//         if (profileData?.profile) {
+//           const prof = profileData.profile;
+//           if ((prof.phone || prof.phoneNumber) && !phoneNumber) {
+//             const ph = prof.phone || prof.phoneNumber;
+//             setPhoneNumber(ph);
+//           }
+//           if (prof.email && !connectedGmail) {
+//             setGmailInput(prof.email);
+//           }
+//         }
+//       } catch (err) {
+//         // Backend optional
+//       }
+//     };
+//     loadProfileData();
+
+//     // 3. Load Resumes
+//     const loadUserResumes = async () => {
+//       try {
+//         const resList = await getResumes();
+//         if (Array.isArray(resList) && resList.length > 0) {
+//           const formatted = resList.map((r, i) => ({
+//             id: r.id || r.resumeId || `res-${i}`,
+//             name: r.fileName || r.name || r.originalFileName || `Resume_${i + 1}.pdf`,
+//           }));
+//           // Prepend default reference resume
+//           setResumesList([
+//             { id: "default", name: DEFAULT_RESUME_NAME },
+//             ...formatted.filter((f) => f.name !== DEFAULT_RESUME_NAME),
+//           ]);
+//         }
+//       } catch (err) {
+//         // Keep default list
+//       }
+//     };
+//     loadUserResumes();
+//   }, []);
+
+//   // Save changes to localStorage
+//   const persistSettings = (overrides = {}) => {
+//     const payload = {
+//       isGmailConnected: overrides.isGmailConnected !== undefined ? overrides.isGmailConnected : isGmailConnected,
+//       connectedGmail: overrides.connectedGmail !== undefined ? overrides.connectedGmail : connectedGmail,
+//       phoneNumber: overrides.phoneNumber !== undefined ? overrides.phoneNumber : phoneNumber,
+//       isPhoneVerified: overrides.isPhoneVerified !== undefined ? overrides.isPhoneVerified : isPhoneVerified,
+//       selectedResume: overrides.selectedResume !== undefined ? overrides.selectedResume : selectedResume,
+//       appsCount: overrides.appsCount !== undefined ? overrides.appsCount : appsCount,
+//       selectedTime: overrides.selectedTime !== undefined ? overrides.selectedTime : selectedTime,
+//       jobTitles: overrides.jobTitles !== undefined ? overrides.jobTitles : jobTitles,
+//       locations: overrides.locations !== undefined ? overrides.locations : locations,
+//       updatedAt: new Date().toISOString(),
+//     };
+//     try {
+//       localStorage.setItem("c2c_auto_apply_settings", JSON.stringify(payload));
+//     } catch (e) {
+//       console.warn("Error saving C2C settings:", e);
+//     }
+//   };
+
+//   // Connect Gmail Handlers
+//   const handleOpenGmailModal = () => {
+//     if (!gmailInput) {
+//       const user = getStoredUser();
+//       setGmailInput(user?.email || "jyothsna@gmail.com");
+//     }
+//     setIsGmailModalOpen(true);
+//   };
+
+//   const handleConfirmGmailConnect = () => {
+//     const emailToConnect = gmailInput.trim() || "jyothsna@gmail.com";
+//     setIsGmailConnected(true);
+//     setConnectedGmail(emailToConnect);
+//     setIsGmailModalOpen(false);
+//     persistSettings({ isGmailConnected: true, connectedGmail: emailToConnect });
+//     setToast({
+//       show: true,
+//       message: `Gmail connected successfully (${emailToConnect})`,
+//       type: "success",
+//     });
+//   };
+
+//   const handleDisconnectGmail = () => {
+//     setIsGmailConnected(false);
+//     setConnectedGmail("");
+//     persistSettings({ isGmailConnected: false, connectedGmail: "" });
+//     setToast({
+//       show: true,
+//       message: "Gmail disconnected.",
+//       type: "warning",
+//     });
+//   };
+
+//   // Phone Number Handlers
+//   const handleOpenPhoneModal = () => {
+//     setPhoneInput(phoneNumber || "");
+//     setPhoneError("");
+//     setIsPhoneModalOpen(true);
+//   };
+
+//   const handleOpenOtpModal = async () => {
+//     if (!phoneNumber) {
+//       handleOpenPhoneModal();
+//       return;
+//     }
+
+//     try {
+//       await sendPhoneOtpApi(phoneNumber);
+//     } catch (err) {
+//       console.warn("Could not send OTP:", err);
+//     }
+
+//     setIsOtpModalOpen(true);
+//   };
+
+//   const handleOtpVerifiedSuccess = (verifiedNumber) => {
+//     setIsPhoneVerified(true);
+//     setIsOtpModalOpen(false);
+//     persistSettings({ isPhoneVerified: true });
+//     setToast({
+//       show: true,
+//       message: "Phone number verified successfully!",
+//       type: "success",
+//     });
+//   };
+
+//   const handleChangePhoneNumberFromOtp = () => {
+//     setIsOtpModalOpen(false);
+//     setPhoneInput(phoneNumber || "");
+//     setPhoneError("");
+//     setIsPhoneModalOpen(true);
+//   };
+
+//   const handleSavePhone = async () => {
+//     const cleaned = phoneInput.trim();
+//     if (!cleaned) {
+//       setPhoneError("Please enter a valid phone number.");
+//       return;
+//     }
+//     const digitsOnly = cleaned.replace(/\D/g, "");
+//     if (digitsOnly.length < 10) {
+//       setPhoneError("Phone number must contain at least 10 digits.");
+//       return;
+//     }
+
+//     try {
+//       await updatePersonalProfile({ phone: cleaned });
+//     } catch {
+//       // Backend optional
+//     }
+
+//     const numberChanged = cleaned !== phoneNumber;
+//     setPhoneNumber(cleaned);
+//     if (numberChanged) {
+//       setIsPhoneVerified(false);
+//     }
+//     setIsPhoneModalOpen(false);
+//     persistSettings({
+//       phoneNumber: cleaned,
+//       ...(numberChanged ? { isPhoneVerified: false } : {}),
+//     });
+//     setToast({
+//       show: true,
+//       message: "Phone number updated successfully!",
+//       type: "success",
+//     });
+//   };
+
+//   // Job Titles Add/Remove
+//   const handleAddJobTitle = (e) => {
+//     e?.preventDefault();
+//     const val = jobTitleInput.trim();
+//     if (!val) return;
+//     if (jobTitles.some((t) => t.toLowerCase() === val.toLowerCase())) {
+//       setToast({
+//         show: true,
+//         message: `"${val}" is already in your target job titles list.`,
+//         type: "warning",
+//       });
+//       return;
+//     }
+//     const updated = [...jobTitles, val];
+//     setJobTitles(updated);
+//     setJobTitleInput("");
+//     persistSettings({ jobTitles: updated });
+//   };
+
+//   const handleRemoveJobTitle = (titleToRemove) => {
+//     const updated = jobTitles.filter((t) => t !== titleToRemove);
+//     setJobTitles(updated);
+//     persistSettings({ jobTitles: updated });
+//   };
+
+//   // Location Add/Remove
+//   const handleAddLocation = (e) => {
+//     e?.preventDefault();
+//     const val = locationInput.trim();
+//     if (!val) return;
+//     if (locations.some((l) => l.toLowerCase() === val.toLowerCase())) {
+//       setToast({
+//         show: true,
+//         message: `"${val}" is already in your locations list.`,
+//         type: "warning",
+//       });
+//       return;
+//     }
+//     const updated = [...locations, val];
+//     setLocations(updated);
+//     setLocationInput("");
+//     persistSettings({ locations: updated });
+//   };
+
+//   const handleRemoveLocation = (locToRemove) => {
+//     const updated = locations.filter((l) => l !== locToRemove);
+//     setLocations(updated);
+//     persistSettings({ locations: updated });
+//   };
+
+//   // Save Settings
+//   const handleSaveAll = () => {
+//     setIsSaving(true);
+//     persistSettings();
+//     setTimeout(() => {
+//       setIsSaving(false);
+//       setToast({
+//         show: true,
+//         message: "C2C Auto Apply settings saved successfully!",
+//         type: "success",
+//       });
+//     }, 350);
+//   };
+
+//   return (
+//     <div className="flex h-screen overflow-hidden bg-[#F8FAFC]">
+//       {/* Left Sidebar */}
+//       <Sidebar />
+
+//       {/* Main Content Area (Scrollable) */}
+//       <div className="flex min-w-0 flex-1 flex-col h-screen overflow-y-auto bg-[#F8FAFC]">
+//         {/* Top Header */}
+//         <Header />
+
+//         {/* Main C2C Auto Apply Content */}
+//         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-7 flex flex-col gap-6 w-full bg-[#F8FAFC]">
+//           {/* Page Heading & Action Button */}
+//           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+//             <div className="flex flex-col gap-1">
+//               <h1 className="text-[22px] sm:text-[24px] font-bold text-slate-900 tracking-tight">
+//                 C2C Auto Select Auto Apply Settings
+//               </h1>
+//               <p className="text-[13.5px] sm:text-[14px] text-slate-500">
+//                 Configure your contact information, resume and other settings to start automatic C2C job applications.
+//               </p>
+//             </div>
+
+         
+//           </div>
+
+//           {/* Toast Notification */}
+//           {toast.show && (
+//             <div
+//               className={`fixed top-5 right-5 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg border text-sm font-medium transition-all transform animate-in fade-in slide-in-from-top-2 duration-200 ${
+//                 toast.type === "success"
+//                   ? "bg-white text-emerald-700 border-emerald-200 shadow-emerald-500/10"
+//                   : toast.type === "warning"
+//                   ? "bg-white text-amber-700 border-amber-200 shadow-amber-500/10"
+//                   : "bg-white text-rose-700 border-rose-200 shadow-rose-500/10"
+//               }`}
+//             >
+//               {toast.type === "success" ? (
+//                 <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+//               ) : (
+//                 <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
+//               )}
+//               <span>{toast.message}</span>
+//             </div>
+//           )}
+//           {/* SECTION 2: Enable auto-apply */}
+// <div className="relative flex items-center justify-between gap-4 rounded-xl border border-[#6A5CFF] border-l-4 bg-[#EFEEFF] p-3 sm:p-4">
+//   <div className="min-w-0">
+//     <h4 className="text-[14px] font-bold text-[#1A0EA5]">
+//       Enable auto-apply
+//     </h4>
+
+//     <p className="text-[12.5px] text-[#1A0EA5] mt-0.5">
+//       Turn on automatic C2C job applications using your saved settings.
+//     </p>
+//   </div>
+
+//   <button
+//     type="button"
+//     role="switch"
+//     aria-checked={isAutoApplyEnabled}
+//     onClick={() => setIsAutoApplyEnabled((prev) => !prev)}
+//     className={`w-11 h-6 rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
+//       isAutoApplyEnabled ? "bg-[#6A5CFF]" : "bg-slate-300"
+//     }`}
+//   >
+//     <span
+//       className={`block w-5 h-5 rounded-full bg-white shadow-sm transform transition-transform duration-200 ${
+//         isAutoApplyEnabled ? "translate-x-5" : "translate-x-0"
+//       }`}
+//     />
+//   </button>
+// </div>
+
+//           {/* ================= SECTION A: Contact Settings Card ================= */}
+//           <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-5 sm:p-6 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col gap-4.5">
+//             {/* Card Header */}
+//             <div className="flex items-start gap-3.5">
+//               <div className="w-9 h-9 rounded-lg bg-[#EFF6FF] border border-[#DBEAFE] flex items-center justify-center text-[#4F46E5] shrink-0 mt-0.5">
+//                 <Mail className="w-4.5 h-4.5 text-[#4F46E5]" />
+//               </div>
+//               <div>
+//                 <h2 className="text-[16px] sm:text-[17px] font-bold text-slate-900 leading-snug">
+//                   Contact Settings
+//                 </h2>
+//                 <p className="text-[12.5px] sm:text-[13px] text-slate-500 mt-0.5">
+//                   Connect your email and phone number to send C2C job applications automatically.
+//                 </p>
+//               </div>
+//             </div>
+
+//             {/* Contact Rows Container */}
+//             <div className="flex flex-col gap-3">
+              
+
+//               {/* Row 2: Phone Number */}
+//               <div className="rounded-xl border border-[#E2E8F0] bg-white p-3.5 sm:p-4 flex items-center justify-between hover:border-slate-300 transition-colors">
+//                 <div className="flex items-center gap-3">
+//                   <div className="w-9 h-9 rounded-lg bg-[#EFF6FF] border border-[#DBEAFE] flex items-center justify-center text-[#4F46E5] shrink-0">
+//                     <Phone className="w-4.5 h-4.5 text-[#4F46E5]" />
+//                   </div>
+//                   <div>
+//                     <h3 className="text-[13.5px] font-semibold text-slate-900 leading-tight">
+//                       Phone Number
+//                     </h3>
+//                     <div className="flex items-center gap-1.5 mt-0.5">
+//                       <span
+//                         className={`w-2 h-2 rounded-full shrink-0 ${
+//                           phoneNumber ? "bg-emerald-500" : "bg-rose-500"
+//                         }`}
+//                       />
+//                       <span className="text-[12px] text-slate-500 font-medium">
+//                         {phoneNumber ? (
+//                           <>
+//                             <span>{phoneNumber}</span>
+//                             {isPhoneVerified && (
+//                               <span className="ml-1 text-emerald-600 font-semibold">
+//                                 (Verified)
+//                               </span>
+//                             )}
+//                           </>
+//                         ) : (
+//                           "Not added"
+//                         )}
+//                       </span>
+//                     </div>
+//                   </div>
+//                 </div>
+
+//                 {isPhoneVerified ? (
+//                   <div className="flex items-center gap-2">
+//                     <span className="hidden sm:inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
+//                       <Check className="w-3.5 h-3.5" />
+//                       Verified
+//                     </span>
+//                     <button
+//                       type="button"
+//                       onClick={handleOpenPhoneModal}
+//                       className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-[12.5px] font-semibold text-slate-600 hover:text-indigo-600 transition-colors cursor-pointer"
+//                     >
+//                       Change
+//                     </button>
+//                   </div>
+//                 ) : (
+//                   <button
+//                     type="button"
+//                     onClick={handleOpenOtpModal}
+//                     className="px-4 py-2 rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white text-[12.5px] font-semibold transition-all shadow-2xs hover:shadow cursor-pointer"
+//                   >
+//                     verify Phone Number
+//                   </button>
+//                 )}
+//               </div>
+//             </div>
+//           </div>
+          
+        
+
+
+
+
+
+
+          
+
+//           {/* ================= SECTION C: Schedule & Targeting Card ================= */}
+//           <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-5 sm:p-6 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col gap-5">
+//             {/* Card Header */}
+//             <div className="flex items-start gap-3.5">
+//               <div className="w-9 h-9 rounded-lg bg-[#EFF6FF] border border-[#DBEAFE] flex items-center justify-center text-[#4F46E5] shrink-0 mt-0.5">
+//                 <Clock className="w-4.5 h-4.5 text-[#4F46E5]" />
+//               </div>
+//               <div>
+//                 <h2 className="text-[16px] sm:text-[17px] font-bold text-slate-900 leading-snug">
+//                   Schedule & Targeting
+//                 </h2>
+//                 <p className="text-[12.5px] sm:text-[13px] text-slate-500 mt-0.5">
+//                   Set when and what type of C2C jobs to apply for.
+//                 </p>
+//               </div>
+//                  <button
+//               type="button"
+//               onClick={handleSaveAll}
+//               disabled={isSaving}
+//               className="ml-auto px-5 py-2.5 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] active:bg-[#3730A3] text-white text-xs sm:text-sm font-semibold transition-all shadow-xs hover:shadow flex items-center justify-center gap-2 cursor-pointer shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
+  
+//             >
+//               {isSaving ? (
+//                 <>
+//                   <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+//                   <span>Saving...</span>
+//                 </>
+//               ) : (
+//                 <>
+//                   <Save className="w-4 h-4" />
+//                   <span>Save Settings</span>
+//                 </>
+//               )}
+//             </button>
+//             </div>
+
+//             {/* WHEN TO SEND Row Matching Image 2 */}
+//             <div className="flex flex-col gap-2 pt-1 border-t border-slate-100">
+//               <div className="flex items-center justify-between">
+//                 <div className="flex items-center gap-1.5 text-slate-700 text-xs font-bold uppercase tracking-wider">
+//                   <Clock className="w-3.5 h-3.5 text-slate-400" />
+//                   <span>WHEN TO SEND</span>
+//                 </div>
+//                 <div className="flex items-center gap-1 text-[11.5px] text-slate-400 font-medium">
+//                   <span>max 10 per hour</span>
+//                   <HelpCircle className="w-3.5 h-3.5 text-slate-400" />
+//                 </div>
+//               </div>
+
+//               {/* Number of apps + time dropdown */}
+//               <div className="flex flex-wrap items-center gap-2.5 pt-1">
+//                 <span className="text-[13px] font-medium text-slate-700">Send</span>
+//                 <input
+//                   type="number"
+//                   min={1}
+//                   max={10}
+//                   value={appsCount}
+//                   onChange={(e) => {
+//                     const num = parseInt(e.target.value, 10);
+//                     if (isNaN(num)) setAppsCount(1);
+//                     else setAppsCount(Math.max(1, Math.min(10, num)));
+//                   }}
+//                   className="w-16 h-[38px] rounded-lg border border-[#E2E8F0] bg-white text-center text-[13.5px] font-semibold text-slate-900 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-[#EEF2FF] shadow-2xs"
+//                 />
+//                 <span className="text-[13px] font-medium text-slate-700">applications at</span>
+
+//                 {/* Time selector dropdown */}
+//                 <div ref={timeDropdownRef} className="relative">
+//                   <button
+//                     type="button"
+//                     onClick={() => setIsTimeDropdownOpen(!isTimeDropdownOpen)}
+//                     className="h-[38px] px-3.5 rounded-lg border border-[#E2E8F0] bg-white flex items-center gap-2 text-[13px] font-semibold text-slate-800 hover:border-slate-300 shadow-2xs cursor-pointer focus:outline-none"
+//                   >
+//                     <span>{selectedTime}</span>
+//                     <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+//                   </button>
+
+//                   {isTimeDropdownOpen && (
+//                     <div className="absolute left-0 mt-1 w-36 bg-white rounded-xl border border-slate-200 shadow-xl py-1 z-30 max-h-48 overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
+//                       {TIME_OPTIONS.map((t) => (
+//                         <button
+//                           key={t}
+//                           type="button"
+//                           onClick={() => {
+//                             setSelectedTime(t);
+//                             setIsTimeDropdownOpen(false);
+//                             persistSettings({ selectedTime: t });
+//                           }}
+//                           className={`w-full text-left px-3 py-1.5 text-xs font-semibold cursor-pointer flex items-center justify-between ${
+//                             selectedTime === t ? "bg-[#EEF2FF] text-[#4F46E5]" : "text-slate-700 hover:bg-slate-50"
+//                           }`}
+//                         >
+//                           <span>{t}</span>
+//                           {selectedTime === t && <Check className="w-3.5 h-3.5 text-[#4F46E5]" />}
+//                         </button>
+//                       ))}
+//                     </div>
+//                   )}
+//                 </div>
+//               </div>
+//             </div>
+
+//             {/* JOB TITLES & LOCATION 2-Column Section Matching Image 2 */}
+//             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2 border-t border-slate-100">
+//               {/* Left Column: JOB TITLES */}
+//               <div className="flex flex-col gap-2">
+//                 <div className="flex items-center gap-1.5 text-slate-700 text-xs font-bold uppercase tracking-wider">
+//                   <Briefcase className="w-3.5 h-3.5 text-slate-400" />
+//                   <span>JOB TITLES</span>
+//                 </div>
+
+//                 {/* Input + Plus Button */}
+//                 <form onSubmit={handleAddJobTitle} className="flex items-center gap-2">
+//                   <input
+//                     type="text"
+//                     value={jobTitleInput}
+//                     onChange={(e) => setJobTitleInput(e.target.value)}
+//                     placeholder="e.g. Data Engineer"
+//                     className="flex-1 h-[40px] px-3.5 rounded-lg border border-[#E2E8F0] bg-white text-[13px] text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-[#EEF2FF] shadow-2xs"
+//                   />
+//                   <button
+//                     type="submit"
+//                     className="w-10 h-[40px] rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:shadow"
+//                     title="Add Job Title"
+//                   >
+//                     <Plus className="w-5 h-5" />
+//                   </button>
+//                 </form>
+
+//                 {/* Added Job Title Badges */}
+//                 <div className="flex flex-wrap gap-1.5 pt-1 min-h-[32px]">
+//                   {jobTitles.map((title) => (
+//                     <span
+//                       key={title}
+//                       className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#EEF2FF] text-[#4F46E5] border border-[#C7D2FE]/70 shadow-2xs"
+//                     >
+//                       <span>{title}</span>
+//                       <button
+//                         type="button"
+//                         onClick={() => handleRemoveJobTitle(title)}
+//                         className="hover:text-rose-600 transition-colors cursor-pointer"
+//                         title="Remove"
+//                       >
+//                         <X className="w-3.5 h-3.5" />
+//                       </button>
+//                     </span>
+//                   ))}
+//                 </div>
+//               </div>
+
+//               {/* Right Column: LOCATION */}
+//               <div className="flex flex-col gap-2">
+//                 <div className="flex items-center gap-1.5 text-slate-700 text-xs font-bold uppercase tracking-wider">
+//                   <MapPin className="w-3.5 h-3.5 text-slate-400" />
+//                   <span>LOCATION</span>
+//                 </div>
+
+//                 {/* Input + Plus Button */}
+//                 <form onSubmit={handleAddLocation} className="flex items-center gap-2">
+//                   <input
+//                     type="text"
+//                     value={locationInput}
+//                     onChange={(e) => setLocationInput(e.target.value)}
+//                     placeholder="e.g. Dallas, TX"
+//                     className="flex-1 h-[40px] px-3.5 rounded-lg border border-[#E2E8F0] bg-white text-[13px] text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-[#EEF2FF] shadow-2xs"
+//                   />
+//                   <button
+//                     type="submit"
+//                     className="w-10 h-[40px] rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:shadow"
+//                     title="Add Location"
+//                   >
+//                     <Plus className="w-5 h-5" />
+//                   </button>
+//                 </form>
+
+//                 {/* Added Location Badges */}
+//                 <div className="flex flex-wrap gap-1.5 pt-1 min-h-[32px]">
+//                   {locations.map((loc) => (
+//                     <span
+//                       key={loc}
+//                       className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#EEF2FF] text-[#4F46E5] border border-[#C7D2FE]/70 shadow-2xs"
+//                     >
+//                       <span>{loc}</span>
+//                       <button
+//                         type="button"
+//                         onClick={() => handleRemoveLocation(loc)}
+//                         className="hover:text-rose-600 transition-colors cursor-pointer"
+//                         title="Remove"
+//                       >
+//                         <X className="w-3.5 h-3.5" />
+//                       </button>
+//                     </span>
+//                   ))}
+//                 </div>
+//               </div>
+//             </div>
+            
+//           </div>
+
+//           {/* ================= Phone Number Modal ================= */}
+//           {isPhoneModalOpen && (
+//             <div
+//               className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-200"
+//               onClick={() => setIsPhoneModalOpen(false)}
+//             >
+//               <div
+//                 className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-md p-6 flex flex-col gap-4 animate-in zoom-in-95 duration-200"
+//                 onClick={(e) => e.stopPropagation()}
+//               >
+//                 <div className="flex items-center justify-between">
+//                   <div className="flex items-center gap-2.5">
+//                     <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] border border-[#DBEAFE] flex items-center justify-center text-[#4F46E5]">
+//                       <Phone className="w-4 h-4" />
+//                     </div>
+//                     <h3 className="text-base font-bold text-slate-900">
+//                       {phoneNumber ? "Edit Phone Number" : "Add Phone Number"}
+//                     </h3>
+//                   </div>
+//                   <button
+//                     type="button"
+//                     onClick={() => setIsPhoneModalOpen(false)}
+//                     className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+//                   >
+//                     <X className="w-4 h-4" />
+//                   </button>
+//                 </div>
+
+//                 <p className="text-xs text-slate-500 leading-relaxed">
+//                   Enter your phone number with country code. This number will be used for C2C recruiter communications and application auto-fill.
+//                 </p>
+
+//                 <div className="flex flex-col gap-1.5">
+//                   <label className="text-xs font-semibold text-slate-700">Phone Number</label>
+//                   <input
+//                     type="tel"
+//                     value={phoneInput}
+//                     onChange={(e) => {
+//                       setPhoneInput(e.target.value);
+//                       if (phoneError) setPhoneError("");
+//                     }}
+//                     placeholder="+1 (555) 234-5678"
+//                     className="w-full h-10 px-3.5 rounded-lg border border-[#E2E8F0] text-sm text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-[#EEF2FF]"
+//                   />
+//                   {phoneError && (
+//                     <span className="text-xs text-rose-600 font-medium">{phoneError}</span>
+//                   )}
+//                 </div>
+
+//                 <div className="flex items-center justify-end gap-2.5 pt-2">
+//                   <button
+//                     type="button"
+//                     onClick={() => setIsPhoneModalOpen(false)}
+//                     className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+//                   >
+//                     Cancel
+//                   </button>
+//                   <button
+//                     type="button"
+//                     onClick={handleSavePhone}
+//                     className="px-4 py-2 rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-semibold transition-all shadow-2xs hover:shadow cursor-pointer"
+//                   >
+//                     Save Phone Number
+//                   </button>
+//                 </div>
+//               </div>
+//             </div>
+//           )}
+
+//           {/* ================= Gmail Connect Modal ================= */}
+//           {isGmailModalOpen && (
+//             <div
+//               className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-200"
+//               onClick={() => setIsGmailModalOpen(false)}
+//             >
+//               <div
+//                 className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-md p-6 flex flex-col gap-4 animate-in zoom-in-95 duration-200"
+//                 onClick={(e) => e.stopPropagation()}
+//               >
+//                 <div className="flex items-center justify-between">
+//                   <div className="flex items-center gap-2.5">
+//                     <GmailLogo />
+//                     <h3 className="text-base font-bold text-slate-900">
+//                       Connect Google Account
+//                     </h3>
+//                   </div>
+//                   <button
+//                     type="button"
+//                     onClick={() => setIsGmailModalOpen(false)}
+//                     className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+//                   >
+//                     <X className="w-4 h-4" />
+//                   </button>
+//                 </div>
+
+//                 <p className="text-xs text-slate-500 leading-relaxed">
+//                   Connect your Gmail address to allow Auto Jobs Apply to send C2C applications directly from your email on your behalf.
+//                 </p>
+
+//                 <div className="flex flex-col gap-1.5">
+//                   <label className="text-xs font-semibold text-slate-700">Gmail Address</label>
+//                   <input
+//                     type="email"
+//                     value={gmailInput}
+//                     onChange={(e) => setGmailInput(e.target.value)}
+//                     placeholder="your-email@gmail.com"
+//                     className="w-full h-10 px-3.5 rounded-lg border border-[#E2E8F0] text-sm text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-[#EEF2FF]"
+//                   />
+//                 </div>
+
+//                 <div className="flex items-center justify-end gap-2.5 pt-2">
+//                   <button
+//                     type="button"
+//                     onClick={() => setIsGmailModalOpen(false)}
+//                     className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+//                   >
+//                     Cancel
+//                   </button>
+//                   <button
+//                     type="button"
+//                     onClick={handleConfirmGmailConnect}
+//                     className="px-4 py-2 rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-semibold transition-all shadow-2xs hover:shadow cursor-pointer flex items-center gap-2"
+//                   >
+//                     <GmailLogo />
+//                     <span>Authorize & Connect</span>
+//                   </button>
+//                 </div>
+//               </div>
+//             </div>
+//           )}
+
+//           {/* ================= Phone OTP Verification Modal ================= */}
+//           <PhoneOtpModal
+//             isOpen={isOtpModalOpen}
+//             phoneNumber={phoneNumber}
+//             onClose={() => setIsOtpModalOpen(false)}
+//             onSuccess={handleOtpVerifiedSuccess}
+//             onChangePhoneNumber={handleChangePhoneNumberFromOtp}
+//             onShowToast={(msg, type) => setToast({ show: true, message: msg, type })}
+//           />
+//         </main>
+//       </div>
+//     </div>
+//   );
+// };
+
+// export default C2CAutoApply;
+
+
+
+
 import React, { useState, useEffect, useRef } from "react";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
-import { Lock } from "lucide-react";
 import {
   Mail,
   Phone,
@@ -11,13 +936,11 @@ import {
   MapPin,
   Plus,
   X,
-  Info,
   ChevronDown,
   Check,
   CheckCircle2,
   AlertCircle,
   HelpCircle,
-  Sparkles,
   Save,
 } from "lucide-react";
 import {
@@ -25,6 +948,8 @@ import {
   getOnboardingProfile,
   getResumes,
   updatePersonalProfile,
+  getC2CAutoApplySettings,
+  updateC2CAutoApplySettings,
 } from "../services/api";
 import PhoneOtpModal from "../components/PhoneOtpModal";
 import { sendPhoneOtpApi } from "../services/phoneVerificationService";
@@ -40,92 +965,199 @@ const GmailLogo = () => (
   </svg>
 );
 
-const TIME_OPTIONS = [
-  "8:00 AM",
-  "8:30 AM",
-  "9:00 AM",
-  "9:30 AM",
-  "10:00 AM",
-  "10:30 AM",
-  "11:00 AM",
-  "11:30 AM",
-  "12:00 PM",
-  "1:00 PM",
-  "2:00 PM",
-  "3:00 PM",
-  "4:00 PM",
-  "5:00 PM",
-  "6:00 PM",
-];
+// Half-hour time slots for 24 hours in user-friendly 12-hour format
+const TIME_OPTIONS = (() => {
+  const times = [];
+  for (let h = 0; h < 24; h++) {
+    for (const m of [0, 30]) {
+      const period = h >= 12 ? "PM" : "AM";
+      const h12 = h % 12 || 12;
+      const mStr = m === 0 ? "00" : "30";
+      times.push(`${h12}:${mStr} ${period}`);
+    }
+  }
+  return times;
+})();
 
-const DEFAULT_RESUME_NAME = "Default (Vasim_Lureshi_Mission_Lead_SOF_Resume.pdf)";
+/**
+ * Format 24-hour "HH:mm" string into 12-hour "h:mm A" string
+ * e.g. "18:30" -> "6:30 PM", "09:00" -> "9:00 AM"
+ */
+const format24to12 = (time24) => {
+  if (!time24 || typeof time24 !== "string") return "";
+  const trimmed = time24.trim();
+  if (/AM|PM/i.test(trimmed)) return trimmed;
+  const parts = trimmed.split(":");
+  if (parts.length < 2) return trimmed;
+  const h = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  if (isNaN(h) || isNaN(m)) return trimmed;
+  const period = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 || 12;
+  const mStr = m < 10 ? `0${m}` : `${m}`;
+  return `${h12}:${mStr} ${period}`;
+};
+
+/**
+ * Format 12-hour "h:mm A" string into 24-hour "HH:mm" string
+ * e.g. "6:30 PM" -> "18:30", "9:00 AM" -> "09:00"
+ */
+const format12to24 = (time12) => {
+  if (!time12 || typeof time12 !== "string") return "";
+  const trimmed = time12.trim();
+  if (!/AM|PM/i.test(trimmed)) {
+    const parts = trimmed.split(":");
+    if (parts.length >= 2) {
+      const h = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      if (!isNaN(h) && !isNaN(m)) {
+        return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+      }
+    }
+    return trimmed;
+  }
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) return trimmed;
+  let [, hStr, mStr, period] = match;
+  let h = parseInt(hStr, 10);
+  const m = parseInt(mStr, 10);
+  period = period.toUpperCase();
+  if (period === "PM" && h < 12) h += 12;
+  if (period === "AM" && h === 12) h = 0;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+};
+
+/**
+ * Convert time string (24h or 12h) to total minutes from midnight
+ */
+const toMinutes = (timeStr) => {
+  const time24 = format12to24(timeStr);
+  const parts = time24.split(":");
+  const h = parseInt(parts[0], 10) || 0;
+  const m = parseInt(parts[1], 10) || 0;
+  return h * 60 + m;
+};
+
+/**
+ * Validate that a new time has at least minGapMinutes (default 60m) gap with existing times
+ */
+const checkMinTimeGap = (existingTimes24, newTime24, minGapMinutes = 60) => {
+  const newMin = toMinutes(newTime24);
+  for (const existing of existingTimes24) {
+    const exMin = toMinutes(existing);
+    const diff = Math.abs(newMin - exMin);
+    const wrappedDiff = Math.min(diff, 1440 - diff);
+    if (wrappedDiff < minGapMinutes) {
+      return {
+        valid: false,
+        conflictTime: existing,
+        diffMinutes: wrappedDiff,
+      };
+    }
+  }
+  return { valid: true };
+};
+
+/**
+ * Format nextFireAt ISO timestamp for UI display
+ */
+const formatNextFireAt = (isoString) => {
+  if (!isoString) return "";
+  try {
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return isoString;
+    return d.toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+  } catch {
+    return isoString;
+  }
+};
+
+/**
+ * Extract clean, user-friendly error message from axios error
+ */
+const getErrorMessage = (error, fallbackMessage) => {
+  if (!error) return fallbackMessage;
+  if (error.response?.status === 404) {
+    return "Resume not found. Please upload or select a valid resume before enabling Auto Apply.";
+  }
+  if (error.response?.status === 409) {
+    return "Phone number is not verified. Please verify your phone number before enabling Auto Apply.";
+  }
+  if (error.response?.status === 401) {
+    return "Your session has expired. Please log in again.";
+  }
+  if (error.response?.data?.message) {
+    return error.response.data.message;
+  }
+  if (error.response?.data?.error) {
+    return typeof error.response.data.error === "string"
+      ? error.response.data.error
+      : JSON.stringify(error.response.data.error);
+  }
+  if (typeof error.response?.data === "string" && error.response.data.length < 150) {
+    return error.response.data;
+  }
+  if (error.message && !error.response) {
+    return "Unable to connect to the server. Please check your internet connection.";
+  }
+  return fallbackMessage;
+};
 
 const C2CAutoApply = () => {
+  // Loading & State guards
+  const [isLoadingSettings, setIsLoadingSettings] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isToggling, setIsToggling] = useState(false);
+
+  // Auto Apply Toggle & Backend State
+  const [isAutoApplyEnabled, setIsAutoApplyEnabled] = useState(false);
+  const [resumeId, setResumeId] = useState(null);
+  const [timeZone, setTimeZone] = useState("UTC");
+  const [nextFireAt, setNextFireAt] = useState(null);
+  const [maxPerRun, setMaxPerRun] = useState(10);
+
   // Contact States
   const [isGmailConnected, setIsGmailConnected] = useState(false);
   const [connectedGmail, setConnectedGmail] = useState("");
-  const [phoneNumber, setPhoneNumber] = useState(() => {
-    try {
-      const savedSettings = localStorage.getItem("c2c_auto_apply_settings");
-      if (savedSettings) {
-        const parsed = JSON.parse(savedSettings);
-        if (parsed.phoneNumber) return parsed.phoneNumber;
-      }
-    } catch (e) {}
-    return "9632587412";
-  });
-  const [isPhoneVerified, setIsPhoneVerified] = useState(() => {
-    try {
-      const savedSettings = localStorage.getItem("c2c_auto_apply_settings");
-      if (savedSettings) {
-        const parsed = JSON.parse(savedSettings);
-        if (parsed.isPhoneVerified !== undefined) return parsed.isPhoneVerified;
-      }
-    } catch (e) {}
-    return false;
-  });
-  const [isOtpModalOpen, setIsOtpModalOpen] = useState(false);
-const [isPhoneModalOpen, setIsPhoneModalOpen] = useState(false);
-const [phoneInput, setPhoneInput] = useState("");
-const [phoneError, setPhoneError] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [isPhoneVerified, setIsPhoneVerified] = useState(false);
 
+  // Modals
+  const [isOtpModalOpen, setIsOtpModalOpen] = useState(false);
+  const [isPhoneModalOpen, setIsPhoneModalOpen] = useState(false);
+  const [phoneInput, setPhoneInput] = useState("");
+  const [phoneError, setPhoneError] = useState("");
   const [isGmailModalOpen, setIsGmailModalOpen] = useState(false);
   const [gmailInput, setGmailInput] = useState("");
-const [isAutoApplyEnabled, setIsAutoApplyEnabled] = useState(false);
-
-
-  // Resume Settings States
-  const [resumesList, setResumesList] = useState([
-    { id: "default", name: DEFAULT_RESUME_NAME },
-  ]);
-  const [selectedResume, setSelectedResume] = useState(DEFAULT_RESUME_NAME);
-  const [isResumeDropdownOpen, setIsResumeDropdownOpen] = useState(false);
-  const resumeDropdownRef = useRef(null);
 
   // Schedule & Targeting States
-  const [appsCount, setAppsCount] = useState(10);
-  const [selectedTime, setSelectedTime] = useState("9:00 AM");
+  const [appsCount, setAppsCount] = useState(5);
+  const [appsCountError, setAppsCountError] = useState("");
+  const [runTimes, setRunTimes] = useState([]);
   const [isTimeDropdownOpen, setIsTimeDropdownOpen] = useState(false);
+  const [timeError, setTimeError] = useState("");
   const timeDropdownRef = useRef(null);
 
-  // Job Titles State
+  // Job Titles State (Max 10, 2-120 chars)
   const [jobTitleInput, setJobTitleInput] = useState("");
-  const [jobTitles, setJobTitles] = useState(["Data Engineer"]);
+  const [jobTitles, setJobTitles] = useState([]);
 
-  // Locations State
+  // Locations State (Max 10, 2-120 chars)
   const [locationInput, setLocationInput] = useState("");
-  const [locations, setLocations] = useState(["Dallas, TX"]);
+  const [locations, setLocations] = useState([]);
 
-  // UI & Toast States
-  const [isSaving, setIsSaving] = useState(false);
+  // Toast Notification State
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
 
-  // Close dropdowns on click outside
+  // Close dropdown on outside click
   useEffect(() => {
     const handleOutsideClick = (e) => {
-      if (resumeDropdownRef.current && !resumeDropdownRef.current.contains(e.target)) {
-        setIsResumeDropdownOpen(false);
-      }
       if (timeDropdownRef.current && !timeDropdownRef.current.contains(e.target)) {
         setIsTimeDropdownOpen(false);
       }
@@ -134,143 +1166,510 @@ const [isAutoApplyEnabled, setIsAutoApplyEnabled] = useState(false);
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, []);
 
-  // Toast Auto-hide
+  // Toast Auto-hide timer
   useEffect(() => {
     if (toast.show) {
       const timer = setTimeout(() => {
         setToast((prev) => ({ ...prev, show: false }));
-      }, 3500);
+      }, 4000);
       return () => clearTimeout(timer);
     }
   }, [toast.show]);
 
-  // Load initial settings, profile, and resumes
-  useEffect(() => {
-    // 1. Check local storage for C2C Auto Apply settings
+  /**
+   * Fetch saved C2C settings from backend GET /api/c2c/auto-apply
+   */
+  const loadC2CSettings = async () => {
     try {
-      const savedSettings = localStorage.getItem("c2c_auto_apply_settings");
-      if (savedSettings) {
-        const parsed = JSON.parse(savedSettings);
-        if (parsed.isGmailConnected !== undefined) setIsGmailConnected(parsed.isGmailConnected);
-        if (parsed.connectedGmail) setConnectedGmail(parsed.connectedGmail);
-        if (parsed.phoneNumber) setPhoneNumber(parsed.phoneNumber);
-        if (parsed.isPhoneVerified !== undefined) setIsPhoneVerified(parsed.isPhoneVerified);
-        if (parsed.selectedResume) setSelectedResume(parsed.selectedResume);
-        if (parsed.appsCount !== undefined) setAppsCount(parsed.appsCount);
-        if (parsed.selectedTime) setSelectedTime(parsed.selectedTime);
-        if (Array.isArray(parsed.jobTitles) && parsed.jobTitles.length > 0) {
-          setJobTitles(parsed.jobTitles);
+      const data = await getC2CAutoApplySettings();
+      if (data) {
+        setIsAutoApplyEnabled(Boolean(data.enabled));
+        if (data.resumeId !== undefined && data.resumeId !== null) {
+          setResumeId(data.resumeId);
         }
-        if (Array.isArray(parsed.locations) && parsed.locations.length > 0) {
-          setLocations(parsed.locations);
+        if (data.timeZone) {
+          setTimeZone(data.timeZone);
+        }
+        if (typeof data.perRunCount === "number") {
+          setAppsCount(data.perRunCount);
+        }
+        if (typeof data.maxPerRun === "number") {
+          setMaxPerRun(data.maxPerRun);
+        }
+        if (Array.isArray(data.runTimes)) {
+          setRunTimes(data.runTimes.map(format12to24));
+        }
+        if (Array.isArray(data.titles)) {
+          setJobTitles(data.titles);
+        }
+        if (Array.isArray(data.locations)) {
+          setLocations(data.locations);
+        }
+        if (data.phoneVerified !== undefined) {
+          setIsPhoneVerified(Boolean(data.phoneVerified));
+        }
+        if (data.nextFireAt !== undefined) {
+          setNextFireAt(data.nextFireAt);
         }
       }
-    } catch (e) {
-      console.warn("Could not load local C2C settings:", e);
+    } catch (err) {
+      if (err.response?.status === 404) {
+        // Fallback to backend defaults if no saved settings exist yet
+        setIsAutoApplyEnabled(false);
+        setResumeId(null);
+        setTimeZone("UTC");
+        setAppsCount(5);
+        setRunTimes([]);
+        setJobTitles([]);
+        setLocations([]);
+      } else {
+        console.error("Error loading C2C Auto Apply settings:", err);
+        setToast({
+          show: true,
+          message: getErrorMessage(err, "Unable to load saved C2C settings."),
+          type: "danger",
+        });
+      }
     }
+  };
 
-    // 2. Load profile phone & email
-    const loadProfileData = async () => {
+  /**
+   * Load initial settings, profile data, and resumes on mount
+   */
+  useEffect(() => {
+    let isMounted = true;
+
+    const initializeData = async () => {
+      setIsLoadingSettings(true);
       try {
-        const user = getStoredUser();
-        if (user?.email && !connectedGmail) {
-          setGmailInput(user.email);
-        }
+        // 1. Fetch C2C settings from GET /api/c2c/auto-apply
+        await loadC2CSettings();
 
-        const profileData = await getOnboardingProfile();
-        if (profileData?.profile) {
-          const prof = profileData.profile;
-          if ((prof.phone || prof.phoneNumber) && !phoneNumber) {
+        // 2. Load User Profile for contact info (Phone, Email)
+        try {
+          const user = getStoredUser();
+          if (user?.email) {
+            setGmailInput(user.email);
+          }
+          const profileData = await getOnboardingProfile();
+          if (profileData?.profile) {
+            const prof = profileData.profile;
             const ph = prof.phone || prof.phoneNumber;
-            setPhoneNumber(ph);
+            if (ph) {
+              setPhoneNumber(ph);
+            }
+            if (prof.email) {
+              setGmailInput(prof.email);
+            }
           }
-          if (prof.email && !connectedGmail) {
-            setGmailInput(prof.email);
-          }
+        } catch {
+          // Profile endpoint optional
         }
-      } catch (err) {
-        // Backend optional
-      }
-    };
-    loadProfileData();
 
-    // 3. Load Resumes
-    const loadUserResumes = async () => {
-      try {
-        const resList = await getResumes();
-        if (Array.isArray(resList) && resList.length > 0) {
-          const formatted = resList.map((r, i) => ({
-            id: r.id || r.resumeId || `res-${i}`,
-            name: r.fileName || r.name || r.originalFileName || `Resume_${i + 1}.pdf`,
-          }));
-          // Prepend default reference resume
-          setResumesList([
-            { id: "default", name: DEFAULT_RESUME_NAME },
-            ...formatted.filter((f) => f.name !== DEFAULT_RESUME_NAME),
-          ]);
+        // 3. Inspect user-owned resumes to assign resumeId if null
+        try {
+          const resList = await getResumes();
+          if (Array.isArray(resList) && resList.length > 0) {
+            setResumeId((currentResumeId) => {
+              if (currentResumeId) return currentResumeId;
+              const primary = resList.find((r) => r.isPrimary || r.primary) || resList[0];
+              const resolvedId = primary?.id || primary?.resumeId || null;
+              const numericId = typeof resolvedId === "number" ? resolvedId : parseInt(resolvedId, 10);
+              return !isNaN(numericId) && numericId ? numericId : null;
+            });
+          }
+        } catch {
+          // Resumes optional
         }
-      } catch (err) {
-        // Keep default list
+      } finally {
+        if (isMounted) {
+          setIsLoadingSettings(false);
+        }
       }
     };
-    loadUserResumes();
+
+    initializeData();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  // Save changes to localStorage
-  const persistSettings = (overrides = {}) => {
+  /**
+   * Enable / Disable Auto Apply Toggle
+   * PUT /api/c2c/auto-apply
+   */
+  const handleToggleAutoApply = async () => {
+    if (isToggling || isLoadingSettings) return;
+
+    const nextEnabled = !isAutoApplyEnabled;
+
+    if (nextEnabled) {
+      // Validate mandatory settings when ENABLING
+      if (!isPhoneVerified) {
+        setToast({
+          show: true,
+          message: "Please verify your phone number before enabling Auto Apply.",
+          type: "warning",
+        });
+        return;
+      }
+
+      if (!resumeId) {
+        setToast({
+          show: true,
+          message: "A valid resume is required. Please upload a resume before enabling Auto Apply.",
+          type: "warning",
+        });
+        return;
+      }
+
+      if (!jobTitles || jobTitles.length === 0) {
+        setToast({
+          show: true,
+          message: "Please add at least one job title before enabling Auto Apply.",
+          type: "warning",
+        });
+        return;
+      }
+
+      if (!runTimes || runTimes.length === 0) {
+        setToast({
+          show: true,
+          message: "Please add at least one run time schedule before enabling Auto Apply.",
+          type: "warning",
+        });
+        return;
+      }
+
+      if (appsCount < 1 || appsCount > maxPerRun) {
+        setToast({
+          show: true,
+          message: `Applications per run must be between 1 and ${maxPerRun}.`,
+          type: "warning",
+        });
+        return;
+      }
+    }
+
+    setIsToggling(true);
+
+    // Complete payload required by PUT /api/c2c/auto-apply
     const payload = {
-      isGmailConnected: overrides.isGmailConnected !== undefined ? overrides.isGmailConnected : isGmailConnected,
-      connectedGmail: overrides.connectedGmail !== undefined ? overrides.connectedGmail : connectedGmail,
-      phoneNumber: overrides.phoneNumber !== undefined ? overrides.phoneNumber : phoneNumber,
-      isPhoneVerified: overrides.isPhoneVerified !== undefined ? overrides.isPhoneVerified : isPhoneVerified,
-      selectedResume: overrides.selectedResume !== undefined ? overrides.selectedResume : selectedResume,
-      appsCount: overrides.appsCount !== undefined ? overrides.appsCount : appsCount,
-      selectedTime: overrides.selectedTime !== undefined ? overrides.selectedTime : selectedTime,
-      jobTitles: overrides.jobTitles !== undefined ? overrides.jobTitles : jobTitles,
-      locations: overrides.locations !== undefined ? overrides.locations : locations,
-      updatedAt: new Date().toISOString(),
+      enabled: nextEnabled,
+      resumeId: resumeId,
+      timeZone: timeZone || "UTC",
+      perRunCount: Number(appsCount) || 5,
+      runTimes: runTimes,
+      titles: jobTitles,
+      locations: locations || [],
     };
+
     try {
-      localStorage.setItem("c2c_auto_apply_settings", JSON.stringify(payload));
-    } catch (e) {
-      console.warn("Error saving C2C settings:", e);
+      const result = await updateC2CAutoApplySettings(payload);
+
+      // Update toggle only after successful backend confirmation
+      setIsAutoApplyEnabled(nextEnabled);
+
+      if (result) {
+        if (result.nextFireAt !== undefined) setNextFireAt(result.nextFireAt);
+        if (result.phoneVerified !== undefined) setIsPhoneVerified(Boolean(result.phoneVerified));
+        if (result.maxPerRun !== undefined) setMaxPerRun(result.maxPerRun);
+        if (result.resumeId !== undefined && result.resumeId !== null) setResumeId(result.resumeId);
+        if (result.timeZone) setTimeZone(result.timeZone);
+      }
+
+      if (!nextEnabled) {
+        setNextFireAt(null);
+      }
+
+      setToast({
+        show: true,
+        message: nextEnabled
+          ? "C2C Auto Select Auto Apply enabled successfully!"
+          : "C2C Auto Select Auto Apply disabled.",
+        type: "success",
+      });
+    } catch (error) {
+      console.error("Error toggling C2C Auto Apply:", error);
+      const msg = getErrorMessage(error, "Failed to update Auto Apply status.");
+      setToast({
+        show: true,
+        message: msg,
+        type: "danger",
+      });
+    } finally {
+      setIsToggling(false);
     }
   };
 
-  // Connect Gmail Handlers
-  const handleOpenGmailModal = () => {
-    if (!gmailInput) {
-      const user = getStoredUser();
-      setGmailInput(user?.email || "jyothsna@gmail.com");
+  /**
+   * Save Settings Button
+   * PUT /api/c2c/auto-apply
+   */
+  const handleSaveAll = async () => {
+    if (isSaving || isLoadingSettings) return;
+
+    // Validate application count
+    if (appsCount < 1 || appsCount > maxPerRun) {
+      setToast({
+        show: true,
+        message: `Applications per run must be between 1 and ${maxPerRun}.`,
+        type: "warning",
+      });
+      return;
     }
-    setIsGmailModalOpen(true);
+
+    // If auto-apply is currently enabled, ensure mandatory fields are not cleared
+    if (isAutoApplyEnabled) {
+      if (!isPhoneVerified) {
+        setToast({
+          show: true,
+          message: "Phone number must be verified when Auto Apply is enabled.",
+          type: "warning",
+        });
+        return;
+      }
+      if (!resumeId) {
+        setToast({
+          show: true,
+          message: "A valid resume is required when Auto Apply is enabled.",
+          type: "warning",
+        });
+        return;
+      }
+      if (jobTitles.length === 0) {
+        setToast({
+          show: true,
+          message: "At least one job title is required when Auto Apply is enabled.",
+          type: "warning",
+        });
+        return;
+      }
+      if (runTimes.length === 0) {
+        setToast({
+          show: true,
+          message: "At least one run time schedule is required when Auto Apply is enabled.",
+          type: "warning",
+        });
+        return;
+      }
+    }
+
+    setIsSaving(true);
+
+    // Complete PUT payload preserving enabled state, resumeId, timeZone, etc.
+    const payload = {
+      enabled: isAutoApplyEnabled,
+      resumeId: resumeId,
+      timeZone: timeZone || "UTC",
+      perRunCount: Number(appsCount) || 5,
+      runTimes: runTimes,
+      titles: jobTitles,
+      locations: locations || [],
+    };
+
+    try {
+      const result = await updateC2CAutoApplySettings(payload);
+
+      // On HTTP 200, update local state from the returned settings View
+      if (result) {
+        if (result.enabled !== undefined) setIsAutoApplyEnabled(Boolean(result.enabled));
+        if (result.nextFireAt !== undefined) setNextFireAt(result.nextFireAt);
+        if (result.phoneVerified !== undefined) setIsPhoneVerified(Boolean(result.phoneVerified));
+        if (result.maxPerRun !== undefined) setMaxPerRun(result.maxPerRun);
+        if (result.resumeId !== undefined && result.resumeId !== null) setResumeId(result.resumeId);
+        if (result.timeZone) setTimeZone(result.timeZone);
+      }
+
+      setToast({
+        show: true,
+        message: "C2C Auto Apply settings saved successfully!",
+        type: "success",
+      });
+    } catch (error) {
+      console.error("Error saving C2C Auto Apply settings:", error);
+      // Retain the user's unsaved input and show appropriate error message
+      const msg = getErrorMessage(error, "Failed to save settings. Please try again.");
+      setToast({
+        show: true,
+        message: msg,
+        type: "danger",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleConfirmGmailConnect = () => {
-    const emailToConnect = gmailInput.trim() || "jyothsna@gmail.com";
-    setIsGmailConnected(true);
-    setConnectedGmail(emailToConnect);
-    setIsGmailModalOpen(false);
-    persistSettings({ isGmailConnected: true, connectedGmail: emailToConnect });
-    setToast({
-      show: true,
-      message: `Gmail connected successfully (${emailToConnect})`,
-      type: "success",
-    });
+  /**
+   * Application Count Input Handler
+   */
+  const handleAppsCountChange = (val) => {
+    setAppsCountError("");
+    if (val === "") {
+      setAppsCount("");
+      setAppsCountError(`Please enter a number between 1 and ${maxPerRun}`);
+      return;
+    }
+    const num = parseInt(val, 10);
+    if (isNaN(num)) {
+      setAppsCount(1);
+      return;
+    }
+    setAppsCount(num);
+    if (num < 1 || num > maxPerRun) {
+      setAppsCountError(`Applications per run must be between 1 and ${maxPerRun}`);
+    }
   };
 
-  const handleDisconnectGmail = () => {
-    setIsGmailConnected(false);
-    setConnectedGmail("");
-    persistSettings({ isGmailConnected: false, connectedGmail: "" });
-    setToast({
-      show: true,
-      message: "Gmail disconnected.",
-      type: "warning",
-    });
+  /**
+   * Run Times Add / Remove Handlers
+   */
+  const handleAddRunTime = (time12) => {
+    setTimeError("");
+    const time24 = format12to24(time12);
+    if (!time24) return;
+
+    if (runTimes.includes(time24)) {
+      setToast({
+        show: true,
+        message: `${time12} is already scheduled.`,
+        type: "warning",
+      });
+      setIsTimeDropdownOpen(false);
+      return;
+    }
+
+    if (runTimes.length >= 8) {
+      setToast({
+        show: true,
+        message: "Maximum 8 run times allowed.",
+        type: "warning",
+      });
+      setIsTimeDropdownOpen(false);
+      return;
+    }
+
+    // Enforce configured minimum 60-minute gap between run times
+    const gapCheck = checkMinTimeGap(runTimes, time24, 60);
+    if (!gapCheck.valid) {
+      const conflict12 = format24to12(gapCheck.conflictTime);
+      const msg = `Run times must be at least 60 minutes apart. (${time12} is too close to ${conflict12})`;
+      setTimeError(msg);
+      setToast({
+        show: true,
+        message: msg,
+        type: "warning",
+      });
+      return;
+    }
+
+    const updated = [...runTimes, time24].sort((a, b) => toMinutes(a) - toMinutes(b));
+    setRunTimes(updated);
+    setIsTimeDropdownOpen(false);
   };
 
-  // Phone Number Handlers
+  const handleRemoveRunTime = (time24ToRemove) => {
+    setTimeError("");
+    const updated = runTimes.filter((t) => t !== time24ToRemove);
+    setRunTimes(updated);
+  };
+
+  /**
+   * Job Titles Add / Remove Handlers
+   * Requirements: 2 to 120 characters, max 10 unique titles, trimmed
+   */
+  const handleAddJobTitle = (e) => {
+    e?.preventDefault();
+    const val = jobTitleInput.trim();
+    if (!val) return;
+
+    if (val.length < 2 || val.length > 120) {
+      setToast({
+        show: true,
+        message: "Job title must be between 2 and 120 characters.",
+        type: "warning",
+      });
+      return;
+    }
+
+    if (jobTitles.length >= 10) {
+      setToast({
+        show: true,
+        message: "Maximum 10 unique job titles allowed.",
+        type: "warning",
+      });
+      return;
+    }
+
+    if (jobTitles.some((t) => t.toLowerCase() === val.toLowerCase())) {
+      setToast({
+        show: true,
+        message: `"${val}" is already in your job titles list.`,
+        type: "warning",
+      });
+      return;
+    }
+
+    const updated = [...jobTitles, val];
+    setJobTitles(updated);
+    setJobTitleInput("");
+  };
+
+  const handleRemoveJobTitle = (titleToRemove) => {
+    const updated = jobTitles.filter((t) => t !== titleToRemove);
+    setJobTitles(updated);
+  };
+
+  /**
+   * Locations Add / Remove Handlers
+   * Requirements: 2 to 120 characters, max 10 unique locations, trimmed, optional
+   */
+  const handleAddLocation = (e) => {
+    e?.preventDefault();
+    const val = locationInput.trim();
+    if (!val) return;
+
+    if (val.length < 2 || val.length > 120) {
+      setToast({
+        show: true,
+        message: "Location must be between 2 and 120 characters.",
+        type: "warning",
+      });
+      return;
+    }
+
+    if (locations.length >= 10) {
+      setToast({
+        show: true,
+        message: "Maximum 10 unique locations allowed.",
+        type: "warning",
+      });
+      return;
+    }
+
+    if (locations.some((l) => l.toLowerCase() === val.toLowerCase())) {
+      setToast({
+        show: true,
+        message: `"${val}" is already in your locations list.`,
+        type: "warning",
+      });
+      return;
+    }
+
+    const updated = [...locations, val];
+    setLocations(updated);
+    setLocationInput("");
+  };
+
+  const handleRemoveLocation = (locToRemove) => {
+    const updated = locations.filter((l) => l !== locToRemove);
+    setLocations(updated);
+  };
+
+  /**
+   * Phone Number Handlers
+   */
   const handleOpenPhoneModal = () => {
     setPhoneInput(phoneNumber || "");
     setPhoneError("");
@@ -282,25 +1681,24 @@ const [isAutoApplyEnabled, setIsAutoApplyEnabled] = useState(false);
       handleOpenPhoneModal();
       return;
     }
-
     try {
       await sendPhoneOtpApi(phoneNumber);
     } catch (err) {
       console.warn("Could not send OTP:", err);
     }
-
     setIsOtpModalOpen(true);
   };
 
-  const handleOtpVerifiedSuccess = (verifiedNumber) => {
+  const handleOtpVerifiedSuccess = async () => {
     setIsPhoneVerified(true);
     setIsOtpModalOpen(false);
-    persistSettings({ isPhoneVerified: true });
     setToast({
       show: true,
       message: "Phone number verified successfully!",
       type: "success",
     });
+    // Refresh auto-apply settings after successful phone verification
+    await loadC2CSettings();
   };
 
   const handleChangePhoneNumberFromOtp = () => {
@@ -334,10 +1732,6 @@ const [isAutoApplyEnabled, setIsAutoApplyEnabled] = useState(false);
       setIsPhoneVerified(false);
     }
     setIsPhoneModalOpen(false);
-    persistSettings({
-      phoneNumber: cleaned,
-      ...(numberChanged ? { isPhoneVerified: false } : {}),
-    });
     setToast({
       show: true,
       message: "Phone number updated successfully!",
@@ -345,68 +1739,37 @@ const [isAutoApplyEnabled, setIsAutoApplyEnabled] = useState(false);
     });
   };
 
-  // Job Titles Add/Remove
-  const handleAddJobTitle = (e) => {
-    e?.preventDefault();
-    const val = jobTitleInput.trim();
-    if (!val) return;
-    if (jobTitles.some((t) => t.toLowerCase() === val.toLowerCase())) {
-      setToast({
-        show: true,
-        message: `"${val}" is already in your target job titles list.`,
-        type: "warning",
-      });
-      return;
+  /**
+   * Gmail Connection Handlers
+   */
+  const handleOpenGmailModal = () => {
+    if (!gmailInput) {
+      const user = getStoredUser();
+      setGmailInput(user?.email || "jyothsna@gmail.com");
     }
-    const updated = [...jobTitles, val];
-    setJobTitles(updated);
-    setJobTitleInput("");
-    persistSettings({ jobTitles: updated });
+    setIsGmailModalOpen(true);
   };
 
-  const handleRemoveJobTitle = (titleToRemove) => {
-    const updated = jobTitles.filter((t) => t !== titleToRemove);
-    setJobTitles(updated);
-    persistSettings({ jobTitles: updated });
+  const handleConfirmGmailConnect = () => {
+    const emailToConnect = gmailInput.trim() || "jyothsna@gmail.com";
+    setIsGmailConnected(true);
+    setConnectedGmail(emailToConnect);
+    setIsGmailModalOpen(false);
+    setToast({
+      show: true,
+      message: `Gmail connected successfully (${emailToConnect})`,
+      type: "success",
+    });
   };
 
-  // Location Add/Remove
-  const handleAddLocation = (e) => {
-    e?.preventDefault();
-    const val = locationInput.trim();
-    if (!val) return;
-    if (locations.some((l) => l.toLowerCase() === val.toLowerCase())) {
-      setToast({
-        show: true,
-        message: `"${val}" is already in your locations list.`,
-        type: "warning",
-      });
-      return;
-    }
-    const updated = [...locations, val];
-    setLocations(updated);
-    setLocationInput("");
-    persistSettings({ locations: updated });
-  };
-
-  const handleRemoveLocation = (locToRemove) => {
-    const updated = locations.filter((l) => l !== locToRemove);
-    setLocations(updated);
-    persistSettings({ locations: updated });
-  };
-
-  // Save Settings
-  const handleSaveAll = () => {
-    setIsSaving(true);
-    persistSettings();
-    setTimeout(() => {
-      setIsSaving(false);
-      setToast({
-        show: true,
-        message: "C2C Auto Apply settings saved successfully!",
-        type: "success",
-      });
-    }, 350);
+  const handleDisconnectGmail = () => {
+    setIsGmailConnected(false);
+    setConnectedGmail("");
+    setToast({
+      show: true,
+      message: "Gmail disconnected.",
+      type: "warning",
+    });
   };
 
   return (
@@ -421,67 +1784,84 @@ const [isAutoApplyEnabled, setIsAutoApplyEnabled] = useState(false);
 
         {/* Main C2C Auto Apply Content */}
         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-7 flex flex-col gap-6 w-full bg-[#F8FAFC]">
-          {/* Page Heading & Action Button */}
+          {/* Page Heading */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex flex-col gap-1">
               <h1 className="text-[22px] sm:text-[24px] font-bold text-slate-900 tracking-tight">
-                C2C Auto Select Auto  Apply
+                C2C Auto Select Auto Apply
               </h1>
               <p className="text-[13.5px] sm:text-[14px] text-slate-500">
                 Configure your contact information, resume and other settings to start automatic C2C job applications.
               </p>
             </div>
-
-         
           </div>
 
           {/* Toast Notification */}
           {toast.show && (
             <div
-              className={`fixed top-5 right-5 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg border text-sm font-medium transition-all transform animate-in fade-in slide-in-from-top-2 duration-200 ${
-                toast.type === "success"
+              className={`fixed top-5 right-5 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg border text-sm font-medium transition-all transform animate-in fade-in slide-in-from-top-2 duration-200 ${toast.type === "success"
                   ? "bg-white text-emerald-700 border-emerald-200 shadow-emerald-500/10"
                   : toast.type === "warning"
-                  ? "bg-white text-amber-700 border-amber-200 shadow-amber-500/10"
-                  : "bg-white text-rose-700 border-rose-200 shadow-rose-500/10"
-              }`}
+                    ? "bg-white text-amber-700 border-amber-200 shadow-amber-500/10"
+                    : "bg-white text-rose-700 border-rose-200 shadow-rose-500/10"
+                }`}
             >
               {toast.type === "success" ? (
                 <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
               ) : (
-                <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
+                <AlertCircle
+                  className={`w-5 h-5 shrink-0 ${toast.type === "warning" ? "text-amber-500" : "text-rose-500"
+                    }`}
+                />
               )}
               <span>{toast.message}</span>
             </div>
           )}
+
+          {/* Loading Indicator Banner */}
+          {isLoadingSettings && (
+            <div className="flex items-center gap-3 px-4 py-3 bg-[#EEF2FF] border border-[#C7D2FE] rounded-xl text-xs sm:text-[13px] font-medium text-[#4F46E5] animate-pulse">
+              <div className="w-4 h-4 border-2 border-[#4F46E5]/30 border-t-[#4F46E5] rounded-full animate-spin shrink-0" />
+              <span>Loading your saved C2C Auto Apply settings...</span>
+            </div>
+          )}
+
           {/* SECTION 2: Enable auto-apply */}
-<div className="relative flex items-center justify-between gap-4 rounded-xl border border-[#6A5CFF] border-l-4 bg-[#EFEEFF] p-3 sm:p-4">
-  <div className="min-w-0">
-    <h4 className="text-[14px] font-bold text-[#1A0EA5]">
-      Enable auto-apply
-    </h4>
+          <div className="relative flex items-center justify-between gap-4 rounded-xl border border-[#6A5CFF] border-l-4 bg-[#EFEEFF] p-3 sm:p-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h4 className="text-[14px] font-bold text-[#1A0EA5]">
+                  Enable auto-apply
+                </h4>
+              </div>
 
-    <p className="text-[12.5px] text-[#1A0EA5] mt-0.5">
-      Turn on automatic C2C job applications using your saved settings.
-    </p>
-  </div>
+              <p className="text-[12.5px] text-[#1A0EA5] mt-0.5">
+                {isAutoApplyEnabled && nextFireAt
+                  ? `Turn off automatic C2C job applications.`
+                  : `Turn on automatic C2C job applications using your saved settings.`}
+              </p>
+            </div>
 
-  <button
-    type="button"
-    role="switch"
-    aria-checked={isAutoApplyEnabled}
-    onClick={() => setIsAutoApplyEnabled((prev) => !prev)}
-    className={`w-11 h-6 rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
-      isAutoApplyEnabled ? "bg-[#6A5CFF]" : "bg-slate-300"
-    }`}
-  >
-    <span
-      className={`block w-5 h-5 rounded-full bg-white shadow-sm transform transition-transform duration-200 ${
-        isAutoApplyEnabled ? "translate-x-5" : "translate-x-0"
-      }`}
-    />
-  </button>
-</div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isAutoApplyEnabled}
+              disabled={isToggling || isLoadingSettings}
+              onClick={handleToggleAutoApply}
+              title={
+                isAutoApplyEnabled
+                  ? "Click to disable auto-apply"
+                  : "Click to enable auto-apply"
+              }
+              className={`w-11 h-6 rounded-full p-0.5 transition-colors cursor-pointer shrink-0 disabled:opacity-50 disabled:cursor-not-allowed ${isAutoApplyEnabled ? "bg-[#6A5CFF]" : "bg-slate-300"
+                }`}
+            >
+              <span
+                className={`block w-5 h-5 rounded-full bg-white shadow-sm transform transition-transform duration-200 ${isAutoApplyEnabled ? "translate-x-5" : "translate-x-0"
+                  }`}
+              />
+            </button>
+          </div>
 
           {/* ================= SECTION A: Contact Settings Card ================= */}
           <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-5 sm:p-6 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col gap-4.5">
@@ -502,8 +1882,6 @@ const [isAutoApplyEnabled, setIsAutoApplyEnabled] = useState(false);
 
             {/* Contact Rows Container */}
             <div className="flex flex-col gap-3">
-              
-
               {/* Row 2: Phone Number */}
               <div className="rounded-xl border border-[#E2E8F0] bg-white p-3.5 sm:p-4 flex items-center justify-between hover:border-slate-300 transition-colors">
                 <div className="flex items-center gap-3">
@@ -516,19 +1894,17 @@ const [isAutoApplyEnabled, setIsAutoApplyEnabled] = useState(false);
                     </h3>
                     <div className="flex items-center gap-1.5 mt-0.5">
                       <span
-                        className={`w-2 h-2 rounded-full shrink-0 ${
-                          phoneNumber ? "bg-emerald-500" : "bg-rose-500"
-                        }`}
+                        className={`w-2 h-2 rounded-full shrink-0 ${phoneNumber
+                            ? isPhoneVerified
+                              ? "bg-emerald-500"
+                              : "bg-amber-500"
+                            : "bg-rose-500"
+                          }`}
                       />
                       <span className="text-[12px] text-slate-500 font-medium">
                         {phoneNumber ? (
                           <>
                             <span>{phoneNumber}</span>
-                            {isPhoneVerified && (
-                              <span className="ml-1 text-emerald-600 font-semibold">
-                                (Verified)
-                              </span>
-                            )}
                           </>
                         ) : (
                           "Not added"
@@ -540,8 +1916,8 @@ const [isAutoApplyEnabled, setIsAutoApplyEnabled] = useState(false);
 
                 {isPhoneVerified ? (
                   <div className="flex items-center gap-2">
-                    <span className="hidden sm:inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
-                      <Check className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline-flex items-center gap-1 text-[12.5px] font-bold text-[#4F46E5] bg-[#EEF2FF] px-2.5 py-1.5 rounded-md border border-[#C7D2FE]/80">
+                      <Check className="w-3.5 h-3.5 font-bold" />
                       Verified
                     </span>
                     <button
@@ -564,19 +1940,10 @@ const [isAutoApplyEnabled, setIsAutoApplyEnabled] = useState(false);
               </div>
             </div>
           </div>
-          
-        
-
-
-
-
-
-
-          
 
           {/* ================= SECTION C: Schedule & Targeting Card ================= */}
           <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-5 sm:p-6 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col gap-5">
-            {/* Card Header */}
+            {/* Card Header & Save Settings Button */}
             <div className="flex items-start gap-3.5">
               <div className="w-9 h-9 rounded-lg bg-[#EFF6FF] border border-[#DBEAFE] flex items-center justify-center text-[#4F46E5] shrink-0 mt-0.5">
                 <Clock className="w-4.5 h-4.5 text-[#4F46E5]" />
@@ -589,25 +1956,25 @@ const [isAutoApplyEnabled, setIsAutoApplyEnabled] = useState(false);
                   Set when and what type of C2C jobs to apply for.
                 </p>
               </div>
-                 <button
-              type="button"
-              onClick={handleSaveAll}
-              disabled={isSaving}
-              className="ml-auto px-5 py-2.5 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] active:bg-[#3730A3] text-white text-xs sm:text-sm font-semibold transition-all shadow-xs hover:shadow flex items-center justify-center gap-2 cursor-pointer shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
-  
-            >
-              {isSaving ? (
-                <>
-                  <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                  <span>Saving...</span>
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4" />
-                  <span>Save Settings</span>
-                </>
-              )}
-            </button>
+
+              <button
+                type="button"
+                onClick={handleSaveAll}
+                disabled={isSaving || isLoadingSettings}
+                className="ml-auto px-5 py-2.5 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] active:bg-[#3730A3] text-white text-xs sm:text-sm font-semibold transition-all shadow-xs hover:shadow flex items-center justify-center gap-2 cursor-pointer shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {isSaving ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    <span>Save Settings</span>
+                  </>
+                )}
+              </button>
             </div>
 
             {/* WHEN TO SEND Row Matching Image 2 */}
@@ -618,71 +1985,126 @@ const [isAutoApplyEnabled, setIsAutoApplyEnabled] = useState(false);
                   <span>WHEN TO SEND</span>
                 </div>
                 <div className="flex items-center gap-1 text-[11.5px] text-slate-400 font-medium">
-                  <span>max 10 per hour</span>
+                  <span>max {maxPerRun} per hour</span>
                   <HelpCircle className="w-3.5 h-3.5 text-slate-400" />
                 </div>
               </div>
 
-              {/* Number of apps + time dropdown */}
+              {/* Number of apps + time selector */}
               <div className="flex flex-wrap items-center gap-2.5 pt-1">
                 <span className="text-[13px] font-medium text-slate-700">Send</span>
                 <input
                   type="number"
                   min={1}
-                  max={10}
+                  max={maxPerRun}
                   value={appsCount}
-                  onChange={(e) => {
-                    const num = parseInt(e.target.value, 10);
-                    if (isNaN(num)) setAppsCount(1);
-                    else setAppsCount(Math.max(1, Math.min(10, num)));
-                  }}
-                  className="w-16 h-[38px] rounded-lg border border-[#E2E8F0] bg-white text-center text-[13.5px] font-semibold text-slate-900 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-[#EEF2FF] shadow-2xs"
+                  onChange={(e) => handleAppsCountChange(e.target.value)}
+                  className={`w-16 h-[38px] rounded-lg border bg-white text-center text-[13.5px] font-semibold text-slate-900 focus:outline-none focus:ring-2 shadow-2xs ${appsCountError
+                      ? "border-rose-400 focus:border-rose-500 focus:ring-rose-100"
+                      : "border-[#E2E8F0] focus:border-indigo-400 focus:ring-[#EEF2FF]"
+                    }`}
                 />
-                <span className="text-[13px] font-medium text-slate-700">applications at</span>
+                <span className="text-[13px] font-medium text-slate-700">
+                  applications at
+                </span>
 
-                {/* Time selector dropdown */}
-                <div ref={timeDropdownRef} className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setIsTimeDropdownOpen(!isTimeDropdownOpen)}
-                    className="h-[38px] px-3.5 rounded-lg border border-[#E2E8F0] bg-white flex items-center gap-2 text-[13px] font-semibold text-slate-800 hover:border-slate-300 shadow-2xs cursor-pointer focus:outline-none"
-                  >
-                    <span>{selectedTime}</span>
-                    <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-                  </button>
+                {/* Scheduled run time chips */}
+                <div className="flex flex-wrap items-center gap-1.5">
 
-                  {isTimeDropdownOpen && (
-                    <div className="absolute left-0 mt-1 w-36 bg-white rounded-xl border border-slate-200 shadow-xl py-1 z-30 max-h-48 overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
-                      {TIME_OPTIONS.map((t) => (
-                        <button
-                          key={t}
-                          type="button"
-                          onClick={() => {
-                            setSelectedTime(t);
-                            setIsTimeDropdownOpen(false);
-                            persistSettings({ selectedTime: t });
-                          }}
-                          className={`w-full text-left px-3 py-1.5 text-xs font-semibold cursor-pointer flex items-center justify-between ${
-                            selectedTime === t ? "bg-[#EEF2FF] text-[#4F46E5]" : "text-slate-700 hover:bg-slate-50"
-                          }`}
-                        >
-                          <span>{t}</span>
-                          {selectedTime === t && <Check className="w-3.5 h-3.5 text-[#4F46E5]" />}
-                        </button>
-                      ))}
+                  {/* Add Run Time Dropdown (supports up to 8 schedules) */}
+                  {runTimes.length < 8 && (
+                    <div ref={timeDropdownRef} className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setIsTimeDropdownOpen(!isTimeDropdownOpen)}
+                        className="h-[38px] px-3.5 rounded-lg border border-[#E2E8F0] bg-white flex items-center gap-2 text-[13px] font-semibold text-slate-800 hover:border-slate-300 shadow-2xs cursor-pointer focus:outline-none"
+                      >
+                        <Plus className="w-3.5 h-3.5 text-slate-400" />
+                        <span>{runTimes.length === 0 ? "Select time" : "Add time"}</span>
+                        <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                      </button>
+
+                      {isTimeDropdownOpen && (
+                        <div className="absolute left-0 mt-1 w-40 bg-white rounded-xl border border-slate-200 shadow-xl py-1 z-30 max-h-56 overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
+                          {TIME_OPTIONS.map((t) => {
+                            const t24 = format12to24(t);
+                            const isAlreadySelected = runTimes.includes(t24);
+                            return (
+                              <button
+                                key={t}
+                                type="button"
+                                disabled={isAlreadySelected}
+                                onClick={() => handleAddRunTime(t)}
+                                className={`w-full text-left px-3 py-1.5 text-xs font-semibold cursor-pointer flex items-center justify-between ${isAlreadySelected
+                                    ? "bg-slate-50 text-slate-300 cursor-not-allowed"
+                                    : "text-slate-700 hover:bg-[#EEF2FF] hover:text-[#4F46E5]"
+                                  }`}
+                              >
+                                <span>{t}</span>
+                                {isAlreadySelected && (
+                                  <Check className="w-3.5 h-3.5 text-emerald-500" />
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   )}
+
+                  {runTimes.map((t24) => (
+                    <span
+                      key={t24}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#EEF2FF] text-[#4F46E5] border border-[#C7D2FE]/70 shadow-2xs"
+                    >
+                      <Clock className="w-3 h-3 text-[#4F46E5]" />
+                      <span>{format24to12(t24)}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveRunTime(t24)}
+                        className="hover:text-rose-600 transition-colors cursor-pointer"
+                        title="Remove time"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </span>
+                  ))}
+
+
                 </div>
               </div>
+
+              {/* Inline Validation & helper messages */}
+              <div className="flex flex-wrap items-center justify-between gap-1 text-[11.5px] text-slate-400 pt-0.5">
+                <span>Configure up to 8 run times (minimum 60 minutes apart)</span>
+                {runTimes.length > 0 && (
+                  <span>{runTimes.length} of 8 run times scheduled</span>
+                )}
+              </div>
+              {appsCountError && (
+                <span className="text-xs text-rose-600 font-medium">
+                  {appsCountError}
+                </span>
+              )}
+              {timeError && (
+                <span className="text-xs text-rose-600 font-medium">
+                  {timeError}
+                </span>
+              )}
             </div>
 
             {/* JOB TITLES & LOCATION 2-Column Section Matching Image 2 */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2 border-t border-slate-100">
               {/* Left Column: JOB TITLES */}
               <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-1.5 text-slate-700 text-xs font-bold uppercase tracking-wider">
-                  <Briefcase className="w-3.5 h-3.5 text-slate-400" />
-                  <span>JOB TITLES</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-slate-700 text-xs font-bold uppercase tracking-wider">
+                    <Briefcase className="w-3.5 h-3.5 text-slate-400" />
+                    <span>JOB TITLES</span>
+                  </div>
+                  <span className="text-[11px] text-slate-400 font-medium">
+                    {jobTitles.length}/10 titles
+                  </span>
                 </div>
 
                 {/* Input + Plus Button */}
@@ -691,12 +2113,13 @@ const [isAutoApplyEnabled, setIsAutoApplyEnabled] = useState(false);
                     type="text"
                     value={jobTitleInput}
                     onChange={(e) => setJobTitleInput(e.target.value)}
-                    placeholder="e.g. Data Engineer"
+                    placeholder="e.g. Frontend Developer"
+                    maxLength={120}
                     className="flex-1 h-[40px] px-3.5 rounded-lg border border-[#E2E8F0] bg-white text-[13px] text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-[#EEF2FF] shadow-2xs"
                   />
                   <button
                     type="submit"
-                    className="w-10 h-[40px] rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:shadow"
+                    className="w-10 h-[40px] rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:shadow shrink-0"
                     title="Add Job Title"
                   >
                     <Plus className="w-5 h-5" />
@@ -721,14 +2144,24 @@ const [isAutoApplyEnabled, setIsAutoApplyEnabled] = useState(false);
                       </button>
                     </span>
                   ))}
+                  {jobTitles.length === 0 && (
+                    <span className="text-xs text-slate-400 italic">
+                      No job titles added yet. Add at least one to enable auto-apply.
+                    </span>
+                  )}
                 </div>
               </div>
 
               {/* Right Column: LOCATION */}
               <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-1.5 text-slate-700 text-xs font-bold uppercase tracking-wider">
-                  <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                  <span>LOCATION</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-slate-700 text-xs font-bold uppercase tracking-wider">
+                    <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                    <span>LOCATION</span>
+                  </div>
+                  <span className="text-[11px] text-slate-400 font-medium">
+                    {locations.length}/10 locations
+                  </span>
                 </div>
 
                 {/* Input + Plus Button */}
@@ -738,11 +2171,12 @@ const [isAutoApplyEnabled, setIsAutoApplyEnabled] = useState(false);
                     value={locationInput}
                     onChange={(e) => setLocationInput(e.target.value)}
                     placeholder="e.g. Dallas, TX"
+                    maxLength={120}
                     className="flex-1 h-[40px] px-3.5 rounded-lg border border-[#E2E8F0] bg-white text-[13px] text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-[#EEF2FF] shadow-2xs"
                   />
                   <button
                     type="submit"
-                    className="w-10 h-[40px] rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:shadow"
+                    className="w-10 h-[40px] rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:shadow shrink-0"
                     title="Add Location"
                   >
                     <Plus className="w-5 h-5" />
@@ -767,10 +2201,14 @@ const [isAutoApplyEnabled, setIsAutoApplyEnabled] = useState(false);
                       </button>
                     </span>
                   ))}
+                  {locations.length === 0 && (
+                    <span className="text-xs text-slate-400 italic">
+                      No locations specified (optional — applies nationwide).
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
-            
           </div>
 
           {/* ================= Phone Number Modal ================= */}

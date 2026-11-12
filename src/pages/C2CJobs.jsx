@@ -1,10 +1,16 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
+import JobFilterBar from "../components/JobFilterBar";
 import {
-  Search,
+  JOB_WORKPLACE_OPTIONS,
+  getJobWorkplace,
+  matchesJobDateFilter,
+  normalizeWorkplaceValue,
+  sortWorkplaceOptions,
+} from "../utils/jobHelpers";
+import {
   X,
-  ChevronDown,
   Briefcase,
   Mail,
   MapPin,
@@ -18,249 +24,21 @@ import {
   Layers,
   ArrowRight,
 } from "lucide-react";
-import { getJobs, applyToJobs, getStoredAppliedJobIds } from "../services/api";
+import {
+  getC2CJobs,
+  formatC2CJob,
+  resolveActiveResumeId,
+  applyToC2CJobs,
+  getStoredC2CAppliedJobIds,
+} from "../services/api";
 
 // Helper to determine if a job originates from Email (Vendor) vs Job Portal
 const isEmailVendorJob = (job) => {
+  const route = String(job?.route || "").trim().toUpperCase();
+  if (route.includes("EMAIL") || route.includes("VENDOR")) return true;
   const src = String(job?.sourceType || job?.source || "").trim().toLowerCase();
   return src.includes("email") || src.includes("vendor");
 };
-
-// 8 Reference C2C Job Records precisely matching Image 2
-const C2C_INITIAL_JOBS = [
-  {
-    id: "c2c-1",
-    jobId: "c2c-1",
-    title: "Java Developer (C2C)",
-    company: "Tech Solutions Inc.",
-    isVerified: true,
-    location: "Plano, TX, United States",
-    city: "Plano, TX",
-    workplace: "Onsite",
-    jobType: "C2C",
-    sourceType: "Job Portal",
-    source: "Job Portal",
-    posted: "Oct 2, 2026",
-    postedDate: "2026-10-02",
-    matchPercent: 61.9,
-    role: "Developer",
-    description:
-      "Tech Solutions Inc. is seeking a Senior Java Developer for a long-term enterprise C2C contract. You will architect, develop, and maintain high-throughput distributed microservices handling millions of financial transactions daily.",
-    responsibilities: [
-      "Design and implement robust microservices using Java 17+, Spring Boot, and Hibernate.",
-      "Collaborate with architects and DevOps teams to ensure seamless CI/CD containerized deployments.",
-      "Optimize application performance, database queries, and RESTful API response latencies.",
-      "Participate in code reviews, automated unit testing, and agile sprint planning.",
-    ],
-    requiredSkills: ["Java", "Spring Boot", "Microservices", "PostgreSQL", "Docker", "REST APIs"],
-    preferredSkills: ["Kubernetes", "AWS", "Kafka", "Redis"],
-    experience: "5+ years",
-    salary: "$75 - $90 / hr (C2C)",
-  },
-  {
-    id: "c2c-2",
-    jobId: "c2c-2",
-    title: "UI/UX Designer (C2C)",
-    company: "Digital Minds LLC",
-    isVerified: true,
-    location: "Chicago, IL, United States",
-    city: "Chicago, IL",
-    workplace: "Hybrid",
-    jobType: "C2C",
-    sourceType: "Email (Vendor)",
-    source: "Email (Vendor)",
-    posted: "Oct 2, 2026",
-    postedDate: "2026-10-02",
-    matchPercent: 61.9,
-    role: "Designer",
-    description:
-      "Digital Minds LLC is looking for a creative UI/UX Designer on a C2C contract basis to craft modern, user-centric web and mobile product experiences for our SaaS suite.",
-    responsibilities: [
-      "Create wireframes, high-fidelity mockups, and interactive prototypes using Figma.",
-      "Conduct user research, usability testing, and translate user feedback into design improvements.",
-      "Establish and maintain design systems and design tokens across cross-functional engineering teams.",
-      "Collaborate closely with product managers and front-end developers to deliver seamless user journeys.",
-    ],
-    requiredSkills: ["Figma", "UI/UX Design", "Wireframing", "Prototyping", "Design Systems"],
-    preferredSkills: ["Adobe Creative Suite", "HTML/CSS basics", "User Research", "Micro-interactions"],
-    experience: "4+ years",
-    salary: "$65 - $80 / hr (C2C)",
-  },
-  {
-    id: "c2c-3",
-    jobId: "c2c-3",
-    title: "AWS DevOps Engineer (C2C)",
-    company: "CloudTech Solutions",
-    isVerified: true,
-    location: "Seattle, WA, United States",
-    city: "Seattle, WA",
-    workplace: "Remote",
-    jobType: "C2C",
-    sourceType: "Job Portal",
-    source: "Job Portal",
-    posted: "Oct 2, 2026",
-    postedDate: "2026-10-02",
-    matchPercent: 61.9,
-    role: "DevOps",
-    description:
-      "CloudTech Solutions requires an experienced AWS DevOps Engineer for a multi-cloud enterprise cloud migration and infrastructure modernization project on a C2C contract.",
-    responsibilities: [
-      "Architect and maintain automated Infrastructure as Code (IaC) using Terraform and CloudFormation.",
-      "Build and optimize resilient CI/CD pipelines in GitLab CI and GitHub Actions.",
-      "Manage Kubernetes clusters (EKS) and monitor system reliability with Prometheus and Grafana.",
-      "Enforce cloud security compliance, IAM least-privilege policies, and cost optimization initiatives.",
-    ],
-    requiredSkills: ["AWS", "DevOps", "Terraform", "Kubernetes", "Docker", "CI/CD"],
-    preferredSkills: ["Helm", "Python/Bash scripting", "Prometheus", "ArgoCD"],
-    experience: "5+ years",
-    salary: "$85 - $105 / hr (C2C)",
-  },
-  {
-    id: "c2c-4",
-    jobId: "c2c-4",
-    title: "React Developer (C2C)",
-    company: "Innovative Systems",
-    isVerified: true,
-    location: "Austin, TX, United States",
-    city: "Austin, TX",
-    workplace: "Remote",
-    jobType: "C2C",
-    sourceType: "Email (Vendor)",
-    source: "Email (Vendor)",
-    posted: "Oct 2, 2026",
-    postedDate: "2026-10-02",
-    matchPercent: 61.9,
-    role: "Developer",
-    description:
-      "Innovative Systems is seeking a skilled React Developer on a C2C arrangement to build high-performance client-facing web dashboards and real-time data analytics tools.",
-    responsibilities: [
-      "Develop responsive, accessible, and performant user interfaces using React, TypeScript, and Tailwind CSS.",
-      "Integrate complex REST and GraphQL APIs with state management patterns.",
-      "Write comprehensive unit tests with Jest and React Testing Library.",
-      "Optimize frontend bundle sizes and core web vitals for optimal loading performance.",
-    ],
-    requiredSkills: ["React", "TypeScript", "JavaScript", "Tailwind CSS", "Redux/Zustand"],
-    preferredSkills: ["Next.js", "GraphQL", "Jest", "Webpack/Vite"],
-    experience: "4+ years",
-    salary: "$70 - $85 / hr (C2C)",
-  },
-  {
-    id: "c2c-5",
-    jobId: "c2c-5",
-    title: "Python Developer (C2C)",
-    company: "NextGen Technologies",
-    isVerified: true,
-    location: "San Jose, CA, United States",
-    city: "San Jose, CA",
-    workplace: "Remote",
-    jobType: "C2C",
-    sourceType: "Email (Vendor)",
-    source: "Email (Vendor)",
-    posted: "Sep 26, 2026",
-    postedDate: "2026-09-26",
-    matchPercent: 61.9,
-    role: "Developer",
-    description:
-      "NextGen Technologies is looking for a Python Developer to join our backend and AI integration squad on a 12-month C2C engagement.",
-    responsibilities: [
-      "Build high-throughput microservices and APIs with Python (FastAPI/Django).",
-      "Develop data processing pipelines, ETL workflows, and asynchronous background tasks with Celery.",
-      "Integrate machine learning models and LLM endpoints into core services.",
-      "Ensure unit test coverage, security audits, and adherence to clean code standards.",
-    ],
-    requiredSkills: ["Python", "FastAPI", "Django", "PostgreSQL", "Celery", "REST APIs"],
-    preferredSkills: ["Redis", "AWS", "PyTest", "Docker"],
-    experience: "4+ years",
-    salary: "$75 - $95 / hr (C2C)",
-  },
-  {
-    id: "c2c-6",
-    jobId: "c2c-6",
-    title: "Full Stack Developer (C2C)",
-    company: "Global Tech Inc.",
-    isVerified: true,
-    location: "New York, NY, United States",
-    city: "New York, NY",
-    workplace: "Hybrid",
-    jobType: "C2C",
-    sourceType: "Job Portal",
-    source: "Job Portal",
-    posted: "Sep 26, 2026",
-    postedDate: "2026-09-26",
-    matchPercent: 61.9,
-    role: "Developer",
-    description:
-      "Global Tech Inc. is hiring a versatile Full Stack Developer for an enterprise financial portal redesign on a long-term C2C contract.",
-    responsibilities: [
-      "Lead end-to-end feature development across frontend (React/TypeScript) and backend (Node.js/Express).",
-      "Design relational and document database schemas with MySQL and MongoDB.",
-      "Work in an agile environment collaborating with UX designers, QA engineers, and business analysts.",
-      "Maintain high standards of security, PCI-DSS compliance, and automated testing.",
-    ],
-    requiredSkills: ["Full Stack", "React", "Node.js", "TypeScript", "SQL", "REST APIs"],
-    preferredSkills: ["MongoDB", "AWS", "Express", "Microservices"],
-    experience: "5+ years",
-    salary: "$80 - $100 / hr (C2C)",
-  },
-  {
-    id: "c2c-7",
-    jobId: "c2c-7",
-    title: "Data Engineer (C2C)",
-    company: "DataSphere LLC",
-    isVerified: true,
-    location: "Dallas, TX, United States",
-    city: "Dallas, TX",
-    workplace: "Remote",
-    jobType: "C2C",
-    sourceType: "Email (Vendor)",
-    source: "Email (Vendor)",
-    posted: "Sep 26, 2026",
-    postedDate: "2026-09-26",
-    matchPercent: 61.9,
-    role: "Engineer",
-    description:
-      "DataSphere LLC is seeking a Data Engineer on a C2C contract to build scalable modern data lakehouse pipelines and real-time streaming architectures.",
-    responsibilities: [
-      "Design and maintain automated ETL/ELT pipelines using PySpark, SQL, and Apache Airflow.",
-      "Manage cloud data warehouse architectures on Snowflake and Databricks.",
-      "Ensure data quality, schema validation, and auditability across raw and curated layers.",
-      "Collaborate with data science and business intelligence teams to fulfill analytical requirements.",
-    ],
-    requiredSkills: ["Data Engineering", "Python", "SQL", "Spark/PySpark", "Airflow", "Snowflake"],
-    preferredSkills: ["Kafka", "AWS S3", "Databricks", "dbt"],
-    experience: "5+ years",
-    salary: "$85 - $110 / hr (C2C)",
-  },
-  {
-    id: "c2c-8",
-    jobId: "c2c-8",
-    title: "QA Automation Engineer (C2C)",
-    company: "Quality Systems",
-    isVerified: true,
-    location: "Atlanta, GA, United States",
-    city: "Atlanta, GA",
-    workplace: "Onsite",
-    jobType: "C2C",
-    sourceType: "Job Portal",
-    source: "Job Portal",
-    posted: "Sep 26, 2026",
-    postedDate: "2026-09-26",
-    matchPercent: 61.9,
-    role: "QA",
-    description:
-      "Quality Systems is looking for a QA Automation Engineer for an enterprise healthcare software test suite expansion on a C2C contract.",
-    responsibilities: [
-      "Develop, execute, and maintain automated UI and API test suites using Playwright, Cypress, and Selenium.",
-      "Integrate automated test runs into CI/CD pipelines to provide rapid regression feedback.",
-      "Identify, document, and track software defects with comprehensive reproduction steps.",
-      "Collaborate with development teams to ensure high test coverage and shift-left quality principles.",
-    ],
-    requiredSkills: ["QA Automation", "Playwright", "Cypress", "Selenium", "JavaScript/TypeScript", "API Testing"],
-    preferredSkills: ["Postman", "Jenkins/GitHub Actions", "JMeter", "TestRail"],
-    experience: "4+ years",
-    salary: "$65 - $80 / hr (C2C)",
-  },
-];
 
 // Verified Tick Component
 const VerifiedBadge = () => (
@@ -276,18 +54,20 @@ const VerifiedBadge = () => (
 
 const C2CJobs = () => {
   // Jobs List State
-  const [jobs, setJobs] = useState(C2C_INITIAL_JOBS);
-  const [isLoading, setIsLoading] = useState(false);
+  const [jobs, setJobs] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState(null);
+  const [activeResumeId, setActiveResumeId] = useState(null);
 
   // Search & Filter States
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedDate, setSelectedDate] = useState("All");
-  const [selectedLocation, setSelectedLocation] = useState("All");
-  const [selectedRole, setSelectedRole] = useState("All");
-  const [selectedJobType, setSelectedJobType] = useState("All");
-  const [selectedWorkplace, setSelectedWorkplace] = useState("All");
-  const [selectedCompany, setSelectedCompany] = useState("All");
+  const [selectedDate, setSelectedDate] = useState("All time");
+  const [selectedLocations, setSelectedLocations] = useState([]);
+  const [locationSearch, setLocationSearch] = useState("");
+  const [selectedRoles, setSelectedRoles] = useState([]);
+  const [selectedWorkplace, setSelectedWorkplace] = useState([]);
+  const [selectedCompanies, setSelectedCompanies] = useState([]);
+  const [companySearch, setCompanySearch] = useState("");
 
   // Open dropdown state
   const [openDropdown, setOpenDropdown] = useState(null);
@@ -320,15 +100,24 @@ const [emailNotConnected, setEmailNotConnected] = useState(false);
   // Toast State
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
 
-  // Close dropdowns on outside click
+  // Close dropdowns on outside click or Escape key
   useEffect(() => {
     const handleOutsideClick = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
         setOpenDropdown(null);
       }
     };
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setOpenDropdown(null);
+      }
+    };
     document.addEventListener("mousedown", handleOutsideClick);
-    return () => document.removeEventListener("mousedown", handleOutsideClick);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
   }, []);
 
   // Toast Auto-hide
@@ -350,120 +139,142 @@ const [emailNotConnected, setEmailNotConnected] = useState(false);
     }
   }, [appliedJobIds]);
 
-  // Attempt to fetch from real API if available
-  useEffect(() => {
-    const fetchApiJobs = async () => {
-      try {
-        setIsLoading(true);
-        const res = await getJobs({ employmentType: "contract", q: "c2c", size: 40 });
-        if (res?.items && Array.isArray(res.items) && res.items.length > 0) {
-          // Normalize and merge API jobs with C2C designation
-          const apiFormatted = res.items.map((item, idx) => {
-            const rawSource = item.sourceType || item.source || item.jobSource || item.origin || "";
-            let resolvedSource = "Job Portal";
-            if (typeof rawSource === "string" && (rawSource.toLowerCase().includes("email") || rawSource.toLowerCase().includes("vendor"))) {
-              resolvedSource = "Email (Vendor)";
-            } else if (typeof rawSource === "string" && rawSource.toLowerCase().includes("portal")) {
-              resolvedSource = "Job Portal";
-            } else if (rawSource) {
-              resolvedSource = rawSource;
-            } else {
-              resolvedSource = idx % 2 === 0 ? "Job Portal" : "Email (Vendor)";
-            }
+  // Fetch C2C Jobs from real API using active resume ID
+  const fetchApiJobs = async () => {
+    try {
+      setIsLoading(true);
+      setFetchError(null);
+      const resId = await resolveActiveResumeId();
+      setActiveResumeId(resId);
 
-            return {
-              id: item.id || item.jobId || `api-c2c-${idx}`,
-              jobId: item.jobId || item.id || `api-c2c-${idx}`,
-              title: item.title?.includes("C2C") ? item.title : `${item.title || "Software Specialist"} (C2C)`,
-              company: item.company || item.companyName || "Verified Partner",
-              isVerified: true,
-              location: item.location || item.city || "United States",
-              city: item.city || item.location || "United States",
-              workplace: item.workplace || item.workMode || "Remote",
-              jobType: "C2C",
-              sourceType: resolvedSource,
-              source: item.source || resolvedSource,
-              posted: item.posted || "Oct 2, 2026",
-              postedDate: item.postedDate || "2026-10-02",
-              matchPercent: item.matchScore || item.matchPercent || 61.9,
-              role: item.role || "Developer",
-              description: item.description || "Exciting C2C contract opportunity.",
-              responsibilities: Array.isArray(item.responsibilities) && item.responsibilities.length > 0
-                ? item.responsibilities
-                : [
-                    "Collaborate with the cross-functional team on enterprise requirements.",
-                    "Implement scalable, maintainable, and high-quality software solutions.",
-                    "Participate in design sessions, code reviews, and automated testing.",
-                  ],
-              requiredSkills: Array.isArray(item.requiredSkills) && item.requiredSkills.length > 0
-                ? item.requiredSkills
-                : ["C2C", "Contract", "Software Development"],
-              preferredSkills: Array.isArray(item.preferredSkills) ? item.preferredSkills : [],
-              experience: item.experience || "3+ years",
-              salary: item.salary || "$70 - $95 / hr (C2C)",
-            };
-          });
-          setJobs(apiFormatted);
-        }
-      } catch (err) {
-        // Fall back gracefully to the 8 standard Image 2 reference jobs
-        console.log("C2C real API endpoint unavailable or empty; displaying reference C2C jobs.");
-      } finally {
-        setIsLoading(false);
+      const res = await getC2CJobs({ resumeId: resId, page: 0, size: 20 });
+      const rawList = res?.items || [];
+      const formatted = rawList.map((item, idx) => formatC2CJob(item, idx, resId));
+      setJobs(formatted);
+
+      // Collect any jobs that are already applied according to the backend
+      const backendApplied = rawList
+        .filter((item) => {
+          const j = item?.job || item || {};
+          return Boolean(
+            item?.applied ||
+            item?.isApplied ||
+            item?.hasApplied ||
+            j?.applied ||
+            j?.isApplied ||
+            j?.hasApplied ||
+            String(item?.status || '').toUpperCase() === 'APPLIED' ||
+            String(j?.status || '').toUpperCase() === 'APPLIED' ||
+            String(item?.applicationStatus || '').toUpperCase() === 'APPLIED' ||
+            String(j?.applicationStatus || '').toUpperCase() === 'APPLIED'
+          );
+        })
+        .map((item) => (item?.job?.jobId || item?.job?.id || item?.jobId || item?.id))
+        .filter(Boolean);
+
+      if (backendApplied.length > 0) {
+        setAppliedJobIds((prev) => Array.from(new Set([...prev.map(String), ...backendApplied.map(String)])));
       }
-    };
+    } catch (err) {
+      console.error("[C2CJobs] Error fetching C2C jobs:", err);
+      setFetchError(err?.message || "Unable to load C2C jobs. Please check your connection or try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchApiJobs();
   }, []);
 
+  const toggleCheckbox = (list, setList, item) => {
+    if (list.includes(item)) {
+      setList(list.filter((i) => i !== item));
+    } else {
+      setList([...list, item]);
+    }
+  };
+
   // Filter Dropdown Options
-  const dateOptions = ["All", "Last 24 hours", "Last 7 days", "Last 14 days", "Last 30 days"];
-  const locationOptions = [
-    "All",
-    "Plano, TX",
-    "Chicago, IL",
-    "Seattle, WA",
-    "Austin, TX",
-    "San Jose, CA",
-    "New York, NY",
-    "Dallas, TX",
-    "Atlanta, GA",
-  ];
-  const roleOptions = ["All", "Developer", "Designer", "DevOps", "Engineer", "QA"];
-  const jobTypeOptions = ["All", "C2C", "Corp-to-Corp", "Contract"];
-  const workplaceOptions = ["All", "Remote", "Hybrid", "Onsite"];
-  const companyOptions = [
-    "All",
-    "Tech Solutions Inc.",
-    "Digital Minds LLC",
-    "CloudTech Solutions",
-    "Innovative Systems",
-    "NextGen Technologies",
-    "Global Tech Inc.",
-    "DataSphere LLC",
-    "Quality Systems",
-  ];
+  const locationOptions = useMemo(() => {
+    const locs = new Set([
+      "Plano, TX",
+      "Chicago, IL",
+      "Seattle, WA",
+      "Austin, TX",
+      "San Jose, CA",
+      "New York, NY",
+      "Dallas, TX",
+      "Atlanta, GA",
+    ]);
+    jobs.forEach((j) => {
+      if (j.city && j.city !== "United States") locs.add(j.city);
+      if (j.location) {
+        j.location.split(";").forEach((l) => {
+          const t = l.trim();
+          if (t && t.toLowerCase() !== "remote" && t !== "United States") {
+            locs.add(t);
+          }
+        });
+      }
+    });
+    selectedLocations.forEach((loc) => {
+      if (loc) locs.add(loc);
+    });
+    return Array.from(locs).sort();
+  }, [jobs, selectedLocations]);
+
+  const roleOptions = useMemo(() => {
+    const roles = new Set(["Developer", "Designer", "DevOps", "Engineer", "QA"]);
+    jobs.forEach((j) => {
+      if (j.role) roles.add(j.role);
+    });
+    selectedRoles.forEach((role) => {
+      if (role) roles.add(role);
+    });
+    return Array.from(roles).sort();
+  }, [jobs, selectedRoles]);
+
+  const workplaceOptions = useMemo(() => {
+    return sortWorkplaceOptions([
+      ...JOB_WORKPLACE_OPTIONS,
+      ...jobs.map((j) => getJobWorkplace(j)),
+      ...selectedWorkplace,
+    ]);
+  }, [jobs, selectedWorkplace]);
+
+  const companyOptions = useMemo(() => {
+    const comps = new Set([
+      "Tech Solutions Inc.",
+      "Digital Minds LLC",
+      "CloudTech Solutions",
+      "Innovative Systems",
+      "NextGen Technologies",
+      "Global Tech Inc.",
+      "DataSphere LLC",
+      "Quality Systems",
+    ]);
+    jobs.forEach((j) => {
+      if (j.company) comps.add(j.company);
+    });
+    selectedCompanies.forEach((comp) => {
+      if (comp) comps.add(comp);
+    });
+    return Array.from(comps).sort();
+  }, [jobs, selectedCompanies]);
 
   // Reset Search & Filters
   const handleClearAll = () => {
     setSearchTerm("");
-    setSelectedDate("All");
-    setSelectedLocation("All");
-    setSelectedRole("All");
-    setSelectedJobType("All");
-    setSelectedWorkplace("All");
-    setSelectedCompany("All");
+    setSelectedDate("All time");
+    setSelectedLocations([]);
+    setLocationSearch("");
+    setSelectedRoles([]);
+    setSelectedWorkplace([]);
+    setSelectedCompanies([]);
+    setCompanySearch("");
     setOpenDropdown(null);
   };
-
-  const hasActiveFilters =
-    Boolean(searchTerm.trim()) ||
-    selectedDate !== "All" ||
-    selectedLocation !== "All" ||
-    selectedRole !== "All" ||
-    selectedJobType !== "All" ||
-    selectedWorkplace !== "All" ||
-    selectedCompany !== "All";
 
   // Filtered Jobs
   const filteredJobs = useMemo(() => {
@@ -471,9 +282,9 @@ const [emailNotConnected, setEmailNotConnected] = useState(false);
       // 1. Search query
       if (searchTerm.trim()) {
         const q = searchTerm.toLowerCase();
-        const inTitle = job.title.toLowerCase().includes(q);
-        const inCompany = job.company.toLowerCase().includes(q);
-        const inLocation = job.location.toLowerCase().includes(q);
+        const inTitle = (job.title || "").toLowerCase().includes(q);
+        const inCompany = (job.company || "").toLowerCase().includes(q);
+        const inLocation = (job.location || "").toLowerCase().includes(q);
         const inSkills = Array.isArray(job.requiredSkills)
           ? job.requiredSkills.some((s) => s.toLowerCase().includes(q))
           : false;
@@ -482,40 +293,58 @@ const [emailNotConnected, setEmailNotConnected] = useState(false);
         }
       }
 
-      // 2. Location
-      if (selectedLocation !== "All") {
-        if (!job.location.toLowerCase().includes(selectedLocation.toLowerCase())) {
+      // 2. Date Filter (reuses shared date-filtering logic)
+      if (!matchesJobDateFilter(job, selectedDate)) {
+        return false;
+      }
+
+      // 3. Location (multi-select)
+      if (selectedLocations.length > 0) {
+        const jobLoc = (job.location || "").toLowerCase();
+        const jobCity = (job.city || "").toLowerCase();
+        const matchesLoc = selectedLocations.some((loc) => {
+          const target = loc.toLowerCase().trim();
+          return jobLoc.includes(target) || jobCity.includes(target);
+        });
+        if (!matchesLoc) {
           return false;
         }
       }
 
-      // 3. Role
-      if (selectedRole !== "All") {
-        if (
-          !job.title.toLowerCase().includes(selectedRole.toLowerCase()) &&
-          (!job.role || !job.role.toLowerCase().includes(selectedRole.toLowerCase()))
-        ) {
+      // 4. Role (multi-select)
+      if (selectedRoles.length > 0) {
+        const jobTitle = (job.title || "").toLowerCase();
+        const jobRole = (job.role || "").toLowerCase();
+        const matchesRole = selectedRoles.some((role) => {
+          const target = role.toLowerCase().trim();
+          return jobTitle.includes(target) || jobRole.includes(target);
+        });
+        if (!matchesRole) {
           return false;
         }
       }
 
-      // 4. Job Type
-      if (selectedJobType !== "All") {
-        if (!job.jobType.toLowerCase().includes(selectedJobType.toLowerCase()) && selectedJobType !== "C2C") {
+      // 5. Workplace (multi-select with normalized On-Site comparison)
+      if (selectedWorkplace.length > 0) {
+        const jobMode = normalizeWorkplaceValue(
+          getJobWorkplace(job) || job.workplace
+        ).toLowerCase();
+        const matchesWorkplace = selectedWorkplace.some((wp) => {
+          const targetMode = normalizeWorkplaceValue(wp).toLowerCase();
+          return Boolean(targetMode) && jobMode === targetMode;
+        });
+        if (!matchesWorkplace) {
           return false;
         }
       }
 
-      // 5. Workplace
-      if (selectedWorkplace !== "All") {
-        if (job.workplace.toLowerCase() !== selectedWorkplace.toLowerCase()) {
-          return false;
-        }
-      }
-
-      // 6. Company
-      if (selectedCompany !== "All") {
-        if (job.company.toLowerCase() !== selectedCompany.toLowerCase()) {
+      // 6. Companies (multi-select)
+      if (selectedCompanies.length > 0) {
+        const jobComp = (job.company || "").toLowerCase();
+        const matchesComp = selectedCompanies.some(
+          (comp) => jobComp === comp.toLowerCase().trim()
+        );
+        if (!matchesComp) {
           return false;
         }
       }
@@ -526,11 +355,10 @@ const [emailNotConnected, setEmailNotConnected] = useState(false);
     jobs,
     searchTerm,
     selectedDate,
-    selectedLocation,
-    selectedRole,
-    selectedJobType,
+    selectedLocations,
+    selectedRoles,
     selectedWorkplace,
-    selectedCompany,
+    selectedCompanies,
   ]);
 
   // Handle Application
@@ -538,7 +366,10 @@ const [emailNotConnected, setEmailNotConnected] = useState(false);
     e?.stopPropagation();
     const jId = job.id || job.jobId;
 
-    if (appliedJobIds.includes(jId)) {
+    if (
+      job.isApplied ||
+      appliedJobIds.some((id) => String(id) === String(jId))
+    ) {
       setToast({
         show: true,
         message: "You have already applied to this position.",
@@ -550,19 +381,45 @@ const [emailNotConnected, setEmailNotConnected] = useState(false);
     setApplyingJobIds((prev) => ({ ...prev, [jId]: true }));
 
     try {
-      // Attempt backend apply API call
-      try {
-        await applyToJobs({ jobIds: [jId] });
-      } catch (err) {
-        console.log("Backend apply call queued or simulated for C2C job:", jId);
-      }
+      // 1. Resolve dynamic resumeId (from job record, active state, or storage/backend)
+      const resIdToApply = job.resumeId || activeResumeId || (await resolveActiveResumeId());
+      const numResumeId = Number(resIdToApply);
+      const finalResumeId = !isNaN(numResumeId) && numResumeId > 0 ? numResumeId : 315;
 
-      // Add to applied list
+      // 2. Resolve dynamic jobId
+      const numJobId = Number(job.jobId || job.id);
+      const finalJobId = !isNaN(numJobId) ? numJobId : (job.jobId || job.id);
+
+      // 3. Call POST /api/c2c/applications with dynamic payload: { resumeId, jobIds: [jobId] }
+      await applyToC2CJobs({
+        resumeId: finalResumeId,
+        jobIds: [finalJobId],
+      });
+
+      // 4. Update UI to Applied
       setAppliedJobIds((prev) => [...prev, jId]);
+      setJobs((prevJobs) =>
+        prevJobs.map((j) =>
+          String(j.id || j.jobId) === String(jId) ? { ...j, isApplied: true } : j
+        )
+      );
+
       setToast({
         show: true,
         message: `Application submitted successfully for ${job.title}!`,
         type: "success",
+      });
+    } catch (err) {
+      console.error("[C2CJobs] Failed to apply to C2C job:", err);
+      const errMsg =
+        err?.response?.data?.message ||
+        (typeof err?.response?.data === "string" ? err.response.data : "") ||
+        err?.message ||
+        `Failed to submit application for ${job.title}.`;
+      setToast({
+        show: true,
+        message: errMsg,
+        type: "error",
       });
     } finally {
       setApplyingJobIds((prev) => {
@@ -615,259 +472,97 @@ const [emailNotConnected, setEmailNotConnected] = useState(false);
             </div>
           )}
 
-          {/* Search & Filters Container Matching Image 2 */}
-          <div
-            ref={dropdownRef}
-            className="bg-white rounded-[20px] border border-[#E2E8F0] p-4 sm:p-5 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col gap-3 relative z-20"
-          >
-            {/* Search Input Row with Clear Button */}
-            <div className="flex items-center gap-3 w-full">
-              <div className="flex-1 flex items-center gap-2.5 px-3.5 h-[42px] rounded-[10px] border border-[#E2E8F0] bg-white focus-within:border-[#818CF8] focus-within:ring-2 focus-within:ring-[#EEF2FF] transition-all">
-                <Search className="w-4 h-4 text-[#94A3B8] shrink-0" />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search by title, keyword, company or skills..."
-                  className="w-full bg-transparent text-[13.5px] text-slate-800 placeholder:text-slate-400 focus:outline-none"
-                />
-              </div>
+          {/* Search & Filters Container */}
+          <JobFilterBar
+            dropdownRef={dropdownRef}
+            searchQuery={searchTerm}
+            onSearchChange={setSearchTerm}
+            onClear={handleClearAll}
+            activeDropdown={openDropdown}
+            onToggleDropdown={(name) =>
+              setOpenDropdown((prev) => (prev === name ? null : name))
+            }
+            selectedDate={selectedDate}
+            onSelectDate={(opt) => {
+              setSelectedDate(opt);
+              setOpenDropdown(null);
+            }}
+            selectedLocations={selectedLocations}
+            locationSearch={locationSearch}
+            onLocationSearchChange={setLocationSearch}
+            locationOptions={locationOptions}
+            onToggleLocation={(loc) =>
+              toggleCheckbox(selectedLocations, setSelectedLocations, loc)
+            }
+            selectedRoles={selectedRoles}
+            roleOptions={roleOptions}
+            onToggleRole={(role) =>
+              toggleCheckbox(selectedRoles, setSelectedRoles, role)
+            }
+            selectedWorkplace={selectedWorkplace}
+            workplaceOptions={workplaceOptions}
+            onToggleWorkplace={(wp) =>
+              toggleCheckbox(selectedWorkplace, setSelectedWorkplace, wp)
+            }
+            selectedCompanies={selectedCompanies}
+            companySearch={companySearch}
+            onCompanySearchChange={setCompanySearch}
+            companyOptions={companyOptions}
+            onToggleCompany={(comp) =>
+              toggleCheckbox(selectedCompanies, setSelectedCompanies, comp)
+            }
+            showSort={false}
+          />
 
-              {/* Clear Button */}
-              {hasActiveFilters && (
-                <button
-                  type="button"
-                  onClick={handleClearAll}
-                  className="flex items-center gap-1 px-3 py-2 rounded-lg text-[13px] font-medium text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer shrink-0"
+          {/* Job Cards Grid (4 columns on wide screens matching Image 1) */}
+          {isLoading ? (
+            /* Skeleton Loading Grid */
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+                <div
+                  key={n}
+                  className="bg-white rounded-[16px] border border-[#E2E8F0] p-4.5 flex flex-col justify-between shadow-2xs animate-pulse h-[220px]"
                 >
-                  <X className="w-3.5 h-3.5" />
-                  <span>Clear</span>
-                </button>
-              )}
+                  <div>
+                    <div className="flex justify-between items-center">
+                      <div className="h-6 w-24 bg-slate-100 rounded-lg" />
+                      <div className="h-4 w-16 bg-slate-100 rounded" />
+                    </div>
+                    <div className="mt-3.5 space-y-2">
+                      <div className="h-4 w-4/5 bg-slate-100 rounded" />
+                      <div className="h-3 w-1/2 bg-slate-100 rounded" />
+                      <div className="h-3 w-2/3 bg-slate-100 rounded" />
+                    </div>
+                    <div className="flex gap-1.5 mt-3">
+                      <div className="h-5 w-14 bg-slate-100 rounded" />
+                      <div className="h-5 w-10 bg-slate-100 rounded" />
+                    </div>
+                  </div>
+                  <div className="pt-3.5 mt-1">
+                    <div className="h-9 w-full bg-slate-100 rounded-[10px]" />
+                  </div>
+                </div>
+              ))}
             </div>
-
-            {/* Filter Buttons Row Matching Image 2 */}
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              {/* 1. Date Filter */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setOpenDropdown(openDropdown === "date" ? null : "date")}
-                  className={`px-3 py-1.5 rounded-lg border text-[12.5px] font-medium transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs ${
-                    selectedDate !== "All"
-                      ? "bg-[#EEF2FF] border-[#C7D2FE] text-[#4F46E5]"
-                      : "bg-white border-[#E2E8F0] text-slate-600 hover:bg-slate-50 hover:border-slate-300"
-                  }`}
-                >
-                  <span>{selectedDate === "All" ? "Date" : selectedDate}</span>
-                  <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-                </button>
-                {openDropdown === "date" && (
-                  <div className="absolute left-0 mt-1.5 w-44 bg-white rounded-xl border border-slate-200 shadow-xl py-1.5 z-30 animate-in fade-in zoom-in-95 duration-150">
-                    {dateOptions.map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => {
-                          setSelectedDate(opt);
-                          setOpenDropdown(null);
-                        }}
-                        className={`w-full text-left px-3.5 py-2 text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${
-                          selectedDate === opt ? "bg-[#EEF2FF] text-[#4F46E5]" : "text-slate-700 hover:bg-slate-50"
-                        }`}
-                      >
-                        <span>{opt}</span>
-                        {selectedDate === opt && <Check className="w-3.5 h-3.5 text-[#4F46E5]" />}
-                      </button>
-                    ))}
-                  </div>
-                )}
+          ) : fetchError && jobs.length === 0 ? (
+            /* Error State */
+            <div className="bg-white rounded-[20px] border border-rose-100 p-12 text-center flex flex-col items-center justify-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600">
+                <AlertCircle className="w-6 h-6" />
               </div>
-
-              {/* 2. Location Filter */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setOpenDropdown(openDropdown === "location" ? null : "location")}
-                  className={`px-3 py-1.5 rounded-lg border text-[12.5px] font-medium transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs ${
-                    selectedLocation !== "All"
-                      ? "bg-[#EEF2FF] border-[#C7D2FE] text-[#4F46E5]"
-                      : "bg-white border-[#E2E8F0] text-slate-600 hover:bg-slate-50 hover:border-slate-300"
-                  }`}
-                >
-                  <span>{selectedLocation === "All" ? "Location" : selectedLocation}</span>
-                  <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-                </button>
-                {openDropdown === "location" && (
-                  <div className="absolute left-0 mt-1.5 w-48 bg-white rounded-xl border border-slate-200 shadow-xl py-1.5 z-30 animate-in fade-in zoom-in-95 duration-150 max-h-56 overflow-y-auto">
-                    {locationOptions.map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => {
-                          setSelectedLocation(opt);
-                          setOpenDropdown(null);
-                        }}
-                        className={`w-full text-left px-3.5 py-2 text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${
-                          selectedLocation === opt ? "bg-[#EEF2FF] text-[#4F46E5]" : "text-slate-700 hover:bg-slate-50"
-                        }`}
-                      >
-                        <span>{opt}</span>
-                        {selectedLocation === opt && <Check className="w-3.5 h-3.5 text-[#4F46E5]" />}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* 3. Role Filter */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setOpenDropdown(openDropdown === "role" ? null : "role")}
-                  className={`px-3 py-1.5 rounded-lg border text-[12.5px] font-medium transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs ${
-                    selectedRole !== "All"
-                      ? "bg-[#EEF2FF] border-[#C7D2FE] text-[#4F46E5]"
-                      : "bg-white border-[#E2E8F0] text-slate-600 hover:bg-slate-50 hover:border-slate-300"
-                  }`}
-                >
-                  <span>{selectedRole === "All" ? "Role" : selectedRole}</span>
-                  <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-                </button>
-                {openDropdown === "role" && (
-                  <div className="absolute left-0 mt-1.5 w-44 bg-white rounded-xl border border-slate-200 shadow-xl py-1.5 z-30 animate-in fade-in zoom-in-95 duration-150">
-                    {roleOptions.map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => {
-                          setSelectedRole(opt);
-                          setOpenDropdown(null);
-                        }}
-                        className={`w-full text-left px-3.5 py-2 text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${
-                          selectedRole === opt ? "bg-[#EEF2FF] text-[#4F46E5]" : "text-slate-700 hover:bg-slate-50"
-                        }`}
-                      >
-                        <span>{opt}</span>
-                        {selectedRole === opt && <Check className="w-3.5 h-3.5 text-[#4F46E5]" />}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* 4. Job Type Filter */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setOpenDropdown(openDropdown === "jobType" ? null : "jobType")}
-                  className={`px-3 py-1.5 rounded-lg border text-[12.5px] font-medium transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs ${
-                    selectedJobType !== "All"
-                      ? "bg-[#EEF2FF] border-[#C7D2FE] text-[#4F46E5]"
-                      : "bg-white border-[#E2E8F0] text-slate-600 hover:bg-slate-50 hover:border-slate-300"
-                  }`}
-                >
-                  <span>{selectedJobType === "All" ? "Job Type" : selectedJobType}</span>
-                  <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-                </button>
-                {openDropdown === "jobType" && (
-                  <div className="absolute left-0 mt-1.5 w-44 bg-white rounded-xl border border-slate-200 shadow-xl py-1.5 z-30 animate-in fade-in zoom-in-95 duration-150">
-                    {jobTypeOptions.map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => {
-                          setSelectedJobType(opt);
-                          setOpenDropdown(null);
-                        }}
-                        className={`w-full text-left px-3.5 py-2 text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${
-                          selectedJobType === opt ? "bg-[#EEF2FF] text-[#4F46E5]" : "text-slate-700 hover:bg-slate-50"
-                        }`}
-                      >
-                        <span>{opt}</span>
-                        {selectedJobType === opt && <Check className="w-3.5 h-3.5 text-[#4F46E5]" />}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* 5. Workplace Filter */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setOpenDropdown(openDropdown === "workplace" ? null : "workplace")}
-                  className={`px-3 py-1.5 rounded-lg border text-[12.5px] font-medium transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs ${
-                    selectedWorkplace !== "All"
-                      ? "bg-[#EEF2FF] border-[#C7D2FE] text-[#4F46E5]"
-                      : "bg-white border-[#E2E8F0] text-slate-600 hover:bg-slate-50 hover:border-slate-300"
-                  }`}
-                >
-                  <span>{selectedWorkplace === "All" ? "Workplace" : selectedWorkplace}</span>
-                  <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-                </button>
-                {openDropdown === "workplace" && (
-                  <div className="absolute left-0 mt-1.5 w-44 bg-white rounded-xl border border-slate-200 shadow-xl py-1.5 z-30 animate-in fade-in zoom-in-95 duration-150">
-                    {workplaceOptions.map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => {
-                          setSelectedWorkplace(opt);
-                          setOpenDropdown(null);
-                        }}
-                        className={`w-full text-left px-3.5 py-2 text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${
-                          selectedWorkplace === opt ? "bg-[#EEF2FF] text-[#4F46E5]" : "text-slate-700 hover:bg-slate-50"
-                        }`}
-                      >
-                        <span>{opt}</span>
-                        {selectedWorkplace === opt && <Check className="w-3.5 h-3.5 text-[#4F46E5]" />}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* 6. Companies Filter */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setOpenDropdown(openDropdown === "company" ? null : "company")}
-                  className={`px-3 py-1.5 rounded-lg border text-[12.5px] font-medium transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs ${
-                    selectedCompany !== "All"
-                      ? "bg-[#EEF2FF] border-[#C7D2FE] text-[#4F46E5]"
-                      : "bg-white border-[#E2E8F0] text-slate-600 hover:bg-slate-50 hover:border-slate-300"
-                  }`}
-                >
-                  <span>{selectedCompany === "All" ? "Companies" : selectedCompany}</span>
-                  <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-                </button>
-                {openDropdown === "company" && (
-                  <div className="absolute left-0 mt-1.5 w-52 bg-white rounded-xl border border-slate-200 shadow-xl py-1.5 z-30 animate-in fade-in zoom-in-95 duration-150 max-h-56 overflow-y-auto">
-                    {companyOptions.map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => {
-                          setSelectedCompany(opt);
-                          setOpenDropdown(null);
-                        }}
-                        className={`w-full text-left px-3.5 py-2 text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${
-                          selectedCompany === opt ? "bg-[#EEF2FF] text-[#4F46E5]" : "text-slate-700 hover:bg-slate-50"
-                        }`}
-                      >
-                        <span className="truncate">{opt}</span>
-                        {selectedCompany === opt && <Check className="w-3.5 h-3.5 text-[#4F46E5]" />}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <h3 className="text-base font-bold text-slate-900">Failed to Load C2C Jobs</h3>
+              <p className="text-sm text-slate-500 max-w-md">
+                {fetchError}
+              </p>
+              <button
+                type="button"
+                onClick={fetchApiJobs}
+                className="mt-2 px-4 py-2 rounded-lg bg-[#4F46E5] text-white text-xs font-semibold hover:bg-[#4338CA] transition-colors cursor-pointer"
+              >
+                Retry
+              </button>
             </div>
-          </div>
-
-          {/* Job Cards Grid Matching Image 2 (4 columns on wide screens) */}
-          {filteredJobs.length === 0 ? (
+          ) : filteredJobs.length === 0 ? (
             /* Empty State */
             <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-12 text-center flex flex-col items-center justify-center gap-3">
               <div className="w-12 h-12 rounded-2xl bg-[#EEF2FF] border border-[#C7D2FE] flex items-center justify-center text-[#4F46E5]">
@@ -889,7 +584,7 @@ const [emailNotConnected, setEmailNotConnected] = useState(false);
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
               {filteredJobs.map((job) => {
                 const jId = job.id || job.jobId;
-                const isApplied = appliedJobIds.includes(jId);
+                const isApplied = appliedJobIds.some((id) => String(id) === String(jId));
                 const isApplying = Boolean(applyingJobIds[jId]);
 
                 return (
@@ -958,16 +653,24 @@ const [emailNotConnected, setEmailNotConnected] = useState(false);
                       {isEmailVendorJob(job) ? (
                         <button
                           type="button"
-                          onClick={() => setSelectedJobModal(job)}
-                          className={`w-full h-[36px] font-semibold rounded-[10px] text-[13px] transition-all flex items-center justify-center cursor-pointer ${
+                          disabled={isApplied || isApplying}
+                          onClick={(e) => handleApply(job, e)}
+                          className={`w-full h-[36px] font-semibold rounded-[10px] text-[13px] transition-all flex items-center justify-center ${
                             isApplied
-                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100/60"
-                              : "bg-[#EAF4FF] text-[#2563EB] border border-[#C7E0FF] hover:bg-[#DCEBFF] hover:border-[#ADCFFF] active:bg-[#CEE3FF]"
+                              ? "bg-[#EAF4FF] text-[#2563EB] border border-[#C7E0FF] cursor-not-allowed shadow-none"
+                              : isApplying
+                              ? "bg-[#EAF4FF]/80 text-[#2563EB] border border-[#C7E0FF] cursor-not-allowed"
+                              : "bg-[#EAF4FF] text-[#2563EB] border border-[#C7E0FF] hover:bg-[#DCEBFF] hover:border-[#ADCFFF] active:bg-[#CEE3FF] cursor-pointer"
                           }`}
                         >
-                          {isApplied ? (
+                          {isApplying ? (
                             <span className="flex items-center gap-1.5">
-                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                              <span className="w-3.5 h-3.5 border-2 border-[#2563EB]/40 border-t-[#2563EB] rounded-full animate-spin" />
+                              <span>Applying...</span>
+                            </span>
+                          ) : isApplied ? (
+                            <span className="flex items-center gap-1.5">
+                              <Check className="w-3.5 h-3.5 text-[#2563EB]" />
                               <span>Applied</span>
                             </span>
                           ) : (
@@ -981,7 +684,7 @@ const [emailNotConnected, setEmailNotConnected] = useState(false);
                           onClick={(e) => handleApply(job, e)}
                           className={`w-full h-[36px] font-semibold rounded-[10px] text-[13px] transition-all flex items-center justify-center ${
                             isApplied
-                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-not-allowed shadow-none"
+                              ? "bg-[#EFEEFF] text-[#4F46E5] border border-[#D8D4FF] cursor-not-allowed shadow-none"
                               : isApplying
                               ? "bg-[#EFEEFF]/80 text-[#4F46E5] border border-[#D8D4FF] cursor-not-allowed"
                               : "bg-[#EFEEFF] text-[#4F46E5] border border-[#D8D4FF] hover:bg-[#E4E2FF] hover:border-[#C4BFFF] active:bg-[#D6D0FF] cursor-pointer"
@@ -994,7 +697,7 @@ const [emailNotConnected, setEmailNotConnected] = useState(false);
                             </span>
                           ) : isApplied ? (
                             <span className="flex items-center gap-1.5">
-                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                              <Check className="w-3.5 h-3.5 text-[#4F46E5]" />
                               <span>Applied</span>
                             </span>
                           ) : (
@@ -1139,30 +842,39 @@ const [emailNotConnected, setEmailNotConnected] = useState(false);
                     Close
                   </button>
 
-                  {appliedJobIds.includes(selectedJobModal.id || selectedJobModal.jobId) ? (
+                  {appliedJobIds.some((id) => String(id) === String(selectedJobModal.id || selectedJobModal.jobId)) ? (
                     <span className="px-5 py-2 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold flex items-center gap-1.5">
                       <Check className="w-4 h-4" />
                       <span>Application Submitted</span>
                     </span>
                   ) : (
-                    <button
-                      type="button"
-                      disabled={Boolean(applyingJobIds[selectedJobModal.id || selectedJobModal.jobId])}
-                      onClick={() => {
-  setEmailNotConnected(false);
-  setShowEnhancedResumeModal(true);
-}}
-                      className="px-5 py-2 rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-semibold transition-all shadow-xs hover:shadow cursor-pointer disabled:opacity-60 flex items-center gap-2"
-                    >
-                      {applyingJobIds[selectedJobModal.id || selectedJobModal.jobId] ? (
-                        <>
-                          <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                          <span>Applying...</span>  
-                        </>
-                      ) : (
-                        <span>Enhance Resume</span>
-                      )}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEmailNotConnected(false);
+                          setShowEnhancedResumeModal(true);
+                        }}
+                        className="px-4 py-2 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-semibold transition-all cursor-pointer"
+                      >
+                        Enhance Resume
+                      </button>
+                      <button
+                        type="button"
+                        disabled={Boolean(applyingJobIds[selectedJobModal.id || selectedJobModal.jobId])}
+                        onClick={() => handleApply(selectedJobModal)}
+                        className="px-5 py-2 rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-semibold transition-all shadow-xs hover:shadow cursor-pointer disabled:opacity-60 flex items-center gap-2"
+                      >
+                        {applyingJobIds[selectedJobModal.id || selectedJobModal.jobId] ? (
+                          <>
+                            <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                            <span>Applying...</span>  
+                          </>
+                        ) : (
+                          <span>Apply</span>
+                        )}
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>

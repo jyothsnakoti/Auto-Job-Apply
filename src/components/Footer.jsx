@@ -185,14 +185,14 @@ const Footer = () => {
                             href="#"
                             onClick={(e) => scrollToSection(e, 'top')}
                             style={styles.brandHeader}
-                            aria-label="Auto Jobs Apply Homepage"
+                            aria-label="Meow Meow Jobs Homepage"
                         >
                             <img
                                 src={logoSrc}
-                                alt="Auto Jobs Apply Logo"
+                                alt="Meow Meow Jobs Logo"
                                 style={styles.logoImg}
                             />
-                            <span style={styles.brandTitle}>Auto Jobs Apply</span>
+                            <span style={styles.brandTitle}>Meow Meow Jobs</span>
                         </a>
                         <p style={styles.brandDescription}>
                             Discover relevant opportunities, understand your match, create job-specific

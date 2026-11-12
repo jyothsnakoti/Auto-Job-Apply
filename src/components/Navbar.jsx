@@ -291,10 +291,10 @@ const Navbar = () => {
           href="#"
           onClick={(e) => scrollToSection(e, 'top')}
           style={styles.brandWrapper}
-          aria-label="Auto Jobs Apply Home"
+          aria-label="Meow Meow Jobs Home"
         >
-          <img src={logoSrc} alt="Auto Jobs Apply Logo" style={styles.logoImg} />
-          <span style={styles.brandText}>Auto Jobs Apply</span>
+          <img src={logoSrc} alt="Meow Meow Jobs Logo" style={styles.logoImg} />
+          <span style={styles.brandText}>Meow Meow Jobs</span>
         </a>
 
         {/* CENTER: Nav links for Desktop & Tablet */}

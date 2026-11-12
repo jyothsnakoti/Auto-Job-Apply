@@ -27,6 +27,7 @@ import {
   approveApplication,
   skipApplication,
   getApplications,
+  getResumes,
   normalizeApplicationStatus,
   extractNumericResumeId,
   isJobAlreadyApplied,
@@ -710,6 +711,7 @@ const Dashboard = () => {
   const [isLoadingApplications, setIsLoadingApplications] = useState(true);
   const [applicationsError, setApplicationsError] = useState(null);
   const [actionLoadingIds, setActionLoadingIds] = useState({});
+  const [visitingAppId, setVisitingAppId] = useState(null);
   const appReqSeqRef = useRef(0);
 
   // Enhance Resume States
@@ -740,6 +742,7 @@ const Dashboard = () => {
     return getStoredDashboardData() || null;
   });
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(!dashboardMetrics);
+  const [userResumesList, setUserResumesList] = useState([]);
 
   const [needsActionApp, setNeedsActionApp] = useState(null);
 
@@ -1133,6 +1136,134 @@ useEffect(() => {
     }
   };
 
+  // Helper to extract original job posting URL from application or job object
+  const extractJobUrl = (appObj) => {
+    if (!appObj || typeof appObj !== "object") return null;
+    const nested =
+      (typeof appObj.job === "object" && appObj.job !== null ? appObj.job : null) ||
+      (typeof appObj.jobDetails === "object" && appObj.jobDetails !== null ? appObj.jobDetails : null) ||
+      {};
+    const rawMatch =
+      (typeof appObj.rawMatch === "object" && appObj.rawMatch !== null ? appObj.rawMatch : null) ||
+      (typeof nested.rawMatch === "object" && nested.rawMatch !== null ? nested.rawMatch : null) ||
+      {};
+
+    const candidates = [
+      appObj.applyUrl,
+      appObj.jobUrl,
+      appObj.url,
+      appObj.jobPostingUrl,
+      appObj.postingUrl,
+      appObj.jobLink,
+      appObj.link,
+      appObj.apply_url,
+      appObj.job_url,
+      appObj.applicationUrl,
+      appObj.externalUrl,
+      appObj.originalUrl,
+      appObj.sourceUrl,
+      nested.applyUrl,
+      nested.jobUrl,
+      nested.url,
+      nested.jobPostingUrl,
+      nested.postingUrl,
+      nested.jobLink,
+      nested.link,
+      nested.apply_url,
+      nested.job_url,
+      nested.applicationUrl,
+      nested.externalUrl,
+      nested.originalUrl,
+      nested.sourceUrl,
+      rawMatch.applyUrl,
+      rawMatch.jobUrl,
+      rawMatch.url,
+      rawMatch.jobPostingUrl,
+      rawMatch.postingUrl,
+      rawMatch.job_url,
+      rawMatch.apply_url,
+      rawMatch.jobLink,
+      rawMatch.link,
+    ];
+
+    for (const c of candidates) {
+      if (typeof c === "string" && c.trim()) {
+        const trimmed = c.trim();
+        if (trimmed.length > 5 && !trimmed.toLowerCase().startsWith("javascript:")) {
+          return trimmed;
+        }
+      }
+    }
+    return null;
+  };
+
+  // Helper to validate whether a string is a valid HTTP/HTTPS URL
+  const isValidHttpUrl = (string) => {
+    if (!string || typeof string !== "string") return false;
+    const trimmed = string.trim();
+    if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+      return false;
+    }
+    try {
+      const parsed = new URL(trimmed);
+      return parsed.protocol === "http:" || parsed.protocol === "https:";
+    } catch {
+      return false;
+    }
+  };
+
+  // Handle Visit Site for Failed Applications
+  const handleVisitSite = async (app, e) => {
+    if (e) e.stopPropagation();
+    if (!app) return;
+
+    const appId =
+      extractApplicationId(app) ||
+      app?.id ||
+      app?.applicationId ||
+      app?.application_id ||
+      app?._id;
+
+    if (appId && visitingAppId === appId) return;
+
+    // 1. Check if the job posting URL is directly available on the application record
+    let jobPostingUrl = extractJobUrl(app);
+
+    // 2. If not found on the application record, fetch job details from GET /api/jobs/{jobId}
+    if (!jobPostingUrl) {
+      const nested =
+        (app && typeof app.job === "object" && app.job !== null ? app.job : null) ||
+        (app && typeof app.jobDetails === "object" && app.jobDetails !== null ? app.jobDetails : null) ||
+        {};
+      const jobId = app?.jobId ?? nested?.jobId ?? nested?.id ?? app?.job_id;
+
+      if (jobId && !String(jobId).startsWith("match-")) {
+        try {
+          if (appId) setVisitingAppId(appId);
+          const details = await getJobById(jobId);
+          console.log(`[Dashboard] Fetched job details for Visit Site (Job ID ${jobId}):`, details);
+          jobPostingUrl = extractJobUrl(details);
+          if (jobPostingUrl) {
+            app.jobUrl = jobPostingUrl;
+          }
+        } catch (err) {
+          console.warn(`[Dashboard] Failed to fetch job details for job ID ${jobId}:`, err);
+        } finally {
+          if (appId) setVisitingAppId(null);
+        }
+      }
+    }
+
+    // 3. Verify URL exists and is valid
+    if (!jobPostingUrl || !isValidHttpUrl(jobPostingUrl)) {
+      showToast("Job posting URL is not available.", "error");
+      return;
+    }
+
+    // 4. Open the job posting URL in a new browser tab
+    window.open(jobPostingUrl, "_blank", "noopener,noreferrer");
+  };
+
   // Handle Skip Application (POST /api/applications/{id}/skip)
   const handleSkipApplication = async (app, e) => {
     if (e) e.stopPropagation();
@@ -1377,6 +1508,14 @@ useEffect(() => {
           })
           .catch(() => {});
 
+        getResumes()
+          .then((resData) => {
+            if (isMounted && Array.isArray(resData)) {
+              setUserResumesList(resData);
+            }
+          })
+          .catch(() => {});
+
         // Fetch Dashboard Data from GET /api/dashboard
         const data = await getDashboard();
         if (isMounted && data) {
@@ -1431,15 +1570,32 @@ useEffect(() => {
 
     const handleApplicationsUpdated = () => {
       fetchApplicationsData(selectedAppTab, appPage, false);
+      getDashboard()
+        .then((data) => {
+          if (isMounted && data) {
+            setDashboardMetrics(data);
+          }
+        })
+        .catch(() => {});
+    };
+
+    const handleStorageSync = () => {
+      if (!isMounted) return;
+      const storedDash = getStoredDashboardData();
+      if (storedDash) {
+        setDashboardMetrics(storedDash);
+      }
     };
 
     window.addEventListener("dashboardDataUpdated", handleDashboardUpdated);
     window.addEventListener("applicationsUpdated", handleApplicationsUpdated);
+    window.addEventListener("storage", handleStorageSync);
 
     return () => {
       isMounted = false;
       window.removeEventListener("dashboardDataUpdated", handleDashboardUpdated);
       window.removeEventListener("applicationsUpdated", handleApplicationsUpdated);
+      window.removeEventListener("storage", handleStorageSync);
     };
   }, []);
 
@@ -1465,6 +1621,13 @@ useEffect(() => {
     const handleBillingUpdated = (e) => {
       if (isMounted && e?.detail) {
         setBillingInfo(e.detail);
+        if (typeof e.detail.remainingApplications === "number") {
+          setDashboardMetrics((prev) =>
+            prev
+              ? { ...prev, applicationsRemaining: e.detail.remainingApplications }
+              : prev
+          );
+        }
       }
     };
 
@@ -1517,7 +1680,9 @@ useEffect(() => {
     const remainingVal =
       typeof dashboardMetrics?.applicationsRemaining === "number"
         ? dashboardMetrics.applicationsRemaining
-        : 0;
+        : typeof billingInfo?.remainingApplications === "number"
+          ? billingInfo.remainingApplications
+          : 0;
 
     // 4. Resolve Active Plan Name for "Applications Remaining" card
     const rawCandidate =
@@ -1631,6 +1796,42 @@ useEffect(() => {
     ];
   }, [appTabCounts]);
 
+  // Resume applications list (falls back to userResumesList if /api/dashboard resumeApplications is empty)
+  const effectiveResumeApplications = useMemo(() => {
+    if (
+      Array.isArray(dashboardMetrics?.resumeApplications) &&
+      dashboardMetrics.resumeApplications.length > 0
+    ) {
+      return dashboardMetrics.resumeApplications;
+    }
+    if (userResumesList.length > 0) {
+      return userResumesList.map((r, idx) => ({
+        resumeId: r.id || r.resumeId || r.fileId || `resume-${idx}`,
+        resumeName: r.fileName || r.title || r.name || `Resume ${idx + 1}`,
+        submittedCount:
+          userResumesList.length === 1
+            ? (appTabCounts.submitted || 0)
+            : Number(r.submittedCount || 0),
+      }));
+    }
+    return [];
+  }, [
+    dashboardMetrics?.resumeApplications,
+    userResumesList,
+    appTabCounts.submitted,
+  ]);
+
+  // Synchronized submitted count across resumes (matching Application tabs count from Image 1)
+  const activeSubmittedCount = useMemo(() => {
+    if (typeof appTabCounts?.submitted === "number") {
+      return appTabCounts.submitted;
+    }
+    if (typeof dashboardMetrics?.applicationsSubmitted === "number") {
+      return dashboardMetrics.applicationsSubmitted;
+    }
+    return 0;
+  }, [appTabCounts?.submitted, dashboardMetrics?.applicationsSubmitted]);
+
   // Applications Table List (Directly from backend for current tab)
   const filteredApplications = applications;
 
@@ -1721,89 +1922,89 @@ useEffect(() => {
         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-7 flex flex-col gap-6 w-full bg-[#F8FAFC]">
 
          
-{/* 1. Welcome Message + Applied by Resume + Applications Remaining */}
-<div className="grid w-full grid-cols-1 items-stretch gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(250px,0.9fr)_minmax(280px,1fr)]">
+          {/* 1. Welcome Message + Submitted + Applications Remaining */}
+          <div className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-4 w-full">
+            {/* Welcome Message */}
+            <div className="flex min-w-0 flex-col justify-center gap-1 flex-1">
+              <h1 className="text-[20px] font-bold tracking-tight text-black md:text-[22px]">
+                Welcome back, {userName || "User"}!
+              </h1>
 
-  {/* Welcome Message */}
-  <div className="flex min-w-0 flex-col justify-center gap-1">
-    <h1 className="text-[20px] font-bold tracking-tight text-black md:text-[22px]">
-      Welcome back, {userName || "User"}!
-    </h1>
+              <p className="text-[13px] text-[#64748B] md:text-[14px]">
+                Your job search is running. We're finding, matching and applying to the best opportunities for you.
+              </p>
+            </div>
 
-    <p className="text-[13px] text-[#64748B] md:text-[14px]">
-      Your job search is running. We're finding, matching and applying to the best opportunities for you.
-    </p>
-  </div>
+            {/* Submitted & Applications Remaining Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 items-stretch gap-4 w-full xl:w-auto xl:shrink-0">
+              {/* Submitted Card */}
+              <div className="flex min-w-0 items-stretch xl:w-[280px] 2xl:w-[310px]">
+                <ResumeApplicationDetails
+                  resumeApplications={effectiveResumeApplications}
+                  submittedCount={activeSubmittedCount}
+                  totalSubmittedCount={activeSubmittedCount}
+                  onResumeChange={(resumeId) => {
+                    setSelectedResumeId(resumeId);
+                    setAppPage(0);
+                  }}
+                />
+              </div>
 
-  {/* Applied by Resume Card */}
-  <div className="flex min-w-0 items-stretch">
-    <ResumeApplicationDetails
-  resumeApplications={dashboardMetrics?.resumeApplications ?? []}
-  onResumeChange={(resumeId) => {
-    setSelectedResumeId(resumeId);
-    setAppPage(0);
-  }}
-/>
-  </div>
+              {/* Applications Remaining Card */}
+              {applicationsRemainingCard && (
+                <div className="flex min-w-0 items-stretch xl:w-[305px] 2xl:w-[340px]">
+                  <div className="relative flex h-full w-full min-w-0 flex-col justify-between rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-sm sm:p-5">
+                    {/* Card Title */}
+                    <div className="flex min-h-[40px] min-w-0 items-start">
+                      <h2
+                        className="flex min-w-0 flex-wrap items-center gap-1 text-sm font-regular text-[#0F172A] sm:text-base"
+                        title={
+                          applicationsRemainingCard.fullTitle ||
+                          applicationsRemainingCard.title
+                        }
+                      >
+                        <span>{applicationsRemainingCard.title}</span>
+                        {applicationsRemainingCard.planName && (
+                          <span className="font-bold text-[#0F172A]">
+                            ({applicationsRemainingCard.planName})
+                          </span>
+                        )}
+                      </h2>
+                    </div>
 
-  {/* Applications Remaining Card */}
- 
-{/* Applications Remaining Card */}
-{applicationsRemainingCard && (
-  <div className="flex min-w-0 flex-col gap-4 rounded-[20px] border border-[#E2E8F0] bg-white p-4 shadow-sm transition-all duration-200 hover:shadow-md sm:p-5">
+                    {/* Icon and Count Below Title */}
+                    <div className="mt-4 flex items-center gap-3">
+                      <div
+                        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full"
+                        style={{
+                          backgroundColor: applicationsRemainingCard.iconBg,
+                        }}
+                      >
+                        <img
+                          src={applicationsRemainingCard.icon}
+                          alt={
+                            applicationsRemainingCard.fullTitle ||
+                            applicationsRemainingCard.title
+                          }
+                          className="h-5 w-5 object-contain"
+                        />
+                      </div>
 
-    {/* Card Title */}
-    <div className="flex min-w-0 flex-wrap items-center gap-1">
-      <span
-        className="text-sm font-regular text-[#0F172A] sm:text-base"
-        title={
-          applicationsRemainingCard.fullTitle ||
-          applicationsRemainingCard.title
-        }
-      >
-        {applicationsRemainingCard.title}
-      </span>
+                      <div className="min-w-0">
+                        <p className="text-2xl font-bold leading-tight tracking-tight text-[#0F172A]">
+                          {applicationsRemainingCard.value}
+                        </p>
 
-      {applicationsRemainingCard.planName && (
-        <span className="text-sm font-bold text-[#0F172A] sm:text-base">
-          ({applicationsRemainingCard.planName})
-        </span>
-      )}
-    </div>
-
-    {/* Icon and Count Below Title */}
-    <div className="mt-4 flex items-center gap-3">
-      <div
-        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full"
-        style={{
-          backgroundColor: applicationsRemainingCard.iconBg,
-        }}
-      >
-        <img
-          src={applicationsRemainingCard.icon}
-          alt={
-            applicationsRemainingCard.fullTitle ||
-            applicationsRemainingCard.title
-          }
-          className="h-5 w-5 object-contain"
-        />
-      </div>
-
-      <div className="flex min-w-0 flex-col">
-        <span className="text-2xl font-bold leading-tight tracking-tight text-[#0F172A]">
-          {applicationsRemainingCard.value}
-        </span>
-
-        <span className="text-sm text-[#64748B] mt-2">
-          {applicationsRemainingCard.supportingText}
-        </span>
-      </div>
-    </div>
-  </div>
-)}
-
-</div>
-
+                        <p className="mt-1 truncate text-sm text-[#64748B]">
+                          {applicationsRemainingCard.supportingText}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
 
           {/* Conditional Match Status Banner: No Primary Resume */}
           {matchStatus.hasPrimaryResume === false && (
@@ -2011,7 +2212,7 @@ useEffect(() => {
                           Status
                         </th>
                         <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider relative left-8">
-                          Posted
+                          Applied
                         </th>
                         <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider text-center">
                           Actions
@@ -2206,6 +2407,7 @@ useEffect(() => {
                         const isRetrying = isAppActionLoading === "retry";
                         const isApproving = isAppActionLoading === "approve";
                         const isSkipping = isAppActionLoading === "skip";
+                        const isVisiting = Boolean(applicationId && visitingAppId === applicationId);
 
                         return (
                           <tr
@@ -2381,42 +2583,29 @@ useEffect(() => {
                                 </div>
                               ) : normStatus === "FAILED" || normStatus === "ERROR" ? (
                                 <div className="flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                                  {/* Retry */}
+                                  {/* Visit Site */}
                                   <button
                                     type="button"
-                                    disabled={Boolean(isAppActionLoading)}
-                                    onClick={(e) => handleRetryApplication(app, e)}
+                                    disabled={isVisiting}
+                                    onClick={(e) => handleVisitSite(app, e)}
                                     className={`h-[30px] px-3 rounded-[8px] border text-[12px] font-semibold transition-all shadow-2xs inline-flex items-center justify-center gap-1.5 cursor-pointer ${
-                                      isRetrying
+                                      isVisiting
                                         ? "bg-indigo-50 border-indigo-200 text-indigo-400 cursor-not-allowed"
                                         : "border-[#E2E8F0] bg-white text-[#4F46E5] hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-700 active:scale-95"
                                     }`}
-                                    title="Retry application"
+                                    title="Visit job posting site"
                                   >
-                                    {isRetrying ? (
+                                    {isVisiting ? (
                                       <>
                                         <svg className="w-3.5 h-3.5 animate-spin text-[#4F46E5]" fill="none" viewBox="0 0 24 24">
                                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                                         </svg>
-                                        <span>Retrying...</span>
+                                        <span>Loading...</span>
                                       </>
                                     ) : (
-                                      <span>Retry</span>
+                                      <span>Visit Site</span>
                                     )}
-                                  </button>
-
-                                  {/* Skip */}
-                                  <button
-                                    type="button"
-                                    disabled={Boolean(isAppActionLoading)}
-                                    onClick={(e) => handleSkipApplication(app, e)}
-                                    className={`h-[30px] px-2.5 rounded-[8px] border border-slate-200 bg-white text-[12px] font-medium text-slate-600 hover:bg-slate-100 transition-all inline-flex items-center justify-center gap-1 cursor-pointer active:scale-95 ${
-                                      isSkipping ? "opacity-50 cursor-not-allowed" : ""
-                                    }`}
-                                    title="Skip application"
-                                  >
-                                    {isSkipping ? "Skipping..." : "Skip"}
                                   </button>
                                 </div>
                               ) : normStatus === "SKIPPED" ? (

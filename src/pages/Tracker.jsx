@@ -181,7 +181,6 @@ const isLegacyMockId = (id) => {
 
 const Tracker = () => {
   const [selectedFilter, setSelectedFilter] = useState("All");
-  const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [applications, setApplications] = useState([]);
 
@@ -242,32 +241,8 @@ const Tracker = () => {
         console.warn("Error reading custom applications:", e);
       }
 
-      // 3. Fetch real applications from API
+      // Dashboard applications not loaded into tracker table
       let apiItems = [];
-      try {
-        const result = await getApplications({ tab: "all", size: 100 });
-        if (result && Array.isArray(result.items)) {
-          apiItems = result.items;
-        }
-      } catch (err) {
-        console.debug("[Tracker] API fetch note:", err?.message);
-      }
-
-      // 4. Fallback to cached applications data if API was empty/unavailable
-      if (apiItems.length === 0) {
-        try {
-          const cached = getStoredApplicationsData();
-          if (Array.isArray(cached)) {
-            apiItems = cached;
-          } else if (cached && Array.isArray(cached.items)) {
-            apiItems = cached.items;
-          } else if (cached && Array.isArray(cached.applications)) {
-            apiItems = cached.applications;
-          }
-        } catch (e) {
-          console.debug("[Tracker] Cache fallback note:", e);
-        }
-      }
 
       // 5. Map real applications into standard tracker format
       const mappedApiApps = apiItems
@@ -673,34 +648,15 @@ const Tracker = () => {
     }
   };
 
-  // Filtered applications based on active pill and search query
+  // Filtered applications based on active pill
   const filteredApplications = useMemo(() => {
     return applications.filter((app) => {
-      const matchesFilter =
+      return (
         selectedFilter === "All" ||
-        String(app.status || "").toLowerCase() === selectedFilter.toLowerCase();
-
-      const query = searchQuery.trim().toLowerCase();
-      const matchesSearch =
-        !query ||
-        String(app.company || "").toLowerCase().includes(query) ||
-        String(app.jobTitle || "").toLowerCase().includes(query) ||
-        String(app.location || "").toLowerCase().includes(query) ||
-        String(app.notes || "").toLowerCase().includes(query);
-
-      return matchesFilter && matchesSearch;
+        String(app.status || "").toLowerCase() === selectedFilter.toLowerCase()
+      );
     });
-  }, [applications, selectedFilter, searchQuery]);
-
-  // Statistics counters for top cards
-  const stats = useMemo(() => {
-    const total = applications.length;
-    const interviews = applications.filter((a) => a.status === "Interview").length;
-    const offers = applications.filter((a) => a.status === "Offer").length;
-    const assessments = applications.filter((a) => a.status === "Assessment").length;
-    const verifications = applications.filter((a) => a.status === "Verification").length;
-    return { total, interviews, offers, assessments, verifications };
-  }, [applications]);
+  }, [applications, selectedFilter]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#F8FAFC]">
@@ -713,114 +669,20 @@ const Tracker = () => {
         <Header />
 
         {/* Application Tracker Main Content */}
-        <main className="flex-1 px-4 sm:px-8 py-6 flex flex-col gap-6 w-full max-w-7xl mx-auto">
-          {/* Page Heading & Action Button */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex flex-col gap-1">
-              <h1 className="text-[20px] sm:text-[24px] font-bold text-[#0F172A] tracking-tight">
-                Tracker
-              </h1>
-              <p className="text-[13px] text-[#64748B]">
-                Track, filter, and manage your job applications across every hiring stage.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2.5">
-              <button
-                type="button"
-                onClick={loadApplications}
-                className="h-[38px] px-3.5 rounded-[10px] border border-slate-200 bg-white text-[#475569] hover:bg-slate-50 text-[13px] font-medium flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
-                title="Refresh applications"
-              >
-                <svg className={`w-3.5 h-3.5 ${isLoading ? "animate-spin text-[#2563EB]" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                <span>Refresh</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setIsNewJobModalOpen(true)}
-                className="h-[38px] px-4 rounded-[10px] bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-[13px] font-medium flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                </svg>
-                <span>Add Application</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Quick Metric Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-            <div className="bg-white rounded-[16px] border border-[#E2E8F0] p-4 shadow-xs">
-              <span className="text-[11px] font-semibold text-[#64748B] uppercase tracking-wider">
-                Total Tracked
-              </span>
-              <p className="text-[22px] font-bold text-[#0F172A] mt-1">{stats.total}</p>
-            </div>
-            <div className="bg-white rounded-[16px] border border-[#E2E8F0] p-4 shadow-xs">
-              <span className="text-[11px] font-semibold text-[#059669] uppercase tracking-wider">
-                Interviews
-              </span>
-              <p className="text-[22px] font-bold text-[#059669] mt-1">{stats.interviews}</p>
-            </div>
-            <div className="bg-white rounded-[16px] border border-[#E2E8F0] p-4 shadow-xs">
-              <span className="text-[11px] font-semibold text-[#9333EA] uppercase tracking-wider">
-                Offers
-              </span>
-              <p className="text-[22px] font-bold text-[#9333EA] mt-1">{stats.offers}</p>
-            </div>
-            <div className="bg-white rounded-[16px] border border-[#E2E8F0] p-4 shadow-xs">
-              <span className="text-[11px] font-semibold text-[#EA580C] uppercase tracking-wider">
-                Assessments
-              </span>
-              <p className="text-[22px] font-bold text-[#EA580C] mt-1">{stats.assessments}</p>
-            </div>
-            <div className="bg-white rounded-[16px] border border-[#E2E8F0] p-4 shadow-xs col-span-2 sm:col-span-1">
-              <span className="text-[11px] font-semibold text-[#2563EB] uppercase tracking-wider">
-                Verification
-              </span>
-              <p className="text-[22px] font-bold text-[#2563EB] mt-1">{stats.verifications}</p>
-            </div>
+        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-7 flex flex-col gap-6 w-full bg-[#F8FAFC]">
+          {/* Page Heading */}
+          <div className="flex flex-col gap-1">
+            <h1 className="text-[20px] sm:text-[24px] font-bold text-[#0F172A] tracking-tight">
+              Tracker
+            </h1>
+            <p className="text-[13px] text-[#64748B]">
+              Track, filter, and manage your job applications across every hiring stage.
+            </p>
           </div>
 
           {/* Table Container Card */}
           <div className="bg-white rounded-[20px] border border-[#E2E8F0] p-5 sm:p-6 shadow-[0_1px_3px_rgba(15,23,42,0.02)] flex flex-col gap-5 w-full">
             
-            {/* Top Toolbar: Search + Reset */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              {/* Search Bar */}
-              <div className="relative flex-1 max-w-md">
-                <input
-                  type="text"
-                  placeholder="Search by company, role, or location..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full h-[38px] pl-9 pr-3 text-[13px] rounded-[10px] border border-[#E2E8F0] bg-[#F8FAFC] text-[#0F172A] placeholder-[#94A3B8] focus:outline-none focus:border-[#2563EB] focus:bg-white transition-all"
-                />
-                <svg
-                  className="w-4 h-4 text-[#94A3B8] absolute left-3 top-1/2 -translate-y-1/2"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <circle cx="11" cy="11" r="8" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35" />
-                </svg>
-              </div>
-
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery("")}
-                  className="text-[12.5px] text-[#64748B] hover:text-[#0F172A] transition-colors self-start sm:self-auto"
-                >
-                  Clear search
-                </button>
-              )}
-            </div>
 
             {/* Filter Pills Row - Exactly matching the user's uploaded screenshot */}
             <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-0.5 no-scrollbar">
@@ -841,95 +703,55 @@ const Tracker = () => {
               })}
             </div>
 
-            {/* Applications Table / Empty State / Loading State */}
-            {isLoading ? (
-              <div className="py-16 flex flex-col items-center justify-center gap-3">
-                <svg className="w-6 h-6 animate-spin text-[#2563EB]" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                <p className="text-[13px] font-medium text-[#64748B]">Loading tracker applications...</p>
-              </div>
-            ) : applications.length === 0 ? (
-              /* Global Empty State: No applications at all */
-              <div className="p-10 rounded-[16px] border border-dashed border-slate-200 bg-slate-50/60 flex flex-col items-center justify-center text-center gap-3 my-2">
-                <div className="w-14 h-14 rounded-full bg-[#EEF2FF] flex items-center justify-center text-[#4F46E5]">
-                  <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                </div>
-                <div className="max-w-md">
-                  <h3 className="text-[15px] font-bold text-[#0F172A]">No applications tracked yet</h3>
-                  <p className="text-[13px] text-[#64748B] mt-1 leading-relaxed">
-                    Applications you apply to via Auto Apply or Browse Jobs will appear here automatically. You can also manually track any role by clicking "Add Application".
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsNewJobModalOpen(true)}
-                  className="mt-1 h-[38px] px-4 rounded-[10px] bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-[13px] font-medium flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                  </svg>
-                  <span>Add First Application</span>
-                </button>
-              </div>
-            ) : filteredApplications.length === 0 ? (
-              /* Filter / Search Empty State */
-              <div className="py-12 flex flex-col items-center justify-center gap-2 text-center">
-                <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                  </svg>
-                </div>
-                <h3 className="text-[14px] font-semibold text-[#0F172A]">No applications found</h3>
-                <p className="text-[12.5px] text-[#64748B] max-w-sm">
-                  {searchQuery
-                    ? `No results matching "${searchQuery}" in ${selectedFilter} filter.`
-                    : `There are currently no applications categorized under ${selectedFilter}.`}
-                </p>
-                {selectedFilter !== "All" && (
-                  <button
-                    type="button"
-                    onClick={() => setSelectedFilter("All")}
-                    className="mt-2 text-[12.5px] font-medium text-[#2563EB] hover:underline cursor-pointer"
-                  >
-                    View All Applications ({applications.length})
-                  </button>
-                )}
-              </div>
-            ) : (
-              /* Active Applications Table */
-              <div className="overflow-x-auto w-full -mx-5 sm:mx-0 px-5 sm:px-0">
-                <table className="w-full text-left border-collapse min-w-[760px]">
-                  <thead>
-                    <tr className="border-b border-slate-100">
-                      <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
-                        Company
-                      </th>
-                      <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
-                        Job Title
-                      </th>
-                      <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
-                        ATS Match
-                      </th>
-                      <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
-                        Resume
-                      </th>
-                      <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
-                        Applied
-                      </th>
-                      <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider text-right pr-2">
-                        Actions
-                      </th>
+            {/* Applications Table */}
+            <div className="overflow-x-auto w-full -mx-5 sm:mx-0 px-5 sm:px-0">
+              <table className="w-full text-left border-collapse min-w-[760px]">
+                <thead>
+                  <tr className="border-b border-slate-100">
+                    <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                      Company
+                    </th>
+                    <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                      Job Title
+                    </th>
+                    <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                      ATS Match
+                    </th>
+                    <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                      Resume
+                    </th>
+                    <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                      Applied
+                    </th>
+                    <th className="pb-3 text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wider text-right pr-2">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={7} className="py-12 text-center text-[#64748B] text-[13px] font-medium">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <svg className="w-5 h-5 animate-spin text-[#2563EB]" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          </svg>
+                          <span>Loading applications...</span>
+                        </div>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {filteredApplications.map((app) => {
+                  ) : filteredApplications.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-12 text-center text-[#64748B] text-[13.5px] font-medium">
+                        No applications tracked yet
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredApplications.map((app) => {
                       const meta = STATUS_METADATA[app.status] || STATUS_METADATA.Applied;
                       const isDropdownOpen = statusDropdownOpenId === app.id;
 
@@ -1076,11 +898,11 @@ const Tracker = () => {
                           </td>
                         </tr>
                       );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
 
             {/* Footer Summary */}
             {!isLoading && applications.length > 0 && (

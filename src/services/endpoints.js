@@ -201,6 +201,18 @@ export const JOB_ENDPOINTS = {
   DOWNLOAD_ENHANCED: (jobId) => `${API_BASE_URL}/api/jobs/${jobId}/enhance/download`,
 };
 
+export const C2C_JOB_ENDPOINTS = {
+  LIST: `${API_BASE_URL}/api/c2c/jobs`,
+  GET: `${API_BASE_URL}/api/c2c/jobs`,
+  APPLY: `${API_BASE_URL}/api/c2c/applications`,
+};
+
+export const C2C_APPLICATION_ENDPOINTS = {
+  APPLY: `${API_BASE_URL}/api/c2c/applications`,
+  LIST: `${API_BASE_URL}/api/c2c/applications`,
+  GET: `${API_BASE_URL}/api/c2c/applications`,
+};
+
 
 
 export const APPLICATION_ENDPOINTS = {
@@ -212,6 +224,10 @@ export const APPLICATION_ENDPOINTS = {
   SKIP: (id) => `${API_BASE_URL}/api/applications/${id}/skip`,
   NEEDS_ACTION: `${API_BASE_URL}/api/applications?tab=needs_action`,
   SUBMIT_NEEDS_ACTION_ANSWERS: (id) => `${API_BASE_URL}/api/applications/${id}/needs-action/answers`,
+};
+
+export const C2C_AUTO_APPLY_ENDPOINTS = {
+  SETTINGS: `${API_BASE_URL}/api/c2c/auto-apply`,
 };
 
 export const ENDPOINTS = {
@@ -232,6 +248,10 @@ RESUME: RESUME_ENDPOINTS,
   APPLICATIONS: APPLICATION_ENDPOINTS,
   JOBS: JOB_ENDPOINTS,
   JOB: JOB_ENDPOINTS,
+  C2C_AUTO_APPLY: C2C_AUTO_APPLY_ENDPOINTS,
+  C2C_JOBS: C2C_JOB_ENDPOINTS,
+  C2C_APPLICATION: C2C_APPLICATION_ENDPOINTS,
+  C2C_APPLICATIONS: C2C_APPLICATION_ENDPOINTS,
 };
 
 
